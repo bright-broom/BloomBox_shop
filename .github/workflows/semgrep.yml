@@ -29,7 +29,6 @@ jobs:
           semgrep scan
           --config auto
           --error
-          --metrics=off
           --exclude node_modules
           --exclude .next
           .
