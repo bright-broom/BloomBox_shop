@@ -15,6 +15,11 @@ export default async function GiftPage({ params }: GiftPageProps) {
 
   return (
     <section className="gift-page section-shell">
+      <nav className="checkout-progress" aria-label="ギフト作成の進捗">
+        <span className="is-complete"><b>1</b> 花を選ぶ</span>
+        <span className="is-current" aria-current="step"><b>2</b> 想いを添える</span>
+        <span><b>3</b> 内容確認</span>
+      </nav>
       <header className="gift-header">
         <p className="eyebrow">MAKE IT PERSONAL</p>
         <h1>この花に、<br />あなたの想いを。</h1>
@@ -23,12 +28,19 @@ export default async function GiftPage({ params }: GiftPageProps) {
       <div className="gift-layout">
         <aside className="order-summary">
           <div className="summary-image">
-            <Image src={product.imageUrl} alt={product.imageAlt} fill sizes="(max-width: 760px) 100vw, 36vw" />
+            <Image
+              src={product.imageUrl}
+              alt={product.imageAlt}
+              fill
+              priority
+              sizes="(max-width: 760px) 112px, 36vw"
+            />
           </div>
           <div className="summary-copy">
             <div><p className="eyebrow">YOUR SELECTION</p><h2>{product.name}</h2></div>
             <p>{formatMoney(product.price)}</p>
           </div>
+          <p className="summary-note">税込・送料別 ｜ 数量 1</p>
         </aside>
         <GiftForm productId={product.id} minDeliveryDate={getEarliestDeliveryDate()} />
       </div>

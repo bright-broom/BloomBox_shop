@@ -24,6 +24,11 @@ export default async function HomePage() {
           <Link className="text-link" href="/flowers">
             季節の花から選ぶ <span aria-hidden="true">→</span>
           </Link>
+          <ul className="hero-assurances" aria-label="ご注文について">
+            <li>最短3日後から</li>
+            <li>お届け日指定</li>
+            <li>カード無料</li>
+          </ul>
           <span className="hero-index">VOL. 08 — SUMMER / AUTUMN</span>
         </div>
         <div className="hero-visual">
@@ -57,6 +62,7 @@ export default async function HomePage() {
           <div>
             <p className="eyebrow">SEASONAL COLLECTION</p>
             <h2>今、贈りたい花</h2>
+            <p className="section-description">その時季に美しい花だけを、贈る場面まで想像して束ねました。</p>
           </div>
           <Link className="text-link" href="/flowers">
             すべて見る <span aria-hidden="true">→</span>
@@ -70,8 +76,13 @@ export default async function HomePage() {
       </section>
 
       <section className="how-it-works section-shell">
-        <p className="eyebrow">A GIFT, MADE PERSONAL</p>
-        <h2>贈るまでの、3つの時間。</h2>
+        <div className="dark-section-heading">
+          <div>
+            <p className="eyebrow">A GIFT, MADE PERSONAL</p>
+            <h2>贈るまでの、3つの時間。</h2>
+          </div>
+          <p>花を決めてから、ご注文内容の確認まで約3分です。</p>
+        </div>
         <ol className="steps">
           <li>
             <span>01</span>

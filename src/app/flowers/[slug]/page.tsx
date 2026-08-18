@@ -31,18 +31,33 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <Link className="back-link" href="/flowers">← 一覧へ</Link>
       </div>
       <div className="detail-copy">
-        <p className="eyebrow">{product.palette}</p>
+        <div className="detail-kicker">
+          <p className="eyebrow">{product.palette}</p>
+          <span className={`availability-badge${product.available ? "" : " is-unavailable"}`}>
+            <i aria-hidden="true" /> {product.available ? "ご注文受付中" : "ただいま入荷待ち"}
+          </span>
+        </div>
         <h1>{product.name}</h1>
         <p className="detail-subtitle">{product.subtitle}</p>
         <p className="detail-description">{product.description}</p>
         <div className="detail-price">{formatMoney(product.price)} <small>税込・送料別</small></div>
-        <Link className="primary-button" href={`/gift/${product.id}`}>
-          この花を贈る <span aria-hidden="true">→</span>
-        </Link>
+        {product.available ? (
+          <>
+            <Link className="primary-button" href={`/gift/${product.id}`}>
+              この花を贈る <span aria-hidden="true">→</span>
+            </Link>
+            <ul className="purchase-notes" aria-label="お届けについて">
+              <li>最短3日後からお届け</li>
+              <li>メッセージカード無料</li>
+            </ul>
+          </>
+        ) : (
+          <p className="unavailable-note">次回の入荷まで、いましばらくお待ちください。</p>
+        )}
         <dl className="detail-list">
-          <div><dt>FLOWERS</dt><dd>{product.flowers.join("、")}</dd></div>
-          <div><dt>GROWER</dt><dd>{product.grower}</dd></div>
-          <div><dt>OCCASION</dt><dd>{product.occasion.join(" / ")}</dd></div>
+          <div><dt>花材</dt><dd>{product.flowers.join("、")}</dd></div>
+          <div><dt>つくり手</dt><dd>{product.grower}</dd></div>
+          <div><dt>おすすめ</dt><dd>{product.occasion.join(" / ")}</dd></div>
         </dl>
       </div>
     </article>

@@ -15,8 +15,15 @@ export function GiftForm({
   return (
     <form className="gift-form" action={formAction} noValidate>
       <input type="hidden" name="productId" value={productId} />
+      <div className="form-intro">
+        <div>
+          <p className="eyebrow">GIFT DETAILS</p>
+          <h2>お届け内容</h2>
+        </div>
+        <span><i aria-hidden="true">*</i> 必須項目</span>
+      </div>
       <div className="form-field">
-        <label htmlFor="recipientName">お届けする方のお名前</label>
+        <label htmlFor="recipientName"><span>01</span> お届けする方のお名前 <i aria-hidden="true">*</i></label>
         <input
           id="recipientName"
           name="recipientName"
@@ -28,7 +35,7 @@ export function GiftForm({
         <FieldError id="recipientName-error" messages={state.fieldErrors?.recipientName} />
       </div>
       <div className="form-field">
-        <label htmlFor="deliveryDate">お届け希望日</label>
+        <label htmlFor="deliveryDate"><span>02</span> お届け希望日 <i aria-hidden="true">*</i></label>
         <input
           id="deliveryDate"
           name="deliveryDate"
@@ -42,7 +49,7 @@ export function GiftForm({
       </div>
       <div className="form-field">
         <div className="label-row">
-          <label htmlFor="giftMessage">贈ることば</label>
+          <label htmlFor="giftMessage"><span>03</span> 贈ることば <i aria-hidden="true">*</i></label>
           <span>180文字まで</span>
         </div>
         <textarea

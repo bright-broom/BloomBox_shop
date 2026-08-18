@@ -20,6 +20,7 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
         <span className="product-arrow" aria-hidden="true">
           ↗
         </span>
+        <span className="product-view-label">詳しく見る</span>
       </Link>
       <div className="product-meta">
         <div>
@@ -28,6 +29,11 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
             <Link href={`/flowers/${product.slug}`}>{product.name}</Link>
           </h3>
           <p>{product.subtitle}</p>
+          <ul className="occasion-list" aria-label="おすすめの贈る場面">
+            {product.occasion.slice(0, 2).map((occasion) => (
+              <li key={occasion}>{occasion}</li>
+            ))}
+          </ul>
         </div>
         <p className="price">{formatMoney(product.price)} <small>税込</small></p>
       </div>
