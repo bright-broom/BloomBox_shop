@@ -1,0 +1,71 @@
+import { money } from "@/shared/domain/money";
+import type { ProductRepository } from "../domain/product-repository";
+import { productId, type Product, type ProductId } from "../domain/product";
+
+const PRODUCTS: readonly Product[] = [
+  {
+    id: productId("prod_haru_01"),
+    slug: "haru-no-hikari",
+    name: "春のひかり",
+    subtitle: "やわらかな光を束ねたブーケ",
+    description:
+      "みずみずしいピンクのチューリップを、朝の光のように軽やかに。新しい一歩を祝う日に似合うブーケです。",
+    price: money(6600),
+    imageUrl:
+      "https://images.unsplash.com/photo-1561181286-d3fee7d55364?auto=format&fit=crop&w=1400&q=85",
+    imageAlt: "ガラスの花瓶に活けたピンクのチューリップ",
+    palette: "Tulip · Blush · Leaf",
+    occasion: ["誕生日", "お祝い", "ありがとう"],
+    flowers: ["チューリップ", "季節のグリーン"],
+    grower: "南房総・花人 佐藤農園",
+    available: true,
+  },
+  {
+    id: productId("prod_sora_02"),
+    slug: "sora-no-yohaku",
+    name: "空の余白",
+    subtitle: "青と白、静かな時間のアレンジメント",
+    description:
+      "静かな白に深いグリーンを添えて。言葉にしきれない感謝や、そっと寄り添いたい気持ちを届けます。",
+    price: money(7700),
+    imageUrl:
+      "https://images.unsplash.com/photo-1495231916356-a86217efff12?auto=format&fit=crop&w=1400&q=85",
+    imageAlt: "深い緑の葉を添えた一輪の白いバラ",
+    palette: "White · Shadow · Green",
+    occasion: ["ありがとう", "お見舞い", "記念日"],
+    flowers: ["白バラ", "季節のグリーン"],
+    grower: "信州・青木フラワーファーム",
+    available: true,
+  },
+  {
+    id: productId("prod_akane_03"),
+    slug: "akane-no-uta",
+    name: "茜のうた",
+    subtitle: "鮮やかな色に想いを託す季節の花束",
+    description:
+      "ピンクと黄色に、瑞々しいグリーンを重ねて。大切な節目に、まっすぐな気持ちが伝わる花束です。",
+    price: money(8800),
+    imageUrl:
+      "https://images.unsplash.com/photo-1526047932273-341f2a7631f9?auto=format&fit=crop&w=1400&q=85",
+    imageAlt: "両手で包むように持ったピンクと黄色の花束",
+    palette: "Pink · Citrus · Leaf",
+    occasion: ["記念日", "プロポーズ", "誕生日"],
+    flowers: ["ダリア", "バラ", "季節の小花"],
+    grower: "山形・高橋花卉園",
+    available: true,
+  },
+];
+
+export class InMemoryProductRepository implements ProductRepository {
+  async findAvailable(): Promise<readonly Product[]> {
+    return PRODUCTS.filter((product) => product.available);
+  }
+
+  async findById(id: ProductId): Promise<Product | null> {
+    return PRODUCTS.find((product) => product.id === id) ?? null;
+  }
+
+  async findBySlug(slug: string): Promise<Product | null> {
+    return PRODUCTS.find((product) => product.slug === slug) ?? null;
+  }
+}
