@@ -22,9 +22,11 @@ pnpm dev
 検証コマンド:
 
 ```bash
+pnpm check:architecture
 pnpm typecheck
 pnpm lint
 pnpm test
+pnpm audit --prod --audit-level high
 pnpm build
 ```
 
@@ -43,6 +45,8 @@ Presentation → Application → Domain
 - Product と OrderItem の購入時価格は分離されています。
 - Order の状態は boolean ではなく transition table で管理します。
 - 入力境界は Zod で検証し、価格はブラウザから受け取りません。
+
+開発時は最初に [`AGENTS.md`](AGENTS.md) を確認し、変更領域に応じて [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) または [`docs/engineering/DEVELOPMENT.md`](docs/engineering/DEVELOPMENT.md) の該当箇所だけを参照してください。
 
 ## 本番化に必要な次の境界
 

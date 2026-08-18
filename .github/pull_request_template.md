@@ -17,7 +17,7 @@
 - [ ] Trust boundaries and authorization were considered
 - [ ] External input is validated at runtime
 - [ ] No secrets or sensitive data were added to code or logs
-- [ ] Dependency and CodeQL checks pass
+- [ ] Dependency audit and Semgrep checks pass
 
 ## Test evidence
 
