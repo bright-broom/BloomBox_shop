@@ -28,6 +28,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="ja">
       <body className={`${sans.variable} ${serif.variable}`}>
+        <div className="service-bar" aria-label="BloomBoxのサービス情報">
+          <span>旬の花を産地から</span>
+          <span>お届け日を指定できます</span>
+          <span>メッセージカード付き</span>
+        </div>
         <header className="site-header">
           <Link className="brand" href="/" aria-label="BloomBox ホーム">
             <span className="brand-mark" aria-hidden="true">
@@ -36,7 +41,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <span>BloomBox</span>
           </Link>
           <nav className="main-nav" aria-label="メインナビゲーション">
-            <Link href="/flowers">花を選ぶ</Link>
+            <Link href="/flowers">季節の花</Link>
             <a href="#about">私たちについて</a>
           </nav>
           <Link className="header-cta" href="/flowers">
@@ -55,9 +60,15 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </Link>
             <p>花を贈る。その手前にある想いまで、大切に。</p>
           </div>
-          <div className="footer-note">
-            <span>SEASONAL FLOWERS · DIRECT FROM GROWERS</span>
-            <span>© 2026 BLOOMBOX</span>
+          <div className="footer-meta">
+            <nav className="footer-nav" aria-label="フッターナビゲーション">
+              <Link href="/flowers">季節の花</Link>
+              <a href="mailto:hello@bloombox.jp">お問い合わせ</a>
+            </nav>
+            <div className="footer-note">
+              <span>SEASONAL FLOWERS · DIRECT FROM GROWERS</span>
+              <span>© 2026 BLOOMBOX</span>
+            </div>
           </div>
         </footer>
       </body>

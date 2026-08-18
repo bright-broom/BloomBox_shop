@@ -20,7 +20,7 @@ export default async function FlowersPage() {
         </p>
       </header>
       <div className="filter-row" aria-label="商品情報">
-        <span>ALL FLOWERS</span>
+        <span>すべての季節の花</span>
         <span>{String(products.length).padStart(2, "0")} COLLECTIONS</span>
       </div>
       <div className="product-grid">
