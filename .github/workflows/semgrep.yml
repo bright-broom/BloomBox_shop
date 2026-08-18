@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
-      image: semgrep/semgrep:1.172.0-nonroot
+      image: semgrep/semgrep:1.172.0
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
