@@ -93,6 +93,14 @@ const productionWorkflow = await readFile(".github/workflows/production-release.
 if (!productionWorkflow.includes("if: github.ref == 'refs/heads/main'")) {
   violations.push("production release workflow must reject dispatches from non-main branches");
 }
+if (!productionWorkflow.includes("release_sha:") || !productionWorkflow.includes("inputs.confirm == true")) {
+  violations.push("production release workflow requires explicit revision and operator confirmation");
+}
+
+const codeowners = await readFile(".github/CODEOWNERS", "utf8");
+if (!codeowners.includes("@bright-broom") || codeowners.includes("@KoenigWolf")) {
+  violations.push("CODEOWNERS must use the verified repository administrator account @bright-broom");
+}
 
 if (violations.length) {
   console.error("Repository policy violations:\n" + violations.map((item) => `- ${item}`).join("\n"));
