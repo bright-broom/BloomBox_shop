@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { money } from "@/shared/domain/money";
 import {
   catalogProductReference,
+  commerceProductReference,
   PurchaseIntent,
   purchaseIntentId,
 } from "../domain/purchase-intent";
@@ -70,6 +71,7 @@ function createIntent(): PurchaseIntent {
     displayId: "BBI-20260821-1234",
     item: {
       productId: catalogProductReference("prod_haru_01"),
+      externalProductReference: commerceProductReference("prod_haru_01"),
       productName: "春のひかり",
       quantity: 1,
       unitPriceSnapshot: money(6600),

@@ -134,6 +134,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .section-heading h2, .how-it-works h2 { margin: 0; font-family: var(--font-serif); font-weight: 400; font-size: clamp(34px, 3.4vw, 50px); letter-spacing: .05em; }
 .section-description { max-width: 420px; margin: 17px 0 0; color: var(--ink-soft); font-size: 11px; }
 .product-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(22px, 3vw, 48px); }
+.catalog-empty { grid-column: 1 / -1; margin: 0; padding: 48px 0; border-block: 1px solid var(--line); color: var(--ink-soft); line-height: 2; }
 .product-card:nth-child(2) { margin-top: 70px; }
 .product-image-wrap { position: relative; display: block; aspect-ratio: .79; overflow: hidden; background: var(--sage-light); }
 .product-image { object-fit: cover; transition: transform .7s cubic-bezier(.2,.7,.2,1); }

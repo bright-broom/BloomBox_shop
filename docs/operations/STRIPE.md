@@ -1,6 +1,6 @@
 # Stripe connection and operations
 
-This runbook prepares the dormant Stripe connector defined by ADR 0002. Do not enable live mode until the activation decision, Shopify catalog adapter, isolated end-to-end evidence, tax review, shipping configuration, support ownership, and production secrets are complete.
+This runbook prepares the dormant Stripe connector defined by ADR 0002. Do not enable live mode until the activation decision, Shopify catalog contract evidence, isolated end-to-end evidence, tax review, shipping configuration, support ownership, and production secrets are complete.
 
 ## Fixed integration contract
 
@@ -35,6 +35,8 @@ Create and record the owner for each resource in the private credential inventor
    - `charge.dispute.closed`
 6. The webhook signing secret and expected `acct_` account ID.
 
+Direct Stripe payment must not be activated until the provider activation ADR defines how Shopify-authoritative inventory is reserved before payment and reconciled after cancellation, expiry, refund, and provider outage. The current connector deliberately does not invent an inventory write policy.
+
 ## Runtime configuration
 
 Application runtime:
@@ -43,6 +45,9 @@ Application runtime:
 BLOOMBOX_RUNTIME_MODE=production
 BLOOMBOX_CHECKOUT_PROVIDER=stripe
 BLOOMBOX_PUBLIC_ORIGIN=https://<production-origin>
+SHOPIFY_STORE_DOMAIN=<shop>.myshopify.com
+SHOPIFY_STOREFRONT_ACCESS_TOKEN=<storefront-access-token>
+SHOPIFY_CATALOG_TAG=bloombox
 DATABASE_URL=<least-privilege-application-url>
 DATABASE_SSL_MODE=verify-full
 DATABASE_MAX_CONNECTIONS=5
@@ -88,6 +93,7 @@ Before changing `STRIPE_MODE` to `live`, record all of the following in the acti
 - duplicate form submission, provider timeout after Session creation, duplicate Webhook, invalid signature, delayed delivery, and reversed event order;
 - full and partial refund, failed refund, dispute opened and dispute closed;
 - changed price, unavailable catalog item, shipping-rate failure, and tax configuration mismatch;
+- concurrent buyers, the approved inventory reservation policy, reservation release, and Shopify inventory reconciliation;
 - encrypted address and gift data, log inspection, retention expiry, access controls, and data-subject workflow;
 - database backup restoration, frontend rollback, Inbox retry, Event reconciliation, and incident alert recovery;
 - Stripe Dashboard totals reconciled to BloomBox Payment, Refund, and Ledger records.

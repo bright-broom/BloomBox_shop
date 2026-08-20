@@ -4,6 +4,7 @@ import { multiplyMoney } from "@/shared/domain/money";
 import { BUSINESS_TIME_ZONE } from "@/shared/domain/time";
 import {
   catalogProductReference,
+  commerceProductReference,
   PurchaseIntent,
   purchaseIntentId,
 } from "../domain/purchase-intent";
@@ -55,6 +56,7 @@ export class CreatePurchaseIntent {
       displayId: createDisplayId(createdAt, id),
       item: {
         productId: catalogProductReference(product.id),
+        externalProductReference: commerceProductReference(product.externalReference),
         productName: product.name,
         quantity: 1,
         unitPriceSnapshot: product.price,

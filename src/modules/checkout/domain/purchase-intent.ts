@@ -12,6 +12,7 @@ import {
 
 export type PurchaseIntentId = string & { readonly __brand: "PurchaseIntentId" };
 export type CatalogProductReference = string & { readonly __brand: "CatalogProductReference" };
+export type CommerceProductReference = string & { readonly __brand: "CommerceProductReference" };
 export const COMMERCE_PROVIDERS = ["SHOPIFY", "STRIPE"] as const;
 export type CommerceProvider = (typeof COMMERCE_PROVIDERS)[number];
 
@@ -25,6 +26,11 @@ export function purchaseIntentId(value: string): PurchaseIntentId {
 export function catalogProductReference(value: string): CatalogProductReference {
   if (!value.trim()) throw new InvalidCatalogProductReferenceError();
   return value as CatalogProductReference;
+}
+
+export function commerceProductReference(value: string): CommerceProductReference {
+  if (!value.trim()) throw new InvalidCatalogProductReferenceError();
+  return value as CommerceProductReference;
 }
 
 export class InvalidPurchaseIntentIdError extends Error {
@@ -43,6 +49,7 @@ export class InvalidCatalogProductReferenceError extends Error {
 
 export type PurchaseIntentItem = Readonly<{
   productId: CatalogProductReference;
+  externalProductReference: CommerceProductReference;
   productName: string;
   quantity: number;
   unitPriceSnapshot: Money;

@@ -2,9 +2,9 @@
 
 ## Current status
 
-Preview builds and a public product-preview deployment are supported. Production commerce activation is intentionally blocked because the composed application still uses preview catalog content and in-memory purchase-intent storage. Preview gift intents return in the current browser response and are not persisted. `pnpm check:production` is the executable source of truth for commerce blockers.
+Preview builds and a public product-preview deployment are supported. The production composition now has a Shopify Storefront catalog adapter, durable PurchaseIntent storage, and a disabled Stripe connector. Production commerce activation remains intentionally blocked until account-backed contract, E2E, tax, privacy, recovery, and activation-decision evidence is recorded in `config/production-commerce-activation.json`. Preview gift intents still return in the current browser response and are not persisted. `pnpm check:production` is the executable source of truth for commerce blockers.
 
-Do not disable or bypass that check. Complete ADR 0001's Shopify adapter, contract, security, and E2E work first.
+Do not disable or bypass that check. Complete the Shopify and Stripe runbooks and approve the provider activation ADR first.
 
 ## Environments
 
@@ -40,6 +40,7 @@ The hosting provider must keep immutable deployment history so the frontend can 
 - Production secrets and environment protection are configured; no production secret reaches preview.
 - Monitoring identifies failed checkout handoff, provider errors, latency, and invalid webhook rates without logging PII.
 - If Stripe is activated, the test-mode evidence and account-side checklist in `STRIPE.md` are complete, Event reconciliation is healthy, and the live credentials are isolated from Preview.
+- If Stripe is activated while Shopify remains inventory authority, the approved activation ADR and test evidence cover reservation, release, oversell prevention, and reconciliation before any charge is accepted.
 - The release owner has exercised frontend rollback and confirmed Shopify orders remain intact.
 
 ## Rollback and incidents

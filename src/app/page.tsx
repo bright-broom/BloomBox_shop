@@ -4,6 +4,8 @@ import { siteContent } from "@/shared/infrastructure/content/site-content";
 import Image from "next/image";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   const products = await application.listProducts.execute();
 
@@ -68,9 +70,13 @@ export default async function HomePage() {
           </Link>
         </div>
         <div className="product-grid">
-          {products.map((product, index) => (
+          {products.length > 0 ? products.map((product, index) => (
             <ProductCard key={product.id} product={product} index={index} />
-          ))}
+          )) : (
+            <p className="catalog-empty" role="status">
+              {siteContent.catalog.emptyMessage}
+            </p>
+          )}
         </div>
       </section>
 

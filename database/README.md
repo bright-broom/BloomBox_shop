@@ -11,6 +11,7 @@ PostgreSQL stores BloomBox-owned purchase intents, encrypted personal data, prov
 - `BLOOMBOX_PII_KEYRING`: JSON containing the active AES-256-GCM key ID and all retained decryption keys.
 - `BLOOMBOX_RUNTIME_MODE`: defaults to `preview`; `production` selects the PostgreSQL purchase-intent adapter and fails closed if database or encryption configuration is missing.
 - Stripe connector configuration and account-side setup are documented in `docs/operations/STRIPE.md`.
+- Shopify Storefront catalog configuration and content contract are documented in `docs/operations/SHOPIFY.md`.
 
 Example names only; use secret management rather than a checked-in environment file:
 

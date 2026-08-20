@@ -14,6 +14,7 @@ import { StripeWebhookVerifier } from "@/modules/payment/infrastructure/stripe-w
 import type { StripeConfig } from "@/shared/infrastructure/config/stripe-config";
 import {
   catalogProductReference,
+  commerceProductReference,
   PurchaseIntent,
   purchaseIntentId,
 } from "../domain/purchase-intent";
@@ -53,8 +54,8 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       ORDER BY version
     `;
 
-    expect(rows).toHaveLength(3);
-    expect(rows.map((row) => row.version)).toEqual(["0001", "0002", "0003"]);
+    expect(rows).toHaveLength(4);
+    expect(rows.map((row) => row.version)).toEqual(["0001", "0002", "0003", "0004"]);
     expect(rows.every((row) => /^[0-9a-f]{64}$/.test(row.checksum))).toBe(true);
   });
 
@@ -65,6 +66,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       displayId: `BBI-20260821-${intentId.slice(0, 4).toUpperCase()}`,
       item: {
         productId: catalogProductReference("prod_haru_01"),
+        externalProductReference: commerceProductReference("gid://shopify/ProductVariant/101"),
         productName: "春のひかり",
         quantity: 1,
         unitPriceSnapshot: money(6600),
@@ -83,9 +85,14 @@ describeDatabase("PostgreSQL commerce foundation", () => {
     await repository.save(intent);
     const restored = await repository.findById(intentId);
     const rawRows = await sql`
-      SELECT recipient_ciphertext, gift_message_ciphertext
-      FROM bloombox.purchase_intents
-      WHERE id = ${intentId}
+      SELECT
+        intent.recipient_ciphertext,
+        intent.gift_message_ciphertext,
+        item.catalog_product_id,
+        item.external_product_id
+      FROM bloombox.purchase_intents AS intent
+      JOIN bloombox.purchase_intent_items AS item ON item.purchase_intent_id = intent.id
+      WHERE intent.id = ${intentId}
     `;
     const outboxRows = await sql`
       SELECT event_type, payload
@@ -100,6 +107,10 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       rawRows[0].recipient_ciphertext,
       rawRows[0].gift_message_ciphertext,
     ]).toString("utf8")).not.toContain("花子");
+    expect(rawRows[0]).toMatchObject({
+      catalog_product_id: "prod_haru_01",
+      external_product_id: "gid://shopify/ProductVariant/101",
+    });
     expect(outboxRows).toEqual([{
       event_type: "checkout.purchase_intent.ready",
       payload: { purchaseIntentId: intentId, status: "READY_FOR_CHECKOUT" },
@@ -157,6 +168,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       displayId: `BBI-20260821-${intentId.slice(0, 4).toUpperCase()}`,
       item: {
         productId: catalogProductReference("prod_haru_01"),
+        externalProductReference: commerceProductReference("gid://shopify/ProductVariant/101"),
         productName: "春のひかり",
         quantity: 1,
         unitPriceSnapshot: money(6600),
@@ -214,6 +226,8 @@ describeDatabase("PostgreSQL commerce foundation", () => {
         orders.included_tax_minor,
         payments.status AS payment_status,
         fulfillments.status AS fulfillment_status,
+        order_item.catalog_product_id,
+        order_item.external_product_id,
         gift.address_ciphertext,
         (SELECT COUNT(*)::integer FROM bloombox.orders WHERE purchase_intent_id = ${intentId}) AS order_count,
         (SELECT COUNT(*)::integer FROM bloombox.financial_transactions WHERE payment_id = payments.id) AS ledger_transaction_count
@@ -221,6 +235,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       JOIN bloombox.orders ON orders.purchase_intent_id = intent.id
       JOIN bloombox.payments ON payments.order_id = orders.id
       JOIN bloombox.fulfillments ON fulfillments.order_id = orders.id
+      JOIN bloombox.order_items AS order_item ON order_item.order_id = orders.id
       JOIN bloombox.order_gift_snapshots AS gift ON gift.order_id = orders.id
       WHERE intent.id = ${intentId}
     `;
@@ -232,6 +247,8 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       included_tax_minor: "600",
       payment_status: "CAPTURED",
       fulfillment_status: "UNFULFILLED",
+      catalog_product_id: "prod_haru_01",
+      external_product_id: "gid://shopify/ProductVariant/101",
       order_count: 1,
       ledger_transaction_count: 1,
     });
@@ -519,6 +536,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       displayId: `BBI-20260601-${intentId.slice(0, 4).toUpperCase()}`,
       item: {
         productId: catalogProductReference("prod_retention_01"),
+        externalProductReference: commerceProductReference("gid://shopify/ProductVariant/999"),
         productName: "保存期限テスト",
         quantity: 1,
         unitPriceSnapshot: money(5000),

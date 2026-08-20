@@ -64,6 +64,7 @@ const purchaseIntentRowSchema = z.object({
   recipient_ciphertext: z.instanceof(Buffer).nullable(),
   gift_message_ciphertext: z.instanceof(Buffer).nullable(),
   created_at: z.union([z.string(), z.date()]),
+  catalog_product_id: z.string(),
   external_product_id: z.string(),
   product_name_snapshot: z.string(),
   quantity: z.number().int().positive(),
@@ -163,6 +164,7 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
           intent.recipient_ciphertext,
           intent.gift_message_ciphertext,
           intent.created_at,
+          item.catalog_product_id,
           item.external_product_id,
           item.product_name_snapshot,
           item.quantity,
@@ -264,10 +266,11 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
       `;
       await transaction`
         INSERT INTO bloombox.order_items (
-          id, order_id, external_product_id, product_name_snapshot, quantity,
+          id, order_id, catalog_product_id, external_product_id, product_name_snapshot, quantity,
           unit_amount_minor, tax_minor, discount_minor, line_total_minor, currency, position
         ) VALUES (
-          ${this.createId()}, ${orderId}, ${intent.external_product_id},
+          ${this.createId()}, ${orderId}, ${intent.catalog_product_id},
+          ${intent.external_product_id},
           ${intent.product_name_snapshot}, ${intent.quantity},
           ${toSafeInteger(intent.unit_amount_minor)}, 0, 0, ${itemSubtotal}, ${intent.currency}, 0
         )

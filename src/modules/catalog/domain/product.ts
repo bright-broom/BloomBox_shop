@@ -4,6 +4,7 @@ export type ProductId = string & { readonly __brand: "ProductId" };
 
 export type Product = Readonly<{
   id: ProductId;
+  externalReference: string;
   slug: string;
   name: string;
   subtitle: string;
