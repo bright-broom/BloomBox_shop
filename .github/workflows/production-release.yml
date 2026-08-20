@@ -2,6 +2,15 @@ name: Production Release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Full main commit SHA that has passed all release gates
+        required: true
+        type: string
+      confirm:
+        description: I have reviewed the release evidence and approve deployment
+        required: true
+        type: boolean
 
 permissions:
   contents: read
@@ -13,7 +22,7 @@ concurrency:
 jobs:
   verify:
     name: Verify release candidate
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && inputs.confirm == true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
@@ -32,6 +41,10 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Confirm requested revision
+        env:
+          REQUESTED_RELEASE_SHA: ${{ inputs.release_sha }}
+        run: test "$(git rev-parse HEAD)" = "$REQUESTED_RELEASE_SHA"
       - name: Run release gates
         run: pnpm check:release
       - name: Record verified revision

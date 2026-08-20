@@ -59,3 +59,13 @@ Repository files cannot enforce account-level rulesets. The repository owner mus
 ## Exceptions
 
 An exception states the exact control, reason, owner, expiry date, compensating control, and removal issue. Permanent verbal exceptions are invalid. Urgent production recovery may use the narrowest available bypass, followed by a PR and incident record.
+
+### Current GitHub plan exception
+
+The current private-repository plan does not support branch rulesets, required environment reviewers, wait timers, or administrator-bypass restrictions. GitHub rejected those settings through its API on 2026-08-20. Until [issue #6](https://github.com/bright-broom/BloomBox_shop/issues/6) is completed:
+
+- the Production Environment accepts deployments only from `main`;
+- the release operator must enter the full verified commit SHA and explicitly confirm deployment;
+- CI, Semgrep, PR Governance, and Vercel Preview evidence are reviewed before merge;
+- Production Commerce remains blocked by `pnpm check:production`;
+- the repository owner reviews this exception by 2026-09-30.
