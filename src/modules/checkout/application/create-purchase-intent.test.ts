@@ -7,6 +7,7 @@ import {
   InvalidPurchaseIntentInputError,
 } from "../domain/purchase-intent-policy";
 import { CreatePurchaseIntent } from "./create-purchase-intent";
+import { PurchaseIntentIdempotencyConflictError } from "./create-purchase-intent";
 
 describe("CreatePurchaseIntent", () => {
   it("uses the server-side catalog price snapshot without creating an order", async () => {
@@ -16,10 +17,10 @@ describe("CreatePurchaseIntent", () => {
       products,
       intents,
       () => new Date("2026-08-19T00:00:00.000Z"),
-      () => "12345678-abcd-4000-8000-123456789012",
     );
 
     const intent = await useCase.execute({
+      requestId: "12345678-abcd-4000-8000-123456789012",
       productId: "prod_haru_01",
       recipientName: "花子",
       deliveryDate: "2026-08-25",
@@ -47,6 +48,15 @@ describe("CreatePurchaseIntent", () => {
     await expect(useCase.execute(validInput({ giftMessage: "花".repeat(GIFT_MESSAGE_MAX_LENGTH + 1) })))
       .rejects.toBeInstanceOf(InvalidPurchaseIntentInputError);
   });
+
+  it("returns the original intent for a repeated request and rejects key reuse", async () => {
+    const useCase = createUseCase();
+    const first = await useCase.execute(validInput());
+
+    await expect(useCase.execute(validInput())).resolves.toBe(first);
+    await expect(useCase.execute(validInput({ giftMessage: "別の内容" })))
+      .rejects.toBeInstanceOf(PurchaseIntentIdempotencyConflictError);
+  });
 });
 
 function createUseCase(): CreatePurchaseIntent {
@@ -54,12 +64,12 @@ function createUseCase(): CreatePurchaseIntent {
     new InMemoryProductRepository(),
     new InMemoryPurchaseIntentRepository(),
     () => new Date("2026-08-19T00:00:00.000Z"),
-    () => "12345678-abcd-4000-8000-123456789012",
   );
 }
 
 function validInput(overrides: Partial<Parameters<CreatePurchaseIntent["execute"]>[0]> = {}) {
   return {
+    requestId: "12345678-abcd-4000-8000-123456789012",
     productId: "prod_haru_01",
     recipientName: "花子",
     deliveryDate: "2026-08-25",

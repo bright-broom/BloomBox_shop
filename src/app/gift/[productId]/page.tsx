@@ -3,6 +3,7 @@ import { getEarliestDeliveryDate } from "@/modules/fulfillment/public";
 import { application } from "@/shared/infrastructure/composition-root";
 import { formatMoney } from "@/shared/domain/money";
 import { GiftForm } from "@/ui/gift-form";
+import { randomUUID } from "node:crypto";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 
@@ -42,7 +43,11 @@ export default async function GiftPage({ params }: GiftPageProps) {
           </div>
           <p className="summary-note">税込・送料別 ｜ 数量 1</p>
         </aside>
-        <GiftForm productId={product.id} minDeliveryDate={getEarliestDeliveryDate()} />
+        <GiftForm
+          productId={product.id}
+          minDeliveryDate={getEarliestDeliveryDate()}
+          requestId={randomUUID()}
+        />
       </div>
     </section>
   );

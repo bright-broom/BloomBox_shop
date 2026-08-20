@@ -9,9 +9,11 @@ import { useActionState, useEffect, useRef } from "react";
 export function GiftForm({
   productId,
   minDeliveryDate,
+  requestId,
 }: {
   productId: string;
   minDeliveryDate: string;
+  requestId: string;
 }) {
   const [state, formAction, pending] = useActionState(createPurchaseIntentAction, {});
   const confirmationRef = useRef<HTMLDivElement>(null);
@@ -19,6 +21,19 @@ export function GiftForm({
   useEffect(() => {
     if (state.draft) confirmationRef.current?.focus();
   }, [state.draft]);
+
+  useEffect(() => {
+    if (state.checkout) window.location.assign(state.checkout.url);
+  }, [state.checkout]);
+
+  if (state.checkout) {
+    return (
+      <div className="draft-confirmation" role="status">
+        <p className="eyebrow">SECURE CHECKOUT</p>
+        <h2>安全な決済画面へ<br />移動しています。</h2>
+      </div>
+    );
+  }
 
   if (state.draft) {
     return (
@@ -44,6 +59,7 @@ export function GiftForm({
 
   return (
     <form className="gift-form" action={formAction} noValidate>
+      <input type="hidden" name="requestId" value={requestId} />
       <input type="hidden" name="productId" value={productId} />
       <div className="form-intro">
         <div>

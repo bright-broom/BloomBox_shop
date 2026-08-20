@@ -12,6 +12,7 @@ import {
   recipientName,
 } from "../domain/purchase-intent-policy";
 import type { PurchaseIntentRepository } from "../domain/purchase-intent-repository";
+import { PurchaseIntentAlreadyExistsError } from "../domain/purchase-intent-repository";
 
 export class ProductUnavailableError extends Error {
   constructor() {
@@ -21,6 +22,7 @@ export class ProductUnavailableError extends Error {
 }
 
 export type CreatePurchaseIntentInput = Readonly<{
+  requestId: string;
   productId: string;
   recipientName: string;
   deliveryDate: string;
@@ -32,10 +34,15 @@ export class CreatePurchaseIntent {
     private readonly products: ProductRepository,
     private readonly intents: PurchaseIntentRepository,
     private readonly now: () => Date = () => new Date(),
-    private readonly createId: () => string = () => crypto.randomUUID(),
   ) {}
 
   async execute(input: CreatePurchaseIntentInput): Promise<PurchaseIntent> {
+    const id = purchaseIntentId(input.requestId);
+    const normalizedRecipientName = recipientName(input.recipientName);
+    const normalizedGiftMessage = giftMessage(input.giftMessage);
+    const existing = await this.intents.findById(id);
+    if (existing) return assertIdempotentMatch(existing, input, normalizedRecipientName, normalizedGiftMessage);
+
     const product = await this.products.findById(productId(input.productId));
     if (!product?.available) {
       throw new ProductUnavailableError();
@@ -43,10 +50,9 @@ export class CreatePurchaseIntent {
 
     const createdAt = this.now();
     assertAvailableDeliveryDate(input.deliveryDate, createdAt);
-    const rawId = this.createId();
     const intent = PurchaseIntent.create({
-      id: purchaseIntentId(rawId),
-      displayId: createDisplayId(createdAt, rawId),
+      id,
+      displayId: createDisplayId(createdAt, id),
       item: {
         productId: catalogProductReference(product.id),
         productName: product.name,
@@ -55,17 +61,53 @@ export class CreatePurchaseIntent {
         subtotal: multiplyMoney(product.price, 1),
       },
       recipient: {
-        name: recipientName(input.recipientName),
+        name: normalizedRecipientName,
         deliveryDate: input.deliveryDate,
       },
-      giftMessage: giftMessage(input.giftMessage),
+      giftMessage: normalizedGiftMessage,
       createdAt,
     });
 
     intent.transitionTo("READY_FOR_CHECKOUT");
-    await this.intents.save(intent);
+    try {
+      await this.intents.save(intent);
+    } catch (error) {
+      if (!(error instanceof PurchaseIntentAlreadyExistsError)) throw error;
+      const concurrentlyCreated = await this.intents.findById(id);
+      if (!concurrentlyCreated) throw error;
+      return assertIdempotentMatch(
+        concurrentlyCreated,
+        input,
+        normalizedRecipientName,
+        normalizedGiftMessage,
+      );
+    }
     return intent;
   }
+}
+
+export class PurchaseIntentIdempotencyConflictError extends Error {
+  constructor() {
+    super("同じ操作 ID が異なる購入内容に使用されました。ページを更新してもう一度お試しください。");
+    this.name = "PurchaseIntentIdempotencyConflictError";
+  }
+}
+
+function assertIdempotentMatch(
+  existing: PurchaseIntent,
+  input: CreatePurchaseIntentInput,
+  normalizedRecipientName: ReturnType<typeof recipientName>,
+  normalizedGiftMessage: ReturnType<typeof giftMessage>,
+): PurchaseIntent {
+  if (
+    existing.item.productId !== input.productId
+    || existing.recipient.name !== normalizedRecipientName
+    || existing.recipient.deliveryDate !== input.deliveryDate
+    || existing.giftMessage !== normalizedGiftMessage
+  ) {
+    throw new PurchaseIntentIdempotencyConflictError();
+  }
+  return existing;
 }
 
 function createDisplayId(createdAt: Date, id: string): string {

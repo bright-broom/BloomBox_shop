@@ -16,6 +16,7 @@ export async function createPurchaseIntentAction(
   formData: FormData,
 ): Promise<CreatePurchaseIntentFormState> {
   const parsed = createPurchaseIntentSchema.safeParse({
+    requestId: formData.get("requestId"),
     productId: formData.get("productId"),
     recipientName: formData.get("recipientName"),
     deliveryDate: formData.get("deliveryDate"),
@@ -27,7 +28,11 @@ export async function createPurchaseIntentAction(
   }
 
   try {
-    const intent = await application.createPurchaseIntent.execute(parsed.data);
+    const prepared = await application.preparePurchase.execute(parsed.data);
+    const intent = prepared.intent;
+    if (prepared.checkoutSession) {
+      return { checkout: { url: prepared.checkoutSession.url } };
+    }
     return {
       draft: {
         displayId: intent.displayId,
