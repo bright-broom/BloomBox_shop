@@ -11,6 +11,18 @@ PostgreSQL stores BloomBox-owned purchase intents, encrypted personal data, prov
 - `BLOOMBOX_PII_KEYRING`: JSON containing the active AES-256-GCM key ID and all retained decryption keys.
 - `BLOOMBOX_RUNTIME_MODE`: defaults to `preview`; `production` selects the PostgreSQL purchase-intent adapter and fails closed if database or encryption configuration is missing.
 
+Example names only; use secret management rather than a checked-in environment file:
+
+```text
+BLOOMBOX_RUNTIME_MODE=preview
+DATABASE_URL=postgres://bloombox_application:<password>@<host>:5432/bloombox
+DATABASE_WORKER_URL=postgres://bloombox_worker:<password>@<host>:5432/bloombox
+DATABASE_MIGRATION_URL=postgres://bloombox_migration:<password>@<host>:5432/bloombox
+DATABASE_SSL_MODE=verify-full
+DATABASE_MAX_CONNECTIONS=5
+BLOOMBOX_PII_KEYRING={"activeKeyId":"<key-id>","keys":{"<key-id>":"<base64-32-byte-key>"}}
+```
+
 Never use a production URL in automated tests. The integration suite refuses non-local URLs and database names without `test`.
 
 ## Provisioning
