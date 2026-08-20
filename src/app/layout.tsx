@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Noto_Sans_JP, Shippori_Mincho } from "next/font/google";
 import Link from "next/link";
+import { siteContent } from "@/shared/infrastructure/content/site-content";
 import "./globals.css";
 
 const sans = Noto_Sans_JP({
@@ -18,10 +19,10 @@ const serif = Shippori_Mincho({
 
 export const metadata: Metadata = {
   title: {
-    default: "BloomBox — 想いに、花を選ぶ時間を。",
-    template: "%s | BloomBox",
+    default: siteContent.defaultTitle,
+    template: siteContent.titleTemplate,
   },
-  description: "贈る理由から、ぴったりの花とことばを選ぶギフト体験。",
+  description: siteContent.description,
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -29,16 +30,14 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="ja">
       <body className={`${sans.variable} ${serif.variable}`}>
         <div className="service-bar" aria-label="BloomBoxのサービス情報">
-          <span>旬の花を産地から</span>
-          <span>お届け日を指定できます</span>
-          <span>メッセージカード付き</span>
+          {siteContent.serviceMessages.map((message) => <span key={message}>{message}</span>)}
         </div>
         <header className="site-header">
           <Link className="brand" href="/" aria-label="BloomBox ホーム">
             <span className="brand-mark" aria-hidden="true">
               B
             </span>
-            <span>BloomBox</span>
+            <span>{siteContent.brandName}</span>
           </Link>
           <nav className="main-nav" aria-label="メインナビゲーション">
             <Link href="/flowers">季節の花</Link>
@@ -56,18 +55,18 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <span className="brand-mark" aria-hidden="true">
                 B
               </span>
-              <span>BloomBox</span>
+              <span>{siteContent.brandName}</span>
             </Link>
-            <p>花を贈る。その手前にある想いまで、大切に。</p>
+            <p>{siteContent.footer.tagline}</p>
           </div>
           <div className="footer-meta">
             <nav className="footer-nav" aria-label="フッターナビゲーション">
               <Link href="/flowers">季節の花</Link>
-              <a href="mailto:hello@bloombox.jp">お問い合わせ</a>
+              <a href={`mailto:${siteContent.contactEmail}`}>お問い合わせ</a>
             </nav>
             <div className="footer-note">
-              <span>SEASONAL FLOWERS · DIRECT FROM GROWERS</span>
-              <span>© 2026 BLOOMBOX</span>
+              <span>{siteContent.footer.originNote}</span>
+              <span>© {new Date().getFullYear()} {siteContent.footer.copyrightHolder}</span>
             </div>
           </div>
         </footer>

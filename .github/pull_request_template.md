@@ -6,27 +6,26 @@
 
 <!-- Keep this focused on behavior and meaningful implementation decisions. -->
 
-## Principal Engineer review
+## Risk level
 
-- [ ] Architecture boundaries remain intact
-- [ ] Failure modes and rollback are understood
-- [ ] Observability or operational impact is addressed, or not applicable
+- [ ] L0 — docs, copy, or metadata
+- [ ] L1 — presentation or design
+- [ ] L2 — domain, application, adapter, dependency, or architecture
+- [ ] L3 — payment, auth, PII, webhook, schema, inventory, fulfillment, or production infrastructure
 
-## Security review
+## Review evidence
 
-- [ ] Trust boundaries and authorization were considered
-- [ ] External input is validated at runtime
-- [ ] No secrets or sensitive data were added to code or logs
-- [ ] Dependency audit and Semgrep checks pass
+- [ ] Principal architect — ownership, source of truth, boundaries, failure modes, and ADR impact
+- [ ] Principal designer — hierarchy, states, accessibility, responsive behavior, and content resilience
+- [ ] Principal software engineer — implementation, tests, observability, maintainability, and rollback
+- [ ] Security/privacy — trust boundary, validation, authorization, secrets, PII, and dependencies, or not applicable
 
-## Test evidence
+<!-- Explain the material findings. For L0, mark non-applicable perspectives explicitly. -->
 
-- [ ] Architecture check
-- [ ] Typecheck and lint
-- [ ] Unit tests
-- [ ] Production build
-- [ ] Manual verification, or not applicable
+## Verification
 
-## Risk and rollback
+<!-- List checks actually run and visual, E2E, migration, or provider evidence. -->
+
+## Rollback
 
 <!-- State the main risk and the quickest safe rollback. -->

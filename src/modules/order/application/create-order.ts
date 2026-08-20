@@ -1,7 +1,9 @@
-import type { ProductRepository } from "@/modules/catalog/domain/product-repository";
-import { productId } from "@/modules/catalog/domain/product";
+import { productId, type ProductRepository } from "@/modules/catalog/public";
+import { assertAvailableDeliveryDate } from "@/modules/fulfillment/public";
+import { BUSINESS_TIME_ZONE } from "@/shared/domain/time";
 import { multiplyMoney } from "@/shared/domain/money";
-import { Order, type OrderId } from "../domain/order";
+import { catalogProductReference, Order, type OrderId } from "../domain/order";
+import { giftMessage, recipientName } from "../domain/order-policy";
 import type { OrderRepository } from "../domain/order-repository";
 
 export class ProductUnavailableError extends Error {
@@ -33,22 +35,23 @@ export class CreateOrder {
     }
 
     const createdAt = this.now();
+    assertAvailableDeliveryDate(input.deliveryDate, createdAt);
     const rawId = this.createId();
     const order = Order.create({
       id: rawId as OrderId,
       displayId: createDisplayId(createdAt, rawId),
       item: {
-        productId: product.id,
+        productId: catalogProductReference(product.id),
         productName: product.name,
         quantity: 1,
         unitPriceSnapshot: product.price,
         subtotal: multiplyMoney(product.price, 1),
       },
       recipient: {
-        name: input.recipientName,
+        name: recipientName(input.recipientName),
         deliveryDate: input.deliveryDate,
       },
-      giftMessage: input.giftMessage,
+      giftMessage: giftMessage(input.giftMessage),
       createdAt,
     });
 
@@ -60,7 +63,7 @@ export class CreateOrder {
 
 function createDisplayId(createdAt: Date, id: string): string {
   const date = new Intl.DateTimeFormat("ja-JP", {
-    timeZone: "Asia/Tokyo",
+    timeZone: BUSINESS_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

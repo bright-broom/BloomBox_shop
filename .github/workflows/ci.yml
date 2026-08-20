@@ -29,8 +29,16 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Check repository policy
+        run: pnpm check:repository
       - name: Check architecture boundaries
         run: pnpm check:architecture
+      - name: Check design tokens
+        run: pnpm check:design
+      - name: Check hardcoding policy
+        run: pnpm check:hardcoding
+      - name: Validate managed content
+        run: pnpm check:content
       - name: Check types
         run: pnpm typecheck
       - name: Lint

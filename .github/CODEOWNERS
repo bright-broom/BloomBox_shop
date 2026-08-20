@@ -1,5 +1,10 @@
 * @KoenigWolf
 
 /.github/ @KoenigWolf
+/content/ @KoenigWolf
+/docs/ @KoenigWolf
+/scripts/ @KoenigWolf
+/src/app/ @KoenigWolf
 /src/modules/ @KoenigWolf
 /src/shared/ @KoenigWolf
+/src/ui/ @KoenigWolf

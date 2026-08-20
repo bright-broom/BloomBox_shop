@@ -12,6 +12,16 @@ Use the relevant section for the current change; do not load this entire guide w
 - Expected business failures use typed errors. Never catch and ignore an error.
 - Queries are read-only. Names must not hide writes or external effects.
 - Comments explain constraints and reasons, not what the code visibly does.
+- Cross-module imports use `@/modules/<module>/public`; implementation folders are private to their module.
+
+## Configuration and hardcoding
+
+- Editable brand copy, contact details, and preview content belong in validated `content/` files.
+- Business limits and time rules belong in the owning domain as named exports and have focused tests.
+- Colors and shared visual primitives use semantic design tokens. Do not place raw colors in component rules.
+- Secrets, origins, provider identifiers, and environment-specific values use a centralized server-only environment schema.
+- Do not move unrelated settings into one global configuration object. Preserve ownership and validation boundaries.
+- `pnpm check:hardcoding`, `pnpm check:design`, and content schema tests enforce the deterministic portion of these rules.
 
 ## Next.js and presentation
 
@@ -50,6 +60,14 @@ Test the changed behavior and likely regression, then choose the smallest suffic
 
 Do not rerun an unchanged expensive suite after a documentation-only edit. Do rerun a failed or affected gate after its fix. CI executes the full standard suite on PRs.
 
+Command groups:
+
+- `pnpm check:static` — repository, architecture, design, hardcoding, type, and lint policy.
+- `pnpm check:ci` — static policy, all tests, and production build.
+- `pnpm check:release` — CI, production dependency audit, and production-adapter readiness.
+
+Production readiness is intentionally separate from PR CI while the preview application is being developed. Never weaken it to make a release green.
+
 ## Change and PR discipline
 
 - One PR has one coherent responsibility. Separate unrelated UI, domain, and infrastructure changes.
@@ -57,6 +75,7 @@ Do not rerun an unchanged expensive suite after a documentation-only edit. Do re
 - Do not leave commented-out code. A TODO references a tracked issue when one exists.
 - Schema changes include the schema definition, migration, affected code/tests, compatibility analysis, and rollback plan.
 - A PR explains why, meaningful changes, architecture/security impact, verification evidence, risk, and rollback. Add screenshots when visual behavior changed.
+- Architecture decisions use the ADR template; accepted ADRs override earlier undocumented direction.
 
 ## Definition of done
 

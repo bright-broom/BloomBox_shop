@@ -2,7 +2,7 @@ name: CI failure triage
 
 on:
   workflow_run:
-    workflows: [CI, Semgrep CE]
+    workflows: [CI, Semgrep CE, PR Governance, Production Release]
     types: [completed]
 
 permissions:

@@ -31,7 +31,9 @@ BloomBox is a gift-experience platform. Optimize in this order: correct orders, 
 - A module never mutates another module's tables directly.
 - Keep these concepts distinct: Order/Payment/Fulfillment, Buyer/Recipient, Product/Flower/FlowerLot, Customer/User, Gift/Order.
 - Business logic and authoritative state transitions do not live in React components.
-- Shopify is outside the production architecture unless an ADR explicitly changes that decision.
+- Shopify is the production commerce system of record. Keep its SDK and transport models behind infrastructure adapters as defined by ADR 0001.
+- Checked-in catalog JSON and in-memory repositories are preview fixtures; they must never pass the production-readiness gate.
+- Cross-module code imports only the owning module's `public.ts` entry point.
 
 Architecture details: [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md).
 
@@ -68,7 +70,8 @@ Escalate only for evidence: changed trust boundary, persistence model, provider,
 - Server Components are the default. Limit client boundaries to browser interaction.
 - Add tests for changed behavior and regression risk, not coverage percentage. Critical commerce changes cover failure and repeated execution.
 - Run the smallest sufficient local checks for the level above. CI remains authoritative for the full standard suite.
-- For this repository, the full suite is `pnpm check:architecture`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm audit --prod --audit-level high`, and `pnpm build`.
+- Use `pnpm check:ci` for the deterministic CI suite. Use `pnpm check:release` only for a production candidate; it also audits production dependencies and rejects preview adapters.
+- Put editable site copy in validated `content/` files, business limits in the owning domain policy, design primitives in root CSS tokens, and secrets or environment-specific values in validated server configuration.
 
 Implementation details: [`docs/engineering/DEVELOPMENT.md`](docs/engineering/DEVELOPMENT.md).
 
@@ -78,6 +81,8 @@ Do not preload every document.
 
 - Module, dependency, state, transaction, provider, or data-model change → architecture guide and relevant ADR only.
 - Code, Next.js, validation, tests, dependency, or PR mechanics → development guide, relevant section only.
+- UI pattern, token, accessibility, or visual-state change → [`docs/design/DESIGN_SYSTEM.md`](docs/design/DESIGN_SYSTEM.md).
+- Ownership, review, deployment, or production-readiness change → the relevant document in [`docs/operations`](docs/operations).
 - Security-sensitive change → [`SECURITY.md`](SECURITY.md) plus the affected architecture section.
 - Next.js behavior → the generated Next.js rule above and the exact relevant local framework guide.
 

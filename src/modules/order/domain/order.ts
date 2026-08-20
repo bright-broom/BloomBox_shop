@@ -1,11 +1,24 @@
-import type { ProductId } from "@/modules/catalog/domain/product";
 import type { Money } from "@/shared/domain/money";
+import type { GiftMessage, RecipientName } from "./order-policy";
 import { assertOrderTransition, type OrderStatus } from "./order-status";
 
 export type OrderId = string & { readonly __brand: "OrderId" };
+export type CatalogProductReference = string & { readonly __brand: "CatalogProductReference" };
+
+export function catalogProductReference(value: string): CatalogProductReference {
+  if (!value.trim()) throw new InvalidCatalogProductReferenceError();
+  return value as CatalogProductReference;
+}
+
+export class InvalidCatalogProductReferenceError extends Error {
+  constructor() {
+    super("Catalog product reference must not be empty");
+    this.name = "InvalidCatalogProductReferenceError";
+  }
+}
 
 export type OrderItem = Readonly<{
-  productId: ProductId;
+  productId: CatalogProductReference;
   productName: string;
   quantity: number;
   unitPriceSnapshot: Money;
@@ -13,7 +26,7 @@ export type OrderItem = Readonly<{
 }>;
 
 export type Recipient = Readonly<{
-  name: string;
+  name: RecipientName;
   deliveryDate: string;
 }>;
 
@@ -25,7 +38,7 @@ export class Order {
     readonly displayId: string,
     readonly item: OrderItem,
     readonly recipient: Recipient,
-    readonly giftMessage: string,
+    readonly giftMessage: GiftMessage,
     readonly createdAt: Date,
     status: OrderStatus,
   ) {
@@ -37,7 +50,7 @@ export class Order {
     displayId: string;
     item: OrderItem;
     recipient: Recipient;
-    giftMessage: string;
+    giftMessage: GiftMessage;
     createdAt: Date;
   }): Order {
     return new Order(

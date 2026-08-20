@@ -1,0 +1,79 @@
+name: PR Governance
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr-governance-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate-description:
+    name: Validate risk and review evidence
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate pull request description
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const body = context.payload.pull_request.body ?? "";
+            const requiredHeadings = [
+              "## Why",
+              "## What changed",
+              "## Risk level",
+              "## Review evidence",
+              "## Verification",
+              "## Rollback",
+            ];
+            const missing = requiredHeadings.filter((heading) => !body.includes(heading));
+            const selectedRiskLevels = [...body.matchAll(/- \[[xX]\] L([0-3])\b/g)];
+            const requiredNarrative = ["## Why", "## What changed", "## Verification", "## Rollback"];
+            const emptyNarrative = requiredNarrative.filter((heading) => {
+              const start = body.indexOf(heading);
+              if (start < 0) return false;
+              const remainder = body.slice(start + heading.length);
+              const nextHeading = remainder.search(/^## /m);
+              const section = (nextHeading >= 0 ? remainder.slice(0, nextHeading) : remainder)
+                .replace(/<!--[\s\S]*?-->/g, "")
+                .replace(/^- \[[ xX]\].*$/gm, "")
+                .trim();
+              return section.length < 20;
+            });
+
+            const selectedLevel = selectedRiskLevels[0]?.[1];
+            const selectedReview = (label) => new RegExp(`- \\[x\\] ${label}`, "i").test(body);
+            const requiredReviewByLevel = {
+              L0: [],
+              L1: ["Principal designer", "Principal software engineer"],
+              L2: ["Principal architect", "Principal software engineer"],
+              L3: ["Principal architect", "Principal software engineer", "Security/privacy"],
+            };
+            const missingReviews = (requiredReviewByLevel[`L${selectedLevel}`] ?? [])
+              .filter((label) => !selectedReview(label));
+
+            if (
+              missing.length > 0
+              || selectedRiskLevels.length !== 1
+              || emptyNarrative.length > 0
+              || missingReviews.length > 0
+            ) {
+              core.setFailed([
+                missing.length > 0 ? `Missing headings: ${missing.join(", ")}` : null,
+                selectedRiskLevels.length !== 1
+                  ? "Select exactly one risk level (L0-L3) in the pull request template."
+                  : null,
+                emptyNarrative.length > 0
+                  ? `Add concrete evidence under: ${emptyNarrative.join(", ")}`
+                  : null,
+                missingReviews.length > 0
+                  ? `Complete required review perspectives: ${missingReviews.join(", ")}`
+                  : null,
+              ].filter(Boolean).join("\n"));
+            }

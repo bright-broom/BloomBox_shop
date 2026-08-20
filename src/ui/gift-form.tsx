@@ -1,7 +1,10 @@
 "use client";
 
 import { createOrderAction } from "@/modules/order/presentation/actions";
-import { useActionState } from "react";
+import { DELIVERY_LEAD_TIME_DAYS } from "@/modules/fulfillment/public";
+import { GIFT_MESSAGE_MAX_LENGTH } from "@/modules/order/public";
+import Link from "next/link";
+import { useActionState, useEffect, useRef } from "react";
 
 export function GiftForm({
   productId,
@@ -11,6 +14,33 @@ export function GiftForm({
   minDeliveryDate: string;
 }) {
   const [state, formAction, pending] = useActionState(createOrderAction, {});
+  const confirmationRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (state.draft) confirmationRef.current?.focus();
+  }, [state.draft]);
+
+  if (state.draft) {
+    return (
+      <div className="draft-confirmation" ref={confirmationRef} role="status" tabIndex={-1}>
+        <span className="confirmation-mark" aria-hidden="true">✓</span>
+        <p className="eyebrow">GIFT DRAFT CREATED</p>
+        <h2>ギフトの下書きが<br />できました。</h2>
+        <p>
+          入力内容を確認しました。プレビュー版のため、注文情報は保存されず、決済も発生しません。
+        </p>
+        <dl>
+          <div><dt>受付番号</dt><dd>{state.draft.displayId}</dd></div>
+          <div><dt>お花</dt><dd>{state.draft.productName}</dd></div>
+          <div><dt>お届け予定</dt><dd>{state.draft.deliveryDate}</dd></div>
+          <div><dt>参考価格</dt><dd>{state.draft.formattedTotal}</dd></div>
+        </dl>
+        <Link className="primary-button" href="/flowers">
+          別の花を見る <span aria-hidden="true">→</span>
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <form className="gift-form" action={formAction} noValidate>
@@ -44,19 +74,21 @@ export function GiftForm({
           aria-describedby="deliveryDate-note deliveryDate-error"
           required
         />
-        <p className="field-note" id="deliveryDate-note">ご注文日の3日後からお選びいただけます。</p>
+        <p className="field-note" id="deliveryDate-note">
+          ご注文日の{DELIVERY_LEAD_TIME_DAYS}日後からお選びいただけます。
+        </p>
         <FieldError id="deliveryDate-error" messages={state.fieldErrors?.deliveryDate} />
       </div>
       <div className="form-field">
         <div className="label-row">
           <label htmlFor="giftMessage"><span>03</span> 贈ることば <i aria-hidden="true">*</i></label>
-          <span>180文字まで</span>
+          <span>{GIFT_MESSAGE_MAX_LENGTH}文字まで</span>
         </div>
         <textarea
           id="giftMessage"
           name="giftMessage"
           rows={5}
-          maxLength={180}
+          maxLength={GIFT_MESSAGE_MAX_LENGTH}
           placeholder="伝えたい気持ちを、あなたの言葉で。"
           aria-describedby="giftMessage-error"
           required

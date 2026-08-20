@@ -1,5 +1,5 @@
-import { productId } from "@/modules/catalog/domain/product";
-import { getEarliestDeliveryDate } from "@/modules/fulfillment/domain/delivery-date";
+import { productId } from "@/modules/catalog/public";
+import { getEarliestDeliveryDate } from "@/modules/fulfillment/public";
 import { application } from "@/shared/infrastructure/composition-root";
 import { formatMoney } from "@/shared/domain/money";
 import { GiftForm } from "@/ui/gift-form";
