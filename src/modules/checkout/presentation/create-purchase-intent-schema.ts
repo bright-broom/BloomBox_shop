@@ -1,8 +1,11 @@
-import { z } from "zod";
 import { isAvailableDeliveryDate } from "@/modules/fulfillment/public";
-import { GIFT_MESSAGE_MAX_LENGTH, RECIPIENT_NAME_MAX_LENGTH } from "../domain/order-policy";
+import { z } from "zod";
+import {
+  GIFT_MESSAGE_MAX_LENGTH,
+  RECIPIENT_NAME_MAX_LENGTH,
+} from "../domain/purchase-intent-policy";
 
-export const createOrderSchema = z.object({
+export const createPurchaseIntentSchema = z.object({
   productId: z.string().trim().min(1),
   recipientName: z
     .string()
@@ -19,7 +22,7 @@ export const createOrderSchema = z.object({
     .max(GIFT_MESSAGE_MAX_LENGTH, `${GIFT_MESSAGE_MAX_LENGTH}文字以内で入力してください。`),
 });
 
-export type CreateOrderFormState = Readonly<{
+export type CreatePurchaseIntentFormState = Readonly<{
   error?: string;
   fieldErrors?: Readonly<Record<string, readonly string[]>>;
   draft?: Readonly<{

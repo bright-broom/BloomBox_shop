@@ -7,7 +7,7 @@ export type RecipientName = string & { readonly __brand: "RecipientName" };
 export function giftMessage(value: string): GiftMessage {
   const normalized = value.trim();
   if (!normalized || normalized.length > GIFT_MESSAGE_MAX_LENGTH) {
-    throw new InvalidOrderInputError("ギフトメッセージの内容を確認してください。");
+    throw new InvalidPurchaseIntentInputError("ギフトメッセージの内容を確認してください。");
   }
   return normalized as GiftMessage;
 }
@@ -15,14 +15,14 @@ export function giftMessage(value: string): GiftMessage {
 export function recipientName(value: string): RecipientName {
   const normalized = value.trim();
   if (!normalized || normalized.length > RECIPIENT_NAME_MAX_LENGTH) {
-    throw new InvalidOrderInputError("お届け先のお名前を確認してください。");
+    throw new InvalidPurchaseIntentInputError("お届け先のお名前を確認してください。");
   }
   return normalized as RecipientName;
 }
 
-export class InvalidOrderInputError extends Error {
+export class InvalidPurchaseIntentInputError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "InvalidOrderInputError";
+    this.name = "InvalidPurchaseIntentInputError";
   }
 }

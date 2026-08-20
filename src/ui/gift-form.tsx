@@ -1,8 +1,8 @@
 "use client";
 
-import { createOrderAction } from "@/modules/order/presentation/actions";
+import { GIFT_MESSAGE_MAX_LENGTH } from "@/modules/checkout/public";
+import { createPurchaseIntentAction } from "@/modules/checkout/presentation/actions";
 import { DELIVERY_LEAD_TIME_DAYS } from "@/modules/fulfillment/public";
-import { GIFT_MESSAGE_MAX_LENGTH } from "@/modules/order/public";
 import Link from "next/link";
 import { useActionState, useEffect, useRef } from "react";
 
@@ -13,7 +13,7 @@ export function GiftForm({
   productId: string;
   minDeliveryDate: string;
 }) {
-  const [state, formAction, pending] = useActionState(createOrderAction, {});
+  const [state, formAction, pending] = useActionState(createPurchaseIntentAction, {});
   const confirmationRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -27,7 +27,7 @@ export function GiftForm({
         <p className="eyebrow">GIFT DRAFT CREATED</p>
         <h2>ギフトの下書きが<br />できました。</h2>
         <p>
-          入力内容を確認しました。プレビュー版のため、注文情報は保存されず、決済も発生しません。
+          入力内容を確認しました。プレビュー版のため、購入情報は保存されず、決済も発生しません。
         </p>
         <dl>
           <div><dt>受付番号</dt><dd>{state.draft.displayId}</dd></div>

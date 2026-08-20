@@ -2,15 +2,17 @@ import { describe, expect, it } from "vitest";
 import { assertOrderTransition, InvalidOrderTransitionError } from "./order-status";
 
 describe("order state machine", () => {
-  it("allows the checkout transition", () => {
-    expect(() => assertOrderTransition("DRAFT", "PENDING_PAYMENT")).not.toThrow();
+  it("allows an authoritative order to be confirmed", () => {
+    expect(() => assertOrderTransition("PENDING_CONFIRMATION", "CONFIRMED")).not.toThrow();
   });
 
-  it("does not allow payment to be skipped", () => {
-    expect(() => assertOrderTransition("DRAFT", "PAID")).toThrow(InvalidOrderTransitionError);
+  it("does not contain payment or fulfillment transitions", () => {
+    expect(() => assertOrderTransition("PENDING_CONFIRMATION", "CLOSED"))
+      .toThrow(InvalidOrderTransitionError);
   });
 
   it("keeps terminal states terminal", () => {
-    expect(() => assertOrderTransition("CANCELLED", "PAID")).toThrow(InvalidOrderTransitionError);
+    expect(() => assertOrderTransition("CANCELLED", "CONFIRMED"))
+      .toThrow(InvalidOrderTransitionError);
   });
 });

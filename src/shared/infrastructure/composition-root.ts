@@ -1,16 +1,14 @@
 import { GetProduct } from "@/modules/catalog/application/get-product";
 import { ListProducts } from "@/modules/catalog/application/list-products";
 import { InMemoryProductRepository } from "@/modules/catalog/infrastructure/in-memory-product-repository";
-import { CreateOrder } from "@/modules/order/application/create-order";
-import { GetOrder } from "@/modules/order/application/get-order";
-import { InMemoryOrderRepository } from "@/modules/order/infrastructure/in-memory-order-repository";
+import { CreatePurchaseIntent } from "@/modules/checkout/application/create-purchase-intent";
+import { InMemoryPurchaseIntentRepository } from "@/modules/checkout/infrastructure/in-memory-purchase-intent-repository";
 
 const productRepository = new InMemoryProductRepository();
-const orderRepository = new InMemoryOrderRepository();
+const purchaseIntentRepository = new InMemoryPurchaseIntentRepository();
 
 export const application = {
   listProducts: new ListProducts(productRepository),
   getProduct: new GetProduct(productRepository),
-  createOrder: new CreateOrder(productRepository, orderRepository),
-  getOrder: new GetOrder(orderRepository),
+  createPurchaseIntent: new CreatePurchaseIntent(productRepository, purchaseIntentRepository),
 };

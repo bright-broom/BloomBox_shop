@@ -1,5 +1,4 @@
 import type { Money } from "@/shared/domain/money";
-import type { GiftMessage, RecipientName } from "./order-policy";
 import { assertOrderTransition, type OrderStatus } from "./order-status";
 
 export type OrderId = string & { readonly __brand: "OrderId" };
@@ -26,7 +25,7 @@ export type OrderItem = Readonly<{
 }>;
 
 export type Recipient = Readonly<{
-  name: RecipientName;
+  name: string;
   deliveryDate: string;
 }>;
 
@@ -38,7 +37,7 @@ export class Order {
     readonly displayId: string,
     readonly item: OrderItem,
     readonly recipient: Recipient,
-    readonly giftMessage: GiftMessage,
+    readonly giftMessage: string,
     readonly createdAt: Date,
     status: OrderStatus,
   ) {
@@ -50,7 +49,7 @@ export class Order {
     displayId: string;
     item: OrderItem;
     recipient: Recipient;
-    giftMessage: GiftMessage;
+    giftMessage: string;
     createdAt: Date;
   }): Order {
     return new Order(
@@ -60,7 +59,7 @@ export class Order {
       input.recipient,
       input.giftMessage,
       input.createdAt,
-      "DRAFT",
+      "PENDING_CONFIRMATION",
     );
   }
 
