@@ -17,6 +17,20 @@ jobs:
     name: Quality, architecture, and tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 # 16.10-alpine
+        env:
+          POSTGRES_DB: bloombox_test
+          POSTGRES_USER: bloombox_test
+          POSTGRES_PASSWORD: bloombox_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bloombox_test -d bloombox_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -45,6 +59,10 @@ jobs:
         run: pnpm lint
       - name: Test
         run: pnpm test
+      - name: Test PostgreSQL migrations and adapters
+        env:
+          TEST_DATABASE_URL: postgres://bloombox_test:bloombox_test@127.0.0.1:5432/bloombox_test
+        run: pnpm test:database
       - name: Build production bundle
         run: pnpm build
 
