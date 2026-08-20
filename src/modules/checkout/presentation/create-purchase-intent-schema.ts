@@ -6,6 +6,7 @@ import {
 } from "../domain/purchase-intent-policy";
 
 export const createPurchaseIntentSchema = z.object({
+  requestId: z.string().uuid(),
   productId: z.string().trim().min(1),
   recipientName: z
     .string()
@@ -30,5 +31,8 @@ export type CreatePurchaseIntentFormState = Readonly<{
     productName: string;
     deliveryDate: string;
     formattedTotal: string;
+  }>;
+  checkout?: Readonly<{
+    url: string;
   }>;
 }>;

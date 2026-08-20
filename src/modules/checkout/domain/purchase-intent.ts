@@ -12,9 +12,13 @@ import {
 
 export type PurchaseIntentId = string & { readonly __brand: "PurchaseIntentId" };
 export type CatalogProductReference = string & { readonly __brand: "CatalogProductReference" };
+export const COMMERCE_PROVIDERS = ["SHOPIFY", "STRIPE"] as const;
+export type CommerceProvider = (typeof COMMERCE_PROVIDERS)[number];
 
 export function purchaseIntentId(value: string): PurchaseIntentId {
-  if (!value.trim()) throw new InvalidPurchaseIntentIdError();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    throw new InvalidPurchaseIntentIdError();
+  }
   return value as PurchaseIntentId;
 }
 
@@ -63,6 +67,10 @@ export class PurchaseIntent {
     readonly expiresAt: Date,
     readonly piiRetentionExpiresAt: Date,
     status: PurchaseIntentStatus,
+    private currentCommerceProvider?: CommerceProvider,
+    private currentExternalCheckoutId?: string,
+    private currentProviderApiVersion?: string,
+    private currentCheckoutCreatedAt?: Date,
   ) {
     this.currentStatus = status;
   }
@@ -98,6 +106,10 @@ export class PurchaseIntent {
     expiresAt: Date;
     piiRetentionExpiresAt: Date;
     status: PurchaseIntentStatus;
+    commerceProvider?: CommerceProvider;
+    externalCheckoutId?: string;
+    providerApiVersion?: string;
+    checkoutCreatedAt?: Date;
   }): PurchaseIntent {
     return new PurchaseIntent(
       input.id,
@@ -109,6 +121,10 @@ export class PurchaseIntent {
       input.expiresAt,
       input.piiRetentionExpiresAt,
       input.status,
+      input.commerceProvider,
+      input.externalCheckoutId,
+      input.providerApiVersion,
+      input.checkoutCreatedAt,
     );
   }
 
@@ -116,8 +132,47 @@ export class PurchaseIntent {
     return this.currentStatus;
   }
 
+  get commerceProvider(): CommerceProvider | undefined {
+    return this.currentCommerceProvider;
+  }
+
+  get externalCheckoutId(): string | undefined {
+    return this.currentExternalCheckoutId;
+  }
+
+  get providerApiVersion(): string | undefined {
+    return this.currentProviderApiVersion;
+  }
+
+  get checkoutCreatedAt(): Date | undefined {
+    return this.currentCheckoutCreatedAt;
+  }
+
   transitionTo(nextStatus: PurchaseIntentStatus): void {
     assertPurchaseIntentTransition(this.currentStatus, nextStatus);
     this.currentStatus = nextStatus;
+  }
+
+  recordCheckoutCreated(input: {
+    provider: CommerceProvider;
+    externalCheckoutId: string;
+    providerApiVersion: string;
+    occurredAt: Date;
+  }): void {
+    if (!input.externalCheckoutId.trim() || !input.providerApiVersion.trim()) {
+      throw new InvalidCheckoutReferenceError();
+    }
+    this.transitionTo("CHECKOUT_CREATED");
+    this.currentCommerceProvider = input.provider;
+    this.currentExternalCheckoutId = input.externalCheckoutId;
+    this.currentProviderApiVersion = input.providerApiVersion;
+    this.currentCheckoutCreatedAt = input.occurredAt;
+  }
+}
+
+export class InvalidCheckoutReferenceError extends Error {
+  constructor() {
+    super("Checkout reference is invalid");
+    this.name = "InvalidCheckoutReferenceError";
   }
 }

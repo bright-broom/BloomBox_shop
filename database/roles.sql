@@ -57,6 +57,37 @@ GRANT SELECT, INSERT, UPDATE ON
   bloombox.reconciliation_differences
 TO bloombox_worker;
 
+GRANT SELECT, UPDATE ON
+  bloombox.purchase_intents,
+  bloombox.payments,
+  bloombox.refunds,
+  bloombox.disputes
+TO bloombox_worker;
+
+GRANT SELECT ON
+  bloombox.purchase_intent_items,
+  bloombox.orders,
+  bloombox.order_items,
+  bloombox.order_gift_snapshots,
+  bloombox.fulfillments
+TO bloombox_worker;
+
+GRANT INSERT ON
+  bloombox.buyers,
+  bloombox.recipients,
+  bloombox.orders,
+  bloombox.order_items,
+  bloombox.order_gift_snapshots,
+  bloombox.order_status_transitions,
+  bloombox.payments,
+  bloombox.payment_attempts,
+  bloombox.payment_status_transitions,
+  bloombox.refunds,
+  bloombox.disputes,
+  bloombox.fulfillments,
+  bloombox.fulfillment_status_transitions
+TO bloombox_worker;
+
 GRANT SELECT, INSERT ON
   bloombox.financial_transactions,
   bloombox.ledger_entries,

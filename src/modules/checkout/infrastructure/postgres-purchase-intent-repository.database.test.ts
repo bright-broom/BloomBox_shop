@@ -5,6 +5,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { money } from "@/shared/domain/money";
 import { AesGcmDataProtector } from "@/shared/infrastructure/security/aes-gcm-data-protector";
+import { PostgresDataRetentionJob } from "@/shared/infrastructure/database/data-retention-job";
+import { PostgresWebhookInbox } from "@/modules/payment/infrastructure/postgres-webhook-inbox";
+import { ProcessProviderInbox } from "@/modules/payment/application/process-provider-inbox";
+import { StripeCommerceEventProcessor } from "@/modules/payment/infrastructure/stripe-commerce-event-processor";
+import { StripeEventReconciler } from "@/modules/payment/infrastructure/stripe-event-reconciler";
+import { StripeWebhookVerifier } from "@/modules/payment/infrastructure/stripe-webhook-verifier";
+import type { StripeConfig } from "@/shared/infrastructure/config/stripe-config";
 import {
   catalogProductReference,
   PurchaseIntent,
@@ -12,9 +19,9 @@ import {
 } from "../domain/purchase-intent";
 import { giftMessage, recipientName } from "../domain/purchase-intent-policy";
 import {
-  PostgresPurchaseIntentRepository,
   PurchaseIntentAlreadyExistsError,
-} from "./postgres-purchase-intent-repository";
+} from "../domain/purchase-intent-repository";
+import { PostgresPurchaseIntentRepository } from "./postgres-purchase-intent-repository";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
@@ -46,9 +53,9 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       ORDER BY version
     `;
 
-    expect(rows).toHaveLength(1);
-    expect(rows[0].version).toBe("0001");
-    expect(rows[0].checksum).toMatch(/^[0-9a-f]{64}$/);
+    expect(rows).toHaveLength(3);
+    expect(rows.map((row) => row.version)).toEqual(["0001", "0002", "0003"]);
+    expect(rows.every((row) => /^[0-9a-f]{64}$/.test(row.checksum))).toBe(true);
   });
 
   it("atomically persists an encrypted purchase intent and its outbox event", async () => {
@@ -141,6 +148,293 @@ describeDatabase("PostgreSQL commerce foundation", () => {
     })).rejects.toMatchObject({ code: "23514" });
   });
 
+  it("converts a paid Stripe checkout into one order, payment, fulfillment, and ledger", async () => {
+    const intentId = purchaseIntentId(randomUUID());
+    const checkoutId = `cs_test_${intentId.replaceAll("-", "")}`;
+    const paymentIntentId = `pi_${intentId.replaceAll("-", "")}`;
+    const intent = PurchaseIntent.create({
+      id: intentId,
+      displayId: `BBI-20260821-${intentId.slice(0, 4).toUpperCase()}`,
+      item: {
+        productId: catalogProductReference("prod_haru_01"),
+        productName: "春のひかり",
+        quantity: 1,
+        unitPriceSnapshot: money(6600),
+        subtotal: money(6600),
+      },
+      recipient: { name: recipientName("山田 花子"), deliveryDate: "2026-08-28" },
+      giftMessage: giftMessage("おめでとう"),
+      createdAt: new Date("2026-08-21T00:00:00.000Z"),
+    });
+    intent.transitionTo("READY_FOR_CHECKOUT");
+    const repository = new PostgresPurchaseIntentRepository(sql, protector);
+    await repository.save(intent);
+    intent.recordCheckoutCreated({
+      provider: "STRIPE",
+      externalCheckoutId: checkoutId,
+      providerApiVersion: "2026-07-29.dahlia",
+      occurredAt: new Date("2026-08-21T00:05:00.000Z"),
+    });
+    await repository.saveCheckoutCreated(intent);
+    const processor = new StripeCommerceEventProcessor(sql, protector, "inclusive");
+    const paidEvent = {
+      provider: "STRIPE" as const,
+      providerAccountId: "acct_example",
+      externalEventId: `evt_paid_${intentId}`,
+      eventType: "checkout.session.completed",
+      externalObjectId: checkoutId,
+      apiVersion: "2026-07-29.dahlia",
+      occurredAt: new Date("2026-08-21T00:10:00.000Z"),
+      payload: {
+        objectType: "checkout_session",
+        id: checkoutId,
+        purchaseIntentId: intentId,
+        paymentIntentId,
+        paymentStatus: "paid",
+        checkoutStatus: "complete",
+        amountTotal: 7100,
+        amountSubtotal: 6600,
+        currency: "jpy",
+        totalDetails: { amount_discount: 0, amount_shipping: 500, amount_tax: 600 },
+        customerId: "cus_test_buyer",
+        customerDetails: { email: "buyer@example.test" },
+        collectedInformation: {
+          shipping_details: { name: "山田 花子", address: { country: "JP" } },
+        },
+      },
+    };
+
+    await processor.process(paidEvent);
+    await processor.process(paidEvent);
+    const rows = await sql`
+      SELECT
+        intent.status AS intent_status,
+        orders.status AS order_status,
+        orders.total_minor,
+        orders.included_tax_minor,
+        payments.status AS payment_status,
+        fulfillments.status AS fulfillment_status,
+        gift.address_ciphertext,
+        (SELECT COUNT(*)::integer FROM bloombox.orders WHERE purchase_intent_id = ${intentId}) AS order_count,
+        (SELECT COUNT(*)::integer FROM bloombox.financial_transactions WHERE payment_id = payments.id) AS ledger_transaction_count
+      FROM bloombox.purchase_intents AS intent
+      JOIN bloombox.orders ON orders.purchase_intent_id = intent.id
+      JOIN bloombox.payments ON payments.order_id = orders.id
+      JOIN bloombox.fulfillments ON fulfillments.order_id = orders.id
+      JOIN bloombox.order_gift_snapshots AS gift ON gift.order_id = orders.id
+      WHERE intent.id = ${intentId}
+    `;
+
+    expect(rows[0]).toMatchObject({
+      intent_status: "CONVERTED",
+      order_status: "CONFIRMED",
+      total_minor: "7100",
+      included_tax_minor: "600",
+      payment_status: "CAPTURED",
+      fulfillment_status: "UNFULFILLED",
+      order_count: 1,
+      ledger_transaction_count: 1,
+    });
+    expect(rows[0].address_ciphertext.toString("utf8")).not.toContain("花子");
+
+    const refundEvent = {
+      provider: "STRIPE" as const,
+      providerAccountId: "acct_example",
+      externalEventId: `evt_refund_${intentId}`,
+      eventType: "refund.updated",
+      externalObjectId: `re_${intentId.replaceAll("-", "")}`,
+      apiVersion: "2026-07-29.dahlia",
+      occurredAt: new Date("2026-08-21T01:00:00.000Z"),
+      payload: {
+        objectType: "refund",
+        id: `re_${intentId.replaceAll("-", "")}`,
+        paymentIntentId,
+        amount: 1000,
+        currency: "jpy",
+        status: "succeeded",
+        reason: "requested_by_customer",
+        failureReason: null,
+      },
+    };
+    await processor.process(refundEvent);
+    await processor.process(refundEvent);
+    const refundRows = await sql`
+      SELECT
+        payments.status,
+        payments.amount_refunded_minor,
+        (SELECT COUNT(*)::integer FROM bloombox.refunds WHERE payment_id = payments.id) AS refund_count,
+        (SELECT COUNT(*)::integer FROM bloombox.financial_transactions
+          WHERE payment_id = payments.id AND transaction_type = 'REFUND') AS refund_ledger_count
+      FROM bloombox.payments
+      WHERE external_payment_id = ${paymentIntentId}
+    `;
+    expect(refundRows[0]).toEqual({
+      status: "PARTIALLY_REFUNDED",
+      amount_refunded_minor: "1000",
+      refund_count: 1,
+      refund_ledger_count: 1,
+    });
+
+    await processor.process({
+      ...refundEvent,
+      externalEventId: `evt_refund_delayed_${intentId}`,
+      eventType: "refund.created",
+      occurredAt: new Date("2026-08-21T00:50:00.000Z"),
+      payload: { ...refundEvent.payload, status: "pending" },
+    });
+    const delayedRefundRows = await sql`
+      SELECT
+        refunds.status AS refund_status,
+        payments.status AS payment_status,
+        (SELECT COUNT(*)::integer FROM bloombox.financial_transactions
+          WHERE payment_id = payments.id AND transaction_type = 'REFUND') AS refund_ledger_count
+      FROM bloombox.refunds
+      JOIN bloombox.payments ON payments.id = refunds.payment_id
+      WHERE refunds.external_refund_id = ${refundEvent.externalObjectId}
+    `;
+    expect(delayedRefundRows[0]).toEqual({
+      refund_status: "SUCCEEDED",
+      payment_status: "PARTIALLY_REFUNDED",
+      refund_ledger_count: 1,
+    });
+
+    await expect(processor.process({
+      ...refundEvent,
+      externalEventId: `evt_refund_invalid_${intentId}`,
+      occurredAt: new Date("2026-08-21T01:10:00.000Z"),
+      payload: { ...refundEvent.payload, amount: 2000 },
+    })).rejects.toThrow("Stripe commerce event is inconsistent with persisted state");
+
+    const disputeId = `dp_${intentId.replaceAll("-", "")}`;
+    const disputeCreated = {
+      provider: "STRIPE" as const,
+      providerAccountId: "acct_example",
+      externalEventId: `evt_dispute_created_${intentId}`,
+      eventType: "charge.dispute.created",
+      externalObjectId: disputeId,
+      apiVersion: "2026-07-29.dahlia",
+      occurredAt: new Date("2026-08-21T02:00:00.000Z"),
+      payload: {
+        objectType: "dispute",
+        id: disputeId,
+        paymentIntentId,
+        amount: 7100,
+        currency: "jpy",
+        reason: "fraudulent",
+        status: "needs_response",
+      },
+    };
+    await processor.process(disputeCreated);
+    await processor.process({
+      ...disputeCreated,
+      externalEventId: `evt_dispute_closed_${intentId}`,
+      eventType: "charge.dispute.closed",
+      occurredAt: new Date("2026-08-21T03:00:00.000Z"),
+      payload: { ...disputeCreated.payload, status: "won" },
+    });
+    await processor.process({
+      ...disputeCreated,
+      externalEventId: `evt_dispute_delayed_${intentId}`,
+      occurredAt: new Date("2026-08-21T02:30:00.000Z"),
+      payload: { ...disputeCreated.payload, status: "under_review" },
+    });
+    const disputeRows = await sql`
+      SELECT disputes.status AS dispute_status, payments.status AS payment_status
+      FROM bloombox.disputes
+      JOIN bloombox.payments ON payments.id = disputes.payment_id
+      WHERE disputes.external_dispute_id = ${disputeId}
+    `;
+    expect(disputeRows[0]).toEqual({
+      dispute_status: "WON",
+      payment_status: "PARTIALLY_REFUNDED",
+    });
+
+    const stripeConfig: StripeConfig = {
+      mode: "test",
+      secretKey: "sk_test_example_only",
+      webhookSecret: "whsec_example_only_123",
+      accountId: "acct_example",
+      shippingRateId: "shr_example",
+      taxBehavior: "inclusive",
+      publicOrigin: "http://localhost:3000",
+      apiVersion: "2026-07-29.dahlia",
+    };
+    const reconciledEvent = {
+      id: `evt_reconciled_${intentId}`,
+      object: "event",
+      account: "acct_example",
+      api_version: stripeConfig.apiVersion,
+      created: 1_787_270_400,
+      data: {
+        object: {
+          id: checkoutId,
+          client_reference_id: intentId,
+          payment_intent: paymentIntentId,
+          payment_status: "paid",
+          status: "complete",
+          amount_total: 7100,
+          amount_subtotal: 6600,
+          currency: "jpy",
+          total_details: { amount_discount: 0, amount_shipping: 500, amount_tax: 600 },
+          customer: null,
+          customer_details: null,
+          collected_information: null,
+          metadata: { purchase_intent_id: intentId },
+        },
+      },
+      type: "checkout.session.completed",
+    };
+    const eventSource = {
+      async *list() {
+        yield reconciledEvent;
+      },
+    };
+    const inbox = new PostgresWebhookInbox(
+      sql,
+      protector,
+      randomUUID,
+      () => new Date("2026-08-21T02:00:00.000Z"),
+    );
+    const reconciler = new StripeEventReconciler(
+      sql,
+      new StripeWebhookVerifier(stripeConfig),
+      inbox,
+      stripeConfig,
+      () => new Date("2026-08-21T02:00:00.000Z"),
+      randomUUID,
+      eventSource,
+    );
+
+    await expect(reconciler.execute()).resolves.toEqual({
+      checked: 1,
+      relevant: 1,
+      discovered: 1,
+    });
+    await expect(new ProcessProviderInbox(
+      inbox,
+      processor,
+      () => new Date("2026-08-21T02:01:00.000Z"),
+      () => "integration-worker",
+    ).execute()).resolves.toEqual({
+      claimed: 1,
+      processed: 1,
+      retryScheduled: 0,
+      failed: 0,
+    });
+    const reconciliationRows = await sql`
+      SELECT status, checked_count, difference_count
+      FROM bloombox.reconciliation_runs
+      WHERE commerce_provider = 'STRIPE'
+      ORDER BY started_at DESC
+      LIMIT 1
+    `;
+    expect(reconciliationRows[0]).toEqual({
+      status: "SUCCEEDED",
+      checked_count: 1,
+      difference_count: 1,
+    });
+  });
+
   it("keeps runtime roles least-privileged and append-only", async () => {
     const rows = await sql`
       SELECT
@@ -156,6 +450,160 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       app_can_insert_outbox: true,
       app_can_delete_outbox: false,
     });
+  });
+
+  it("encrypts provider payloads and deduplicates inbox events", async () => {
+    const event = {
+      provider: "STRIPE" as const,
+      providerAccountId: "acct_example",
+      externalEventId: "evt_duplicate_123",
+      eventType: "checkout.session.completed",
+      externalObjectId: "cs_test_123",
+      apiVersion: "2026-07-29.dahlia",
+      occurredAt: new Date("2026-08-21T00:10:00.000Z"),
+      payload: { recipientName: "山田 花子", purchaseIntentId: randomUUID() },
+    };
+    const inbox = new PostgresWebhookInbox(sql, protector, randomUUID, () => event.occurredAt);
+
+    await expect(inbox.record(event)).resolves.toBe("INSERTED");
+    await expect(inbox.record(event)).resolves.toBe("DUPLICATE");
+    const claimed = await inbox.claim({
+      limit: 10,
+      workerId: "worker-retry-test",
+      now: new Date("2026-08-21T00:11:00.000Z"),
+      lockTimeoutMinutes: 5,
+    });
+    expect(claimed).toEqual([event]);
+    await expect(inbox.markFailed(
+      event,
+      "DependencyUnavailableError",
+      new Date("2026-08-21T00:11:00.000Z"),
+      "worker-retry-test",
+    )).resolves.toBe("RETRY_SCHEDULED");
+    await expect(inbox.claim({
+      limit: 10,
+      workerId: "worker-too-early",
+      now: new Date("2026-08-21T00:11:00.500Z"),
+      lockTimeoutMinutes: 5,
+    })).resolves.toEqual([]);
+    const retried = await inbox.claim({
+      limit: 10,
+      workerId: "worker-retry-success",
+      now: new Date("2026-08-21T00:11:02.000Z"),
+      lockTimeoutMinutes: 5,
+    });
+    expect(retried).toEqual([event]);
+    await inbox.markProcessed(
+      event,
+      new Date("2026-08-21T00:11:03.000Z"),
+      "worker-retry-success",
+    );
+    const rows = await sql`
+      SELECT status, attempts, payload_ciphertext, payload_expires_at
+      FROM bloombox.webhook_inbox
+      WHERE external_event_id = ${event.externalEventId}
+    `;
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe("PROCESSED");
+    expect(rows[0].attempts).toBe(1);
+    expect(rows[0].payload_ciphertext.toString("utf8")).not.toContain("花子");
+    expect(new Date(rows[0].payload_expires_at).toISOString()).toBe("2026-09-20T00:10:00.000Z");
+  });
+
+  it("purges expired transient PII without deleting commerce evidence", async () => {
+    const intentId = purchaseIntentId(randomUUID());
+    const createdAt = new Date("2026-06-01T00:00:00.000Z");
+    const intent = PurchaseIntent.create({
+      id: intentId,
+      displayId: `BBI-20260601-${intentId.slice(0, 4).toUpperCase()}`,
+      item: {
+        productId: catalogProductReference("prod_retention_01"),
+        productName: "保存期限テスト",
+        quantity: 1,
+        unitPriceSnapshot: money(5000),
+        subtotal: money(5000),
+      },
+      recipient: { name: recipientName("期限 太郎"), deliveryDate: "2026-06-08" },
+      giftMessage: giftMessage("保存期限の確認"),
+      createdAt,
+    });
+    intent.transitionTo("READY_FOR_CHECKOUT");
+    const repository = new PostgresPurchaseIntentRepository(sql, protector);
+    await repository.save(intent);
+
+    const providerEvent = {
+      provider: "STRIPE" as const,
+      providerAccountId: "acct_example",
+      externalEventId: `evt_retention_${intentId}`,
+      eventType: "payment_intent.succeeded",
+      externalObjectId: `pi_${intentId.replaceAll("-", "")}`,
+      apiVersion: "2026-07-29.dahlia",
+      occurredAt: new Date("2026-06-01T00:10:00.000Z"),
+      payload: { objectType: "payment_intent", status: "succeeded" },
+    };
+    const inbox = new PostgresWebhookInbox(sql, protector, randomUUID, () => createdAt);
+    await inbox.record(providerEvent);
+    const claimed = await inbox.claim({
+      limit: 1,
+      workerId: "retention-worker",
+      now: new Date("2026-06-01T00:11:00.000Z"),
+      lockTimeoutMinutes: 5,
+    });
+    expect(claimed).toHaveLength(1);
+    await inbox.markProcessed(
+      providerEvent,
+      new Date("2026-06-01T00:11:00.000Z"),
+      "retention-worker",
+    );
+
+    const result = await new PostgresDataRetentionJob(sql).execute(
+      new Date("2026-07-02T00:00:00.000Z"),
+    );
+    const rows = await sql`
+      SELECT
+        intent.id,
+        intent.status,
+        intent.pii_key_id,
+        intent.recipient_ciphertext,
+        intent.gift_message_ciphertext,
+        intent.pii_purged_at,
+        inbox.external_event_id,
+        inbox.status AS inbox_status,
+        inbox.payload_key_id,
+        inbox.payload_ciphertext,
+        inbox.payload_purged_at
+      FROM bloombox.purchase_intents AS intent
+      JOIN bloombox.webhook_inbox AS inbox
+        ON inbox.external_event_id = ${providerEvent.externalEventId}
+      WHERE intent.id = ${intentId}
+    `;
+
+    expect(result.purchaseIntentsExpired).toBeGreaterThanOrEqual(1);
+    expect(result.webhookPayloadsPurged).toBeGreaterThanOrEqual(1);
+    expect(result.purchaseIntentPiiPurged).toBeGreaterThanOrEqual(1);
+    expect(rows[0]).toMatchObject({
+      id: intentId,
+      status: "EXPIRED",
+      pii_key_id: null,
+      recipient_ciphertext: null,
+      gift_message_ciphertext: null,
+      external_event_id: providerEvent.externalEventId,
+      inbox_status: "PROCESSED",
+      payload_key_id: null,
+      payload_ciphertext: null,
+    });
+    expect(rows[0].pii_purged_at).toBeTruthy();
+    expect(rows[0].payload_purged_at).toBeTruthy();
+    await expect(repository.findById(intentId)).resolves.toBeNull();
+    const lifecycleRows = await sql`
+      SELECT
+        (SELECT COUNT(*)::integer FROM bloombox.outbox_events
+          WHERE aggregate_id = ${intentId} AND event_type = 'checkout.purchase_intent.expired') AS outbox_count,
+        (SELECT COUNT(*)::integer FROM bloombox.audit_logs
+          WHERE resource_id = ${intentId} AND action = 'checkout.purchase_intent.expired') AS audit_count
+    `;
+    expect(lifecycleRows[0]).toEqual({ outbox_count: 1, audit_count: 1 });
   });
 });
 

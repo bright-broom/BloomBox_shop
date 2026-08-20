@@ -10,6 +10,7 @@ PostgreSQL stores BloomBox-owned purchase intents, encrypted personal data, prov
 - `DATABASE_MAX_CONNECTIONS`: per-process connection limit from 1 to 20.
 - `BLOOMBOX_PII_KEYRING`: JSON containing the active AES-256-GCM key ID and all retained decryption keys.
 - `BLOOMBOX_RUNTIME_MODE`: defaults to `preview`; `production` selects the PostgreSQL purchase-intent adapter and fails closed if database or encryption configuration is missing.
+- Stripe connector configuration and account-side setup are documented in `docs/operations/STRIPE.md`.
 
 Example names only; use secret management rather than a checked-in environment file:
 
@@ -34,6 +35,8 @@ Never use a production URL in automated tests. The integration suite refuses non
 5. Exercise a restore into an isolated database before production activation and quarterly thereafter.
 
 Migration files are immutable after application. The runner records a SHA-256 checksum and refuses a changed historical migration. Schema corrections use a new forward migration; production rollback never edits or deletes accepted commerce facts.
+
+The protected commerce worker claims encrypted Inbox rows with row-level locking and bounded exponential retry, then runs transient-data retention. It expires unstarted PurchaseIntents after 24 hours and removes encrypted Webhook payloads and personal data from terminal PurchaseIntents after 30 days while retaining provider identifiers, processing status, audits, and confirmed Order snapshots needed for reconciliation and support. Changes to confirmed-order retention require a separate privacy and legal review.
 
 ## Local verification
 

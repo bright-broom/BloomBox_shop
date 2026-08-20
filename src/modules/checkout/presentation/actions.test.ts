@@ -5,7 +5,7 @@ const { execute } = vi.hoisted(() => ({ execute: vi.fn() }));
 
 vi.mock("@/shared/infrastructure/composition-root", () => ({
   application: {
-    createPurchaseIntent: { execute },
+    preparePurchase: { execute },
   },
 }));
 
@@ -16,14 +16,16 @@ describe("createPurchaseIntentAction", () => {
 
   it("returns a non-persistent preview summary without recipient PII", async () => {
     execute.mockResolvedValue({
-      displayId: "BBI-20990101-1234",
-      item: {
-        productName: "春のひかり",
-        subtotal: money(6600),
-      },
-      recipient: {
-        name: "花子",
-        deliveryDate: "2099-01-01",
+      intent: {
+        displayId: "BBI-20990101-1234",
+        item: {
+          productName: "春のひかり",
+          subtotal: money(6600),
+        },
+        recipient: {
+          name: "花子",
+          deliveryDate: "2099-01-01",
+        },
       },
     });
 
@@ -54,6 +56,7 @@ describe("createPurchaseIntentAction", () => {
 
 function formData(): FormData {
   const data = new FormData();
+  data.set("requestId", "12345678-abcd-4000-8000-123456789012");
   data.set("productId", "prod_haru_01");
   data.set("recipientName", "花子");
   data.set("deliveryDate", "2099-01-01");

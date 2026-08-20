@@ -1,0 +1,100 @@
+name: Commerce Worker
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: commerce-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    name: Process and reconcile Stripe events
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
+      STRIPE_RECONCILIATION_ENABLED: ${{ vars.STRIPE_RECONCILIATION_ENABLED }}
+      COMMERCE_WORKER_SECRET: ${{ secrets.COMMERCE_WORKER_SECRET }}
+    steps:
+      - name: Invoke protected reconciliation worker
+        id: reconcile
+        run: |
+          if [ "$STRIPE_RECONCILIATION_ENABLED" != "true" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Commerce reconciliation is disabled; skipping."
+            exit 0
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+          test -n "$PRODUCTION_BASE_URL"
+          test -n "$COMMERCE_WORKER_SECRET"
+          curl --fail --silent --show-error --max-time 90 \
+            --request POST \
+            --header "Authorization: Bearer $COMMERCE_WORKER_SECRET" \
+            "${PRODUCTION_BASE_URL%/}/api/internal/commerce-reconciliation" > /dev/null
+      - name: Open or refresh reconciliation incident
+        if: failure() && steps.reconcile.outputs.configured == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const marker = "<!-- bloombox-commerce-reconciliation -->";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `${marker}\nThe Stripe commerce worker is failing. `
+              + `[Inspect the workflow run](${runUrl}), failed Inbox rows, and Stripe events before retrying.`;
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "all",
+              per_page: 100,
+            });
+            const existing = issues.find((issue) => !issue.pull_request && issue.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                state: "open",
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: "[Production] Stripe commerce worker is failing",
+                body,
+              });
+            }
+      - name: Close recovered reconciliation incident
+        if: success() && steps.reconcile.outputs.configured == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const marker = "<!-- bloombox-commerce-reconciliation -->";
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100,
+            });
+            const existing = issues.find((issue) => !issue.pull_request && issue.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: "The Stripe commerce worker has recovered.",
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                state: "closed",
+                state_reason: "completed",
+              });
+            }

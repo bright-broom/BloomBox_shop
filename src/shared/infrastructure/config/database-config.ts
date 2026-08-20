@@ -34,6 +34,15 @@ export function loadDatabaseConfig(
   };
 }
 
+export function loadWorkerDatabaseConfig(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): DatabaseConfig {
+  return loadDatabaseConfig({
+    ...environment,
+    DATABASE_URL: environment.DATABASE_WORKER_URL,
+  });
+}
+
 function isPostgresUrl(value: string): boolean {
   try {
     const protocol = new URL(value).protocol;
