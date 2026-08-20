@@ -1,10 +1,17 @@
 import { productId, type ProductRepository } from "@/modules/catalog/public";
 import { assertAvailableDeliveryDate } from "@/modules/fulfillment/public";
-import { BUSINESS_TIME_ZONE } from "@/shared/domain/time";
 import { multiplyMoney } from "@/shared/domain/money";
-import { catalogProductReference, Order, type OrderId } from "../domain/order";
-import { giftMessage, recipientName } from "../domain/order-policy";
-import type { OrderRepository } from "../domain/order-repository";
+import { BUSINESS_TIME_ZONE } from "@/shared/domain/time";
+import {
+  catalogProductReference,
+  PurchaseIntent,
+  purchaseIntentId,
+} from "../domain/purchase-intent";
+import {
+  giftMessage,
+  recipientName,
+} from "../domain/purchase-intent-policy";
+import type { PurchaseIntentRepository } from "../domain/purchase-intent-repository";
 
 export class ProductUnavailableError extends Error {
   constructor() {
@@ -13,22 +20,22 @@ export class ProductUnavailableError extends Error {
   }
 }
 
-export type CreateOrderInput = Readonly<{
+export type CreatePurchaseIntentInput = Readonly<{
   productId: string;
   recipientName: string;
   deliveryDate: string;
   giftMessage: string;
 }>;
 
-export class CreateOrder {
+export class CreatePurchaseIntent {
   constructor(
     private readonly products: ProductRepository,
-    private readonly orders: OrderRepository,
+    private readonly intents: PurchaseIntentRepository,
     private readonly now: () => Date = () => new Date(),
     private readonly createId: () => string = () => crypto.randomUUID(),
   ) {}
 
-  async execute(input: CreateOrderInput): Promise<Order> {
+  async execute(input: CreatePurchaseIntentInput): Promise<PurchaseIntent> {
     const product = await this.products.findById(productId(input.productId));
     if (!product?.available) {
       throw new ProductUnavailableError();
@@ -37,8 +44,8 @@ export class CreateOrder {
     const createdAt = this.now();
     assertAvailableDeliveryDate(input.deliveryDate, createdAt);
     const rawId = this.createId();
-    const order = Order.create({
-      id: rawId as OrderId,
+    const intent = PurchaseIntent.create({
+      id: purchaseIntentId(rawId),
       displayId: createDisplayId(createdAt, rawId),
       item: {
         productId: catalogProductReference(product.id),
@@ -55,9 +62,9 @@ export class CreateOrder {
       createdAt,
     });
 
-    order.transitionTo("PENDING_PAYMENT");
-    await this.orders.save(order);
-    return order;
+    intent.transitionTo("READY_FOR_CHECKOUT");
+    await this.intents.save(intent);
+    return intent;
   }
 }
 
@@ -70,5 +77,5 @@ function createDisplayId(createdAt: Date, id: string): string {
   })
     .format(createdAt)
     .replaceAll("/", "");
-  return `BB-${date}-${id.slice(0, 4).toUpperCase()}`;
+  return `BBI-${date}-${id.slice(0, 4).toUpperCase()}`;
 }

@@ -52,7 +52,7 @@ Each module exposes cross-module contracts through `src/modules/<module>/public.
 Order, Payment, and Fulfillment have independent explicit state machines with validated transition tables. Provider facts cause commands or events; they do not synchronize boolean flags across models.
 
 - Shopify is the production source of truth for sellable catalog, price, availability, inventory, checkout, payment, orders, and refunds. See ADR 0001.
-- Checked-in catalog JSON and in-memory order storage are deterministic preview adapters, not a production data path.
+- Checked-in catalog JSON and in-memory purchase-intent storage are deterministic preview adapters, not a production data path.
 - A verified Shopify fact is authoritative for checkout and payment state. A browser redirect is not.
 - Inventory changes are traceable movements such as received, reserved, released, consumed, or adjusted.
 - Public identifiers are opaque; database sequences are not exposed.
@@ -101,6 +101,7 @@ An ADR states context, decision, alternatives, consequences, rollout, and rollba
 Accepted decisions:
 
 - [ADR 0001: Shopify-first commerce boundary](adr/0001-shopify-first-commerce-boundary.md)
+- [ADR 0002: Commerce persistence and payment-ready boundaries](adr/0002-commerce-persistence-and-payment-boundaries.md)
 
 ## Architecture decision test
 

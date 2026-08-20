@@ -1,32 +1,35 @@
 import { describe, expect, it } from "vitest";
 import { InMemoryProductRepository } from "@/modules/catalog/infrastructure/in-memory-product-repository";
 import { DeliveryDateUnavailableError } from "@/modules/fulfillment/public";
-import { InMemoryOrderRepository } from "../infrastructure/in-memory-order-repository";
-import { GIFT_MESSAGE_MAX_LENGTH, InvalidOrderInputError } from "../domain/order-policy";
-import { CreateOrder } from "./create-order";
+import { InMemoryPurchaseIntentRepository } from "../infrastructure/in-memory-purchase-intent-repository";
+import {
+  GIFT_MESSAGE_MAX_LENGTH,
+  InvalidPurchaseIntentInputError,
+} from "../domain/purchase-intent-policy";
+import { CreatePurchaseIntent } from "./create-purchase-intent";
 
-describe("CreateOrder", () => {
-  it("uses the server-side catalog price snapshot", async () => {
+describe("CreatePurchaseIntent", () => {
+  it("uses the server-side catalog price snapshot without creating an order", async () => {
     const products = new InMemoryProductRepository();
-    const orders = new InMemoryOrderRepository();
-    const useCase = new CreateOrder(
+    const intents = new InMemoryPurchaseIntentRepository();
+    const useCase = new CreatePurchaseIntent(
       products,
-      orders,
+      intents,
       () => new Date("2026-08-19T00:00:00.000Z"),
       () => "12345678-abcd-4000-8000-123456789012",
     );
 
-    const order = await useCase.execute({
+    const intent = await useCase.execute({
       productId: "prod_haru_01",
       recipientName: "花子",
       deliveryDate: "2026-08-25",
       giftMessage: "おめでとう",
     });
 
-    expect(order.item.unitPriceSnapshot.amount).toBe(6600);
-    expect(order.item.subtotal.amount).toBe(6600);
-    expect(order.status).toBe("PENDING_PAYMENT");
-    expect(order.displayId).toBe("BB-20260819-1234");
+    expect(intent.item.unitPriceSnapshot.amount).toBe(6600);
+    expect(intent.item.subtotal.amount).toBe(6600);
+    expect(intent.status).toBe("READY_FOR_CHECKOUT");
+    expect(intent.displayId).toBe("BBI-20260819-1234");
   });
 
   it("enforces fulfillment policy outside the presentation layer", async () => {
@@ -36,24 +39,24 @@ describe("CreateOrder", () => {
       .rejects.toBeInstanceOf(DeliveryDateUnavailableError);
   });
 
-  it("enforces message policy outside the presentation layer", async () => {
+  it("enforces gift policy outside the presentation layer", async () => {
     const useCase = createUseCase();
 
     await expect(useCase.execute(validInput({ giftMessage: "花".repeat(GIFT_MESSAGE_MAX_LENGTH + 1) })))
-      .rejects.toBeInstanceOf(InvalidOrderInputError);
+      .rejects.toBeInstanceOf(InvalidPurchaseIntentInputError);
   });
 });
 
-function createUseCase(): CreateOrder {
-  return new CreateOrder(
+function createUseCase(): CreatePurchaseIntent {
+  return new CreatePurchaseIntent(
     new InMemoryProductRepository(),
-    new InMemoryOrderRepository(),
+    new InMemoryPurchaseIntentRepository(),
     () => new Date("2026-08-19T00:00:00.000Z"),
     () => "12345678-abcd-4000-8000-123456789012",
   );
 }
 
-function validInput(overrides: Partial<Parameters<CreateOrder["execute"]>[0]> = {}) {
+function validInput(overrides: Partial<Parameters<CreatePurchaseIntent["execute"]>[0]> = {}) {
   return {
     productId: "prod_haru_01",
     recipientName: "花子",

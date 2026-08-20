@@ -3,9 +3,9 @@ import { readFile } from "node:fs/promises";
 const compositionRoot = await readFile("src/shared/infrastructure/composition-root.ts", "utf8");
 const blockers = [];
 
-if (compositionRoot.includes("InMemoryOrderRepository")) {
+if (compositionRoot.includes("InMemoryPurchaseIntentRepository")) {
   blockers.push(
-    "Order persistence is in memory. A production request can lose the order between the Server Action and confirmation page.",
+    "Checkout preparation is using an in-memory preview adapter. Replace it with the approved durable checkout and provider handoff before production.",
   );
 }
 

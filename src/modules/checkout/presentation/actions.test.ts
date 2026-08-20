@@ -5,18 +5,18 @@ const { execute } = vi.hoisted(() => ({ execute: vi.fn() }));
 
 vi.mock("@/shared/infrastructure/composition-root", () => ({
   application: {
-    createOrder: { execute },
+    createPurchaseIntent: { execute },
   },
 }));
 
-import { createOrderAction } from "./actions";
+import { createPurchaseIntentAction } from "./actions";
 
-describe("createOrderAction", () => {
+describe("createPurchaseIntentAction", () => {
   beforeEach(() => execute.mockReset());
 
   it("returns a non-persistent preview summary without recipient PII", async () => {
     execute.mockResolvedValue({
-      displayId: "BB-20990101-1234",
+      displayId: "BBI-20990101-1234",
       item: {
         productName: "春のひかり",
         subtotal: money(6600),
@@ -27,11 +27,11 @@ describe("createOrderAction", () => {
       },
     });
 
-    const state = await createOrderAction({}, formData());
+    const state = await createPurchaseIntentAction({}, formData());
 
     expect(state).toEqual({
       draft: {
-        displayId: "BB-20990101-1234",
+        displayId: "BBI-20990101-1234",
         productName: "春のひかり",
         deliveryDate: "2099-01-01",
         formattedTotal: "￥6,600",
@@ -45,7 +45,7 @@ describe("createOrderAction", () => {
     const invalid = formData();
     invalid.set("recipientName", "");
 
-    const state = await createOrderAction({}, invalid);
+    const state = await createPurchaseIntentAction({}, invalid);
 
     expect(state.fieldErrors?.recipientName).toBeDefined();
     expect(execute).not.toHaveBeenCalled();

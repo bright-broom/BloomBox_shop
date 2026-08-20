@@ -2,7 +2,7 @@
 
 ## Current status
 
-Preview builds and a public product-preview deployment are supported. Production commerce activation is intentionally blocked because the composed application still uses preview catalog content and in-memory order storage. Preview order drafts return in the current browser response and are not persisted. `pnpm check:production` is the executable source of truth for commerce blockers.
+Preview builds and a public product-preview deployment are supported. Production commerce activation is intentionally blocked because the composed application still uses preview catalog content and in-memory purchase-intent storage. Preview gift intents return in the current browser response and are not persisted. `pnpm check:production` is the executable source of truth for commerce blockers.
 
 Do not disable or bypass that check. Complete ADR 0001's Shopify adapter, contract, security, and E2E work first.
 
@@ -33,7 +33,7 @@ The hosting provider must keep immutable deployment history so the frontend can 
 ## Production exit criteria
 
 - Shopify is authoritative for sellable catalog, price, availability, checkout, payment, orders, refunds, and inventory.
-- The composition root contains approved Shopify adapters instead of both in-memory repositories.
+- The composition root contains approved durable checkout and Shopify adapters instead of both in-memory preview repositories.
 - Provider input is runtime-validated; webhook signatures, API versions, timeouts, rate limits, idempotency, and retries are tested.
 - Critical E2E tests pass against an isolated Shopify test store, including duplicate submission, changed price, unavailable inventory, checkout cancellation, and provider outage.
 - Customer and recipient PII, gift metadata, logging, retention, deletion, and support access are documented and approved.
