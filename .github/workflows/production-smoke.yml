@@ -1,0 +1,110 @@
+name: Production Smoke
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  schedule:
+    - cron: "17 * * * *"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: production-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Verify public preview
+    if: >-
+      github.event_name != 'workflow_run'
+      || (github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
+    steps:
+      - name: Verify health and public routes
+        run: |
+          test -n "$PRODUCTION_BASE_URL"
+          base_url="${PRODUCTION_BASE_URL%/}"
+          health=$(curl --fail --silent --show-error --retry 2 --max-time 15 "$base_url/api/health")
+          jq --exit-status \
+            '.status == "ok" and (.release | test("^[0-9a-f]{40}$"))' \
+            <<< "$health" > /dev/null
+
+          for path in / /flowers /flowers/haru-no-hikari /gift/prod_haru_01; do
+            curl --fail --silent --show-error --retry 2 --max-time 15 \
+              "$base_url$path" > /dev/null
+          done
+
+          home=$(curl --fail --silent --show-error --retry 2 --max-time 15 "$base_url/")
+          grep --fixed-strings --quiet "プレビュー版・注文と決済は発生しません" <<< "$home"
+
+      - name: Open or refresh production incident
+        if: failure()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const marker = "<!-- bloombox-production-smoke -->";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `${marker}\nThe public BloomBox smoke test is failing. `
+              + `[Inspect the workflow run](${runUrl}) before the next release.`;
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "all",
+              per_page: 100,
+            });
+            const existing = issues.find((issue) => !issue.pull_request && issue.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                state: "open",
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: "[Production] BloomBox smoke test is failing",
+                body,
+              });
+            }
+
+      - name: Close recovered production incident
+        if: success()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const marker = "<!-- bloombox-production-smoke -->";
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100,
+            });
+            const existing = issues.find((issue) => !issue.pull_request && issue.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: "The scheduled production smoke test has recovered.",
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                state: "closed",
+                state_reason: "completed",
+              });
+            }
