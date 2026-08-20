@@ -5,6 +5,7 @@ import type { AesGcmDataProtector } from "@/shared/infrastructure/security/aes-g
 import { z } from "zod";
 import {
   catalogProductReference,
+  commerceProductReference,
   PurchaseIntent,
   purchaseIntentId,
   type PurchaseIntentId,
@@ -34,6 +35,7 @@ const persistedIntentSchema = z.object({
   external_checkout_id: z.string().nullable(),
   provider_api_version: z.string().nullable(),
   checkout_created_at: z.union([z.string(), z.date()]).nullable(),
+  catalog_product_id: z.string().min(1),
   external_product_id: z.string().min(1),
   product_name_snapshot: z.string().min(1),
   quantity: z.number().int().positive(),
@@ -86,10 +88,11 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
         `;
         await transaction`
           INSERT INTO bloombox.purchase_intent_items (
-            id, purchase_intent_id, external_product_id, product_name_snapshot,
+            id, purchase_intent_id, catalog_product_id, external_product_id, product_name_snapshot,
             quantity, unit_amount_minor, subtotal_minor, currency, position
           ) VALUES (
-            ${this.createId()}, ${intent.id}, ${intent.item.productId}, ${intent.item.productName},
+            ${this.createId()}, ${intent.id}, ${intent.item.productId},
+            ${intent.item.externalProductReference}, ${intent.item.productName},
             ${intent.item.quantity}, ${intent.item.unitPriceSnapshot.amount},
             ${intent.item.subtotal.amount}, ${intent.item.subtotal.currency}, 0
           )
@@ -131,6 +134,7 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
         intent.external_checkout_id,
         intent.provider_api_version,
         intent.checkout_created_at,
+        item.catalog_product_id,
         item.external_product_id,
         item.product_name_snapshot,
         item.quantity,
@@ -169,7 +173,8 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
       displayId: row.data.display_id,
       status: row.data.status,
       item: {
-        productId: catalogProductReference(row.data.external_product_id),
+        productId: catalogProductReference(row.data.catalog_product_id),
+        externalProductReference: commerceProductReference(row.data.external_product_id),
         productName: row.data.product_name_snapshot,
         quantity: row.data.quantity,
         unitPriceSnapshot: money(toSafeInteger(row.data.unit_amount_minor)),

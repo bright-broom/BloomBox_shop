@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "status": "blocked",
+  "checkoutProvider": "STRIPE",
+  "evidence": {
+    "activationDecisionAdr": { "complete": false, "reference": null },
+    "shopifyCatalogContract": { "complete": false, "reference": null },
+    "stripeTestModeE2e": { "complete": false, "reference": null },
+    "inventoryReservationStrategy": { "complete": false, "reference": null },
+    "taxShippingReview": { "complete": false, "reference": null },
+    "privacySupportReview": { "complete": false, "reference": null },
+    "backupRollbackIncidentRehearsal": { "complete": false, "reference": null }
+  }
+}

@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { money } from "@/shared/domain/money";
-import { catalogProductReference, PurchaseIntent, purchaseIntentId } from "../../domain/purchase-intent";
+import {
+  catalogProductReference,
+  commerceProductReference,
+  PurchaseIntent,
+  purchaseIntentId,
+} from "../../domain/purchase-intent";
 import { giftMessage, recipientName } from "../../domain/purchase-intent-policy";
 import {
   StripeCheckoutSessionProvider,
@@ -26,6 +31,7 @@ describe("StripeCheckoutSessionProvider", () => {
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
       purchaseIntentId: "12345678-abcd-4000-8000-123456789012",
       productId: "prod_haru_01",
+      externalProductReference: "gid://shopify/ProductVariant/123",
       productName: "春のひかり",
       quantity: 1,
       unitAmount: 6600,
@@ -44,6 +50,7 @@ function createIntent(): PurchaseIntent {
     displayId: "BBI-20260821-1234",
     item: {
       productId: catalogProductReference("prod_haru_01"),
+      externalProductReference: commerceProductReference("gid://shopify/ProductVariant/123"),
       productName: "春のひかり",
       quantity: 1,
       unitPriceSnapshot: money(6600),

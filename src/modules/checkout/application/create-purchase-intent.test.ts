@@ -29,6 +29,7 @@ describe("CreatePurchaseIntent", () => {
 
     expect(intent.item.unitPriceSnapshot.amount).toBe(6600);
     expect(intent.item.subtotal.amount).toBe(6600);
+    expect(intent.item.externalProductReference).toBe("prod_haru_01");
     expect(intent.status).toBe("READY_FOR_CHECKOUT");
     expect(intent.displayId).toBe("BBI-20260819-1234");
     expect(intent.expiresAt.toISOString()).toBe("2026-08-20T00:00:00.000Z");

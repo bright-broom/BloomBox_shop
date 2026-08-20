@@ -9,6 +9,7 @@ import type { StripeConfig } from "@/shared/infrastructure/config/stripe-config"
 type StripeCheckoutRequest = Readonly<{
   purchaseIntentId: string;
   productId: string;
+  externalProductReference: string;
   productName: string;
   quantity: number;
   unitAmount: number;
@@ -48,6 +49,7 @@ export class StripeCheckoutSessionProvider implements CheckoutSessionProvider {
     return this.api.create({
       purchaseIntentId: intent.id,
       productId: intent.item.productId,
+      externalProductReference: intent.item.externalProductReference,
       productName: intent.item.productName,
       quantity: intent.item.quantity,
       unitAmount: intent.item.unitPriceSnapshot.amount,
@@ -95,7 +97,10 @@ export class StripeSdkCheckoutApi implements StripeCheckoutApi {
           tax_behavior: this.config.taxBehavior,
           product_data: {
             name: request.productName,
-            metadata: { catalog_product_id: request.productId },
+            metadata: {
+              catalog_product_id: request.productId,
+              commerce_product_reference: request.externalProductReference,
+            },
           },
         },
         quantity: request.quantity,

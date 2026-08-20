@@ -38,6 +38,7 @@ const catalogSchema = z.array(catalogItemSchema).min(1).superRefine((items, cont
 export function loadCatalog(): readonly Product[] {
   return catalogSchema.parse(catalog).map((item) => ({
     id: productId(item.id),
+    externalReference: item.id,
     slug: item.slug,
     name: item.name,
     subtitle: item.subtitle,

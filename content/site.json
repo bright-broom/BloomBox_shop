@@ -9,6 +9,9 @@
     "お届け日を指定できます",
     "メッセージカード付き"
   ],
+  "catalog": {
+    "emptyMessage": "ただいまご案内できる花を準備しています。少し時間をおいて、もう一度ご覧ください。"
+  },
   "hero": {
     "eyebrow": "FLOWERS FOR EVERY FEELING",
     "title": "想いに、花を選ぶ",

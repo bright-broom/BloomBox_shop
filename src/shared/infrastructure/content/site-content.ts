@@ -8,6 +8,9 @@ const siteContentSchema = z.object({
   description: z.string().trim().min(1).max(200),
   contactEmail: z.email(),
   serviceMessages: z.array(z.string().trim().min(1).max(80)).min(1).max(4),
+  catalog: z.object({
+    emptyMessage: z.string().trim().min(1).max(160),
+  }),
   hero: z.object({
     eyebrow: z.string().trim().min(1).max(80),
     title: z.string().trim().min(1).max(80),

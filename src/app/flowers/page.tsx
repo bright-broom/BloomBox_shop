@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { application } from "@/shared/infrastructure/composition-root";
 import { ProductCard } from "@/ui/product-card";
+import { siteContent } from "@/shared/infrastructure/content/site-content";
 
 export const metadata: Metadata = { title: "季節の花" };
+export const dynamic = "force-dynamic";
 
 export default async function FlowersPage() {
   const products = await application.listProducts.execute();
@@ -24,9 +26,13 @@ export default async function FlowersPage() {
         <span>{String(products.length).padStart(2, "0")} COLLECTIONS</span>
       </div>
       <div className="product-grid">
-        {products.map((product, index) => (
+        {products.length > 0 ? products.map((product, index) => (
           <ProductCard key={product.id} product={product} index={index} />
-        ))}
+        )) : (
+          <p className="catalog-empty" role="status">
+            {siteContent.catalog.emptyMessage}
+          </p>
+        )}
       </div>
     </section>
   );

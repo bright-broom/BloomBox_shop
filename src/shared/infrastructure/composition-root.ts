@@ -1,6 +1,11 @@
+import { isIP } from "node:net";
+import { headers } from "next/headers";
 import { GetProduct } from "@/modules/catalog/application/get-product";
 import { ListProducts } from "@/modules/catalog/application/list-products";
 import { InMemoryProductRepository } from "@/modules/catalog/infrastructure/in-memory-product-repository";
+import type { ProductRepository } from "@/modules/catalog/public";
+import { ShopifyProductRepository } from "@/modules/catalog/infrastructure/shopify-product-repository";
+import { ShopifyStorefrontFetchClient } from "@/modules/catalog/infrastructure/shopify-storefront-client";
 import { CreatePurchaseIntent } from "@/modules/checkout/application/create-purchase-intent";
 import { PreparePurchase } from "@/modules/checkout/application/prepare-purchase";
 import { StartCheckout } from "@/modules/checkout/application/start-checkout";
@@ -15,6 +20,7 @@ import { loadDataProtectionConfig } from "./config/data-protection-config";
 import { loadCheckoutProviderMode } from "./config/checkout-provider-config";
 import { loadRuntimeMode } from "./config/runtime-config";
 import { loadStripeConfig } from "./config/stripe-config";
+import { loadShopifyStorefrontConfig } from "./config/shopify-storefront-config";
 import {
   getApplicationDatabaseClient,
   getWorkerDatabaseClient,
@@ -28,7 +34,7 @@ import { StripeCommerceEventProcessor } from "@/modules/payment/infrastructure/s
 import { StripeEventReconciler } from "@/modules/payment/infrastructure/stripe-event-reconciler";
 import { PostgresDataRetentionJob } from "./database/data-retention-job";
 
-const productRepository = new InMemoryProductRepository();
+const productRepository = createProductRepository();
 const purchaseIntentRepository = createPurchaseIntentRepository();
 const createPurchaseIntent = new CreatePurchaseIntent(productRepository, purchaseIntentRepository);
 const startCheckout = createStartCheckout(purchaseIntentRepository);
@@ -39,6 +45,32 @@ export const application = {
   createPurchaseIntent,
   preparePurchase: new PreparePurchase(createPurchaseIntent, startCheckout),
 };
+
+function createProductRepository(): ProductRepository {
+  if (loadRuntimeMode() === "preview") return new InMemoryProductRepository();
+
+  const config = loadShopifyStorefrontConfig();
+  return new ShopifyProductRepository(
+    new ShopifyStorefrontFetchClient(
+      config,
+      { buyerIp: getRequestBuyerIp },
+    ),
+    config.catalogTag,
+  );
+}
+
+async function getRequestBuyerIp(): Promise<string | undefined> {
+  try {
+    const requestHeaders = await headers();
+    const candidates = [
+      requestHeaders.get("x-forwarded-for")?.split(",")[0].trim(),
+      requestHeaders.get("x-real-ip")?.trim(),
+    ];
+    return candidates.find((candidate) => candidate && isIP(candidate));
+  } catch {
+    return undefined;
+  }
+}
 
 function createPurchaseIntentRepository(): PurchaseIntentRepository {
   if (loadRuntimeMode() === "preview") return new InMemoryPurchaseIntentRepository();

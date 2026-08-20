@@ -5,6 +5,7 @@ import { basename, join } from "node:path";
 const violations = [];
 const requiredFiles = [
   "AGENTS.md",
+  "config/production-commerce-activation.json",
   "SECURITY.md",
   "docs/architecture/ARCHITECTURE.md",
   "docs/architecture/adr/0000-template.md",
@@ -13,6 +14,7 @@ const requiredFiles = [
   "docs/engineering/DEVELOPMENT.md",
   "docs/operations/GOVERNANCE.md",
   "docs/operations/RELEASE.md",
+  "docs/operations/SHOPIFY.md",
   ".semgrep.yml",
   ".github/CODEOWNERS",
   ".github/pull_request_template.md",
