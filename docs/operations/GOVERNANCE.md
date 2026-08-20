@@ -53,6 +53,7 @@ Repository files cannot enforce account-level rulesets. The repository owner mus
 - Dependabot proposes package and GitHub Actions updates; CI and a human review remain required.
 - Semgrep uses the checked-in deterministic rule set. Rule changes are reviewed like code.
 - The release owner reviews failed production releases and records follow-up work when rollback or manual intervention occurs.
+- Production Smoke checks the public experience after successful `main` CI and hourly; it owns a deduplicated GitHub incident issue until recovery.
 - Quarterly: review code ownership, branch rules, access, secrets, dependency health, provider API versions, backup/restore evidence, and ADR accuracy.
 - After an incident: write a blameless record with timeline, customer impact, contributing conditions, detection gap, remediation owner, and due date.
 

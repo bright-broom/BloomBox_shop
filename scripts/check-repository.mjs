@@ -17,6 +17,7 @@ const requiredFiles = [
   ".github/CODEOWNERS",
   ".github/pull_request_template.md",
   ".github/workflows/production-release.yml",
+  ".github/workflows/production-smoke.yml",
   ".github/workflows/pr-governance.yml",
 ];
 

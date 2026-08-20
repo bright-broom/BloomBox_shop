@@ -28,6 +28,8 @@ Preview must be clearly distinguishable and must not send real notifications, ch
 
 The hosting provider must keep immutable deployment history so the frontend can roll back without changing accepted Shopify orders.
 
+`Production Smoke` runs after successful `main` CI, once per hour, and on demand. It verifies the release-shaped health response and the public home, catalog, product, and gift routes. A failure opens or refreshes one GitHub incident issue; a later successful run comments on and closes that issue automatically.
+
 ## Production exit criteria
 
 - Shopify is authoritative for sellable catalog, price, availability, checkout, payment, orders, refunds, and inventory.
