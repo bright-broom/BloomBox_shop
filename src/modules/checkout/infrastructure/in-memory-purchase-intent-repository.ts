@@ -1,14 +1,14 @@
 import type { PurchaseIntent, PurchaseIntentId } from "../domain/purchase-intent";
 import type { PurchaseIntentRepository } from "../domain/purchase-intent-repository";
 
-const intents = new Map<PurchaseIntentId, PurchaseIntent>();
-
 export class InMemoryPurchaseIntentRepository implements PurchaseIntentRepository {
+  private readonly intents = new Map<PurchaseIntentId, PurchaseIntent>();
+
   async save(intent: PurchaseIntent): Promise<void> {
-    intents.set(intent.id, intent);
+    this.intents.set(intent.id, intent);
   }
 
   async findById(id: PurchaseIntentId): Promise<PurchaseIntent | null> {
-    return intents.get(id) ?? null;
+    return this.intents.get(id) ?? null;
   }
 }

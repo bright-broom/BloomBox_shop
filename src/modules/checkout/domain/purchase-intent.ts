@@ -1,5 +1,10 @@
 import type { Money } from "@/shared/domain/money";
-import type { GiftMessage, RecipientName } from "./purchase-intent-policy";
+import {
+  purchaseIntentExpiry,
+  purchaseIntentPiiRetentionExpiry,
+  type GiftMessage,
+  type RecipientName,
+} from "./purchase-intent-policy";
 import {
   assertPurchaseIntentTransition,
   type PurchaseIntentStatus,
@@ -55,6 +60,8 @@ export class PurchaseIntent {
     readonly recipient: IntendedRecipient,
     readonly giftMessage: GiftMessage,
     readonly createdAt: Date,
+    readonly expiresAt: Date,
+    readonly piiRetentionExpiresAt: Date,
     status: PurchaseIntentStatus,
   ) {
     this.currentStatus = status;
@@ -75,7 +82,33 @@ export class PurchaseIntent {
       input.recipient,
       input.giftMessage,
       input.createdAt,
+      purchaseIntentExpiry(input.createdAt),
+      purchaseIntentPiiRetentionExpiry(input.createdAt),
       "DRAFT",
+    );
+  }
+
+  static restore(input: {
+    id: PurchaseIntentId;
+    displayId: string;
+    item: PurchaseIntentItem;
+    recipient: IntendedRecipient;
+    giftMessage: GiftMessage;
+    createdAt: Date;
+    expiresAt: Date;
+    piiRetentionExpiresAt: Date;
+    status: PurchaseIntentStatus;
+  }): PurchaseIntent {
+    return new PurchaseIntent(
+      input.id,
+      input.displayId,
+      input.item,
+      input.recipient,
+      input.giftMessage,
+      input.createdAt,
+      input.expiresAt,
+      input.piiRetentionExpiresAt,
+      input.status,
     );
   }
 

@@ -23,7 +23,7 @@ Preview must be clearly distinguishable and must not send real notifications, ch
 3. Required owners approve and merge to `main` after all required checks pass.
 4. The release owner starts `Production Release` from the `main` branch, enters the full commit SHA that passed the gates, and explicitly confirms deployment.
 5. The workflow checks out `main`, rejects any SHA mismatch, runs `pnpm check:release`, and stops before deployment if any production blocker remains.
-6. The protected `production` environment requests human approval.
+6. The protected `production` environment requests human approval and applies checksummed forward-only database migrations with a dedicated owner credential.
 7. The workflow calls the configured deployment hook and polls `/api/health` until the healthy revision exactly matches the SHA that passed the release gates.
 
 The hosting provider must keep immutable deployment history so the frontend can roll back without changing accepted Shopify orders.
@@ -49,4 +49,4 @@ After rollback, verify the public origin, a read-only catalog request, and the S
 
 ## Required repository and platform setup
 
-The repository automates code-verifiable conditions. The `production` Environment is restricted to `main`; the current GitHub plan does not support required reviewers or branch protection for this private repository, so governance issue #6 tracks the upgrade. The repository owner must also configure `PRODUCTION_DEPLOY_HOOK_URL`, `PRODUCTION_BASE_URL`, hosting rollback retention, and provider-side access controls. The hosting build must expose its Git revision through `BLOOMBOX_RELEASE_SHA`; Vercel's `VERCEL_GIT_COMMIT_SHA` is recognized automatically.
+The repository automates code-verifiable conditions. The `production` Environment is restricted to `main`; the current GitHub plan does not support required reviewers or branch protection for this private repository, so governance issue #6 tracks the upgrade. The repository owner must also configure `PRODUCTION_DEPLOY_HOOK_URL`, `PRODUCTION_BASE_URL`, `DATABASE_MIGRATION_URL`, hosting rollback retention, and provider-side access controls. The migration URL is a protected production secret and uses a dedicated owner credential; the runtime application never receives it. The hosting build must expose its Git revision through `BLOOMBOX_RELEASE_SHA`; Vercel's `VERCEL_GIT_COMMIT_SHA` is recognized automatically.

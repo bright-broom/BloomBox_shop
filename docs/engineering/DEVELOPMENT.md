@@ -74,6 +74,7 @@ Production readiness is intentionally separate from PR CI while the preview appl
 - Search before adding a utility, service, repository, component, hook, schema, type, or library.
 - Do not leave commented-out code. A TODO references a tracked issue when one exists.
 - Schema changes include the schema definition, migration, affected code/tests, compatibility analysis, and rollback plan.
+- Applied database migrations are immutable and checksummed. Use a new forward migration for corrections and run `pnpm test:database` against an isolated local PostgreSQL database.
 - A PR explains why, meaningful changes, architecture/security impact, verification evidence, risk, and rollback. Add screenshots when visual behavior changed.
 - Architecture decisions use the ADR template; accepted ADRs override earlier undocumented direction.
 

@@ -1,5 +1,7 @@
 export const GIFT_MESSAGE_MAX_LENGTH = 180;
 export const RECIPIENT_NAME_MAX_LENGTH = 80;
+export const PURCHASE_INTENT_EXPIRY_HOURS = 24;
+export const PURCHASE_INTENT_PII_RETENTION_DAYS = 30;
 
 export type GiftMessage = string & { readonly __brand: "GiftMessage" };
 export type RecipientName = string & { readonly __brand: "RecipientName" };
@@ -25,4 +27,12 @@ export class InvalidPurchaseIntentInputError extends Error {
     super(message);
     this.name = "InvalidPurchaseIntentInputError";
   }
+}
+
+export function purchaseIntentExpiry(createdAt: Date): Date {
+  return new Date(createdAt.getTime() + PURCHASE_INTENT_EXPIRY_HOURS * 60 * 60 * 1000);
+}
+
+export function purchaseIntentPiiRetentionExpiry(createdAt: Date): Date {
+  return new Date(createdAt.getTime() + PURCHASE_INTENT_PII_RETENTION_DAYS * 24 * 60 * 60 * 1000);
 }
