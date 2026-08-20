@@ -1,4 +1,4 @@
-import type { Product } from "@/modules/catalog/domain/product";
+import type { Product } from "@/modules/catalog/public";
 import { formatMoney } from "@/shared/domain/money";
 import Image from "next/image";
 import Link from "next/link";

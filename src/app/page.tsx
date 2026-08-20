@@ -1,5 +1,6 @@
 import { ProductCard } from "@/ui/product-card";
 import { application } from "@/shared/infrastructure/composition-root";
+import { siteContent } from "@/shared/infrastructure/content/site-content";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -10,16 +11,14 @@ export default async function HomePage() {
     <>
       <section className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">FLOWERS FOR EVERY FEELING</p>
+          <p className="eyebrow">{siteContent.hero.eyebrow}</p>
           <h1>
-            想いに、花を選ぶ
+            {siteContent.hero.title}
             <br />
-            <em>時間を。</em>
+            <em>{siteContent.hero.emphasis}</em>
           </h1>
           <p className="hero-lead">
-            うれしい、ありがとう、元気でね。
-            <br />
-            まだ名前のない気持ちにも、似合う花があります。
+            {siteContent.hero.lead.map((line, index) => <span key={`${index}-${line}`}>{line}</span>)}
           </p>
           <Link className="text-link" href="/flowers">
             季節の花から選ぶ <span aria-hidden="true">→</span>
@@ -29,19 +28,19 @@ export default async function HomePage() {
             <li>お届け日指定</li>
             <li>カード無料</li>
           </ul>
-          <span className="hero-index">VOL. 08 — SUMMER / AUTUMN</span>
+          <span className="hero-index">{siteContent.hero.edition}</span>
         </div>
         <div className="hero-visual">
           <div className="hero-image-frame">
             <Image
-              src="https://images.unsplash.com/photo-1490750967868-88aa4486c946?auto=format&fit=crop&w=1500&q=90"
-              alt="青空の下に咲く鮮やかな黄色い花"
+              src={siteContent.hero.imageUrl}
+              alt={siteContent.hero.imageAlt}
               fill
               priority
               sizes="(max-width: 760px) 100vw, 58vw"
             />
           </div>
-          <p className="vertical-copy">THE ART OF GIVING, ROOTED IN NATURE</p>
+          <p className="vertical-copy">{siteContent.hero.verticalCopy}</p>
           <span className="sun-shape" aria-hidden="true" />
         </div>
       </section>

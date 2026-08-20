@@ -12,4 +12,8 @@ describe("delivery date", () => {
     expect(isAvailableDeliveryDate("2026-08-21", now)).toBe(false);
     expect(isAvailableDeliveryDate("2026-08-22", now)).toBe(true);
   });
+
+  it.each(["not-a-date", "2026-02-30", "2026-8-22"])("rejects invalid calendar date %s", (value) => {
+    expect(isAvailableDeliveryDate(value, now)).toBe(false);
+  });
 });

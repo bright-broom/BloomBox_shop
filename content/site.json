@@ -1,0 +1,27 @@
+{
+  "brandName": "BloomBox",
+  "defaultTitle": "BloomBox — 想いに、花を選ぶ時間を。",
+  "titleTemplate": "%s | BloomBox",
+  "description": "贈る理由から、ぴったりの花とことばを選ぶギフト体験。",
+  "contactEmail": "hello@bloombox.jp",
+  "serviceMessages": [
+    "プレビュー版・注文と決済は発生しません",
+    "お届け日を指定できます",
+    "メッセージカード付き"
+  ],
+  "hero": {
+    "eyebrow": "FLOWERS FOR EVERY FEELING",
+    "title": "想いに、花を選ぶ",
+    "emphasis": "時間を。",
+    "lead": ["うれしい、ありがとう、元気でね。", "まだ名前のない気持ちにも、似合う花があります。"],
+    "imageUrl": "https://images.unsplash.com/photo-1490750967868-88aa4486c946?auto=format&fit=crop&w=1500&q=90",
+    "imageAlt": "青空の下に咲く鮮やかな黄色い花",
+    "verticalCopy": "THE ART OF GIVING, ROOTED IN NATURE",
+    "edition": "VOL. 08 — SUMMER / AUTUMN"
+  },
+  "footer": {
+    "tagline": "花を贈る。その手前にある想いまで、大切に。",
+    "originNote": "SEASONAL FLOWERS · DIRECT FROM GROWERS",
+    "copyrightHolder": "BLOOMBOX"
+  }
+}

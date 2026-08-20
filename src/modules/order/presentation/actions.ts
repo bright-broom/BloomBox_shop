@@ -1,8 +1,11 @@
 "use server";
 
 import { ProductUnavailableError } from "@/modules/order/application/create-order";
+import { DeliveryDateUnavailableError } from "@/modules/fulfillment/public";
 import { application } from "@/shared/infrastructure/composition-root";
-import { redirect } from "next/navigation";
+import { formatMoney } from "@/shared/domain/money";
+import { reportUnexpectedError } from "@/shared/infrastructure/observability/report-unexpected-error";
+import { InvalidOrderInputError } from "../domain/order-policy";
 import { createOrderSchema, type CreateOrderFormState } from "./create-order-schema";
 
 export async function createOrderAction(
@@ -20,16 +23,27 @@ export async function createOrderAction(
     return { fieldErrors: parsed.error.flatten().fieldErrors };
   }
 
-  let orderId: string;
   try {
     const order = await application.createOrder.execute(parsed.data);
-    orderId = order.id;
+    return {
+      draft: {
+        displayId: order.displayId,
+        productName: order.item.productName,
+        deliveryDate: order.recipient.deliveryDate,
+        formattedTotal: formatMoney(order.item.subtotal),
+      },
+    };
   } catch (error) {
-    if (error instanceof ProductUnavailableError) {
+    if (
+      error instanceof ProductUnavailableError
+      || error instanceof DeliveryDateUnavailableError
+      || error instanceof InvalidOrderInputError
+    ) {
       return { error: error.message };
     }
-    return { error: "ご注文を開始できませんでした。時間をおいてもう一度お試しください。" };
+    const errorId = reportUnexpectedError(error, { operation: "create_order" });
+    return {
+      error: `ご注文を開始できませんでした。時間をおいてもう一度お試しください。（エラー ID: ${errorId}）`,
+    };
   }
-
-  redirect(`/order/${orderId}`);
 }

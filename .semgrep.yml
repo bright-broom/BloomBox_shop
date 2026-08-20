@@ -1,0 +1,31 @@
+rules:
+  - id: bloombox-no-eval
+    languages: [javascript, typescript]
+    message: Dynamic code evaluation is prohibited.
+    severity: ERROR
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+
+  - id: bloombox-no-dangerous-html
+    languages: [typescript]
+    message: dangerouslySetInnerHTML requires an explicit security design and review.
+    severity: ERROR
+    pattern: <$ELEMENT ... dangerouslySetInnerHTML={...} ... />
+
+  - id: bloombox-no-weak-random-token
+    languages: [javascript, typescript]
+    message: Math.random must not generate identifiers, tokens, or secrets.
+    severity: WARNING
+    patterns:
+      - pattern: Math.random()
+      - pattern-inside: |
+          $VALUE = Math.random()
+
+  - id: bloombox-no-shell-exec
+    languages: [javascript, typescript]
+    message: Shell execution with a command string is prohibited; use argument-safe process APIs.
+    severity: ERROR
+    pattern-either:
+      - pattern: exec(...)
+      - pattern: execSync(...)

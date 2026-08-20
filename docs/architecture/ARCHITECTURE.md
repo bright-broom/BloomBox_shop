@@ -45,17 +45,34 @@ Queries have no hidden side effects. Commands express an intended state change. 
 
 Vendor SDKs remain in infrastructure. Payment, email, AI, storage, and shipping are accessed through narrow capability-oriented interfaces.
 
+Each module exposes cross-module contracts through `src/modules/<module>/public.ts`. Direct imports into another module's domain, application, infrastructure, or presentation folders are prohibited and checked automatically. The composition root may wire concrete implementations at the outer boundary.
+
 ## State and source of truth
 
 Order, Payment, and Fulfillment have independent explicit state machines with validated transition tables. Provider facts cause commands or events; they do not synchronize boolean flags across models.
 
-- PostgreSQL is the future production source of truth for internal commerce state; the current in-memory repositories are replaceable development adapters.
-- A verified payment webhook is authoritative for payment success. A browser redirect is not.
+- Shopify is the production source of truth for sellable catalog, price, availability, inventory, checkout, payment, orders, and refunds. See ADR 0001.
+- Checked-in catalog JSON and in-memory order storage are deterministic preview adapters, not a production data path.
+- A verified Shopify fact is authoritative for checkout and payment state. A browser redirect is not.
 - Inventory changes are traceable movements such as received, reserved, released, consumed, or adjusted.
 - Public identifiers are opaque; database sequences are not exposed.
 - An eGift claim URL is a capability: store only a token hash and enforce expiry, single use, rate limiting, and auditability.
 - Timestamps are stored in UTC. Delivery-day rules specify `Asia/Tokyo` explicitly.
 - Money uses integer minor units and an explicit currency. The server recalculates totals and order items retain price snapshots.
+
+## Configuration ownership
+
+Configuration is split by meaning rather than collected into an untyped global object:
+
+| Kind | Location | Validation and ownership |
+| --- | --- | --- |
+| Editable site copy | `content/site.json` | Zod schema at the infrastructure boundary |
+| Preview catalog | `content/catalog.json` | Catalog adapter schema; production replaces it with Shopify |
+| Business policy | Owning module's domain | Typed constants and domain tests |
+| Visual primitives | CSS root semantic tokens | Design-token check and visual review |
+| Secrets and deploy values | Server environment | Central runtime validation; never client-exposed |
+
+This classification removes hidden magic values without creating one high-coupling configuration file.
 
 ## Consistency and side effects
 
@@ -73,11 +90,17 @@ Browse → Gift configuration → Checkout → Payment → Order → Fulfillment
 
 AI, analytics, recommendation, marketing, CMS, and story enrichment are noncritical. Their outage must not prevent checkout or corrupt commerce state. AI output is validated, receives only the minimum necessary data, and never decides price, payment, refund, inventory, shipment, or legal facts. Customer-facing prompts are centralized and versioned.
 
+Production commerce currently stops at the preview boundary. Public experience previews may deploy, but the commerce release gate remains red until Shopify adapters, provider verification, observability, privacy review, and critical-flow E2E evidence satisfy [`../operations/RELEASE.md`](../operations/RELEASE.md).
+
 ## ADR threshold
 
 Create or update an ADR before materially changing architecture style, module ownership, database/ORM, hosting, authentication, payment provider, queue/outbox strategy, CMS, AI provider strategy, or a critical trust boundary.
 
 An ADR states context, decision, alternatives, consequences, rollout, and rollback. Routine implementation within existing boundaries does not need an ADR.
+
+Accepted decisions:
+
+- [ADR 0001: Shopify-first commerce boundary](adr/0001-shopify-first-commerce-boundary.md)
 
 ## Architecture decision test
 

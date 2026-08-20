@@ -1,0 +1,69 @@
+name: Production Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify release candidate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      release-sha: ${{ steps.revision.outputs.release-sha }}
+    steps:
+      - name: Check out main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run release gates
+        run: pnpm check:release
+      - name: Record verified revision
+        id: revision
+        run: echo "release-sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Approve, deploy, and smoke test
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
+      PRODUCTION_DEPLOY_HOOK_URL: ${{ secrets.PRODUCTION_DEPLOY_HOOK_URL }}
+      VERIFIED_RELEASE_SHA: ${{ needs.verify.outputs.release-sha }}
+    steps:
+      - name: Validate deployment configuration
+        run: |
+          test -n "$PRODUCTION_DEPLOY_HOOK_URL"
+          test -n "$PRODUCTION_BASE_URL"
+      - name: Trigger production deployment
+        run: curl --fail --silent --show-error --request POST "$PRODUCTION_DEPLOY_HOOK_URL" > /dev/null
+      - name: Wait for a healthy deployment
+        run: |
+          health_url="${PRODUCTION_BASE_URL%/}/api/health"
+          for attempt in $(seq 1 30); do
+            response=$(curl --fail --silent --show-error --max-time 10 "$health_url" || true)
+            if jq --exit-status --arg release "$VERIFIED_RELEASE_SHA" \
+              '.status == "ok" and .release == $release' <<< "$response" > /dev/null; then
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1

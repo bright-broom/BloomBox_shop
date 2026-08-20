@@ -13,7 +13,13 @@ mitigation. You should receive an acknowledgement within three business days.
 
 ## Engineering controls
 
-Every pull request must pass CodeQL, production dependency auditing, architecture
-boundary checks, type checking, linting, unit tests, and a production build.
-Domain code must remain framework-independent. External input must be validated at
-the presentation boundary, and provider SDKs must remain in infrastructure code.
+Every pull request must pass the deterministic Semgrep rule set, production
+dependency auditing, repository and architecture policy, type checking, linting,
+unit tests, and a production build. GitHub Actions are pinned to immutable commit
+SHAs and dependency updates are reviewed.
+
+Domain code must remain framework-independent. External, content, webhook, and
+provider data must be runtime-validated at its boundary, and provider SDKs must
+remain in infrastructure code. Secrets and customer or recipient PII must not be
+committed or logged. Production deployment additionally requires the protected
+release gate described in `docs/operations/RELEASE.md`.
