@@ -41,6 +41,7 @@ The hosting provider must keep immutable deployment history so the frontend can 
 - Production secrets and environment protection are configured; no production secret reaches preview.
 - Monitoring identifies failed checkout handoff, provider errors, latency, and invalid webhook rates without logging PII.
 - If Stripe is activated, the test-mode evidence and account-side checklist in `STRIPE.md` are complete, Event reconciliation is healthy, and the live credentials are isolated from Preview.
+- The Stripe account contract has passed the manual `Stripe Test Mode Readiness` workflow with separate Checkout, reconciliation, and readiness credentials. The probe Session was expired and the evidence references the tested revision.
 - If Stripe is activated while Shopify remains inventory authority, the approved activation ADR and test evidence cover reservation, release, oversell prevention, and reconciliation before any charge is accepted.
 - The release owner has exercised frontend rollback and confirmed Shopify orders remain intact.
 

@@ -25,6 +25,22 @@ type StripeCheckoutResponse = Readonly<{
   expiresAt: Date;
 }>;
 
+type StripeCheckoutSessionResource = Readonly<{
+  id: string;
+  client_reference_id: string | null;
+  url: string | null;
+  expires_at: number;
+  livemode: boolean;
+}>;
+
+export interface StripeCheckoutSessionsClient {
+  create(
+    request: Stripe.Checkout.SessionCreateParams,
+    options: Readonly<{ idempotencyKey: string }>,
+  ): Promise<StripeCheckoutSessionResource>;
+  retrieve(sessionId: string): Promise<StripeCheckoutSessionResource>;
+}
+
 export interface StripeCheckoutApi {
   create(request: StripeCheckoutRequest): Promise<StripeCheckoutResponse>;
   retrieve(sessionId: string): Promise<StripeCheckoutResponse>;
@@ -73,23 +89,34 @@ export class StripeCheckoutSessionProvider implements CheckoutSessionProvider {
 }
 
 export class StripeSdkCheckoutApi implements StripeCheckoutApi {
-  private readonly stripe: Stripe;
+  private readonly sessions: StripeCheckoutSessionsClient;
 
-  constructor(private readonly config: StripeConfig) {
-    this.stripe = new Stripe(config.secretKey, {
+  constructor(
+    private readonly config: StripeConfig,
+    sessions?: StripeCheckoutSessionsClient,
+  ) {
+    const stripe = new Stripe(config.checkoutSecretKey, {
       apiVersion: config.apiVersion,
       appInfo: { name: "BloomBox", version: "0.1.0" },
       maxNetworkRetries: 2,
       timeout: 10_000,
       telemetry: false,
     });
+    this.sessions = sessions ?? {
+      create: (request, options) => stripe.checkout.sessions.create(request, options),
+      retrieve: (sessionId) => stripe.checkout.sessions.retrieve(sessionId),
+    };
   }
 
   async create(request: StripeCheckoutRequest): Promise<StripeCheckoutResponse> {
-    const session = await this.stripe.checkout.sessions.create({
+    const session = await this.sessions.create({
       mode: "payment",
       client_reference_id: request.purchaseIntentId,
       locale: "ja",
+      submit_type: "pay",
+      billing_address_collection: "auto",
+      automatic_tax: { enabled: this.config.automaticTaxEnabled },
+      consent_collection: { terms_of_service: this.config.termsAcceptance },
       line_items: [{
         price_data: {
           currency: request.currency.toLowerCase(),
@@ -116,22 +143,44 @@ export class StripeSdkCheckoutApi implements StripeCheckoutApi {
       success_url: `${this.config.publicOrigin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${this.config.publicOrigin}/gift/${encodeURIComponent(request.productId)}?checkout=cancelled`,
     }, { idempotencyKey: request.idempotencyKey });
-    return mapStripeSession(session);
+    return mapStripeSession(session, this.config);
   }
 
   async retrieve(sessionId: string): Promise<StripeCheckoutResponse> {
-    return mapStripeSession(await this.stripe.checkout.sessions.retrieve(sessionId));
+    return mapStripeSession(await this.sessions.retrieve(sessionId), this.config);
   }
 }
 
-function mapStripeSession(session: Stripe.Checkout.Session): StripeCheckoutResponse {
+function mapStripeSession(
+  session: StripeCheckoutSessionResource,
+  config: StripeConfig,
+): StripeCheckoutResponse {
   if (!session.url || !session.client_reference_id || !session.expires_at) {
+    throw new StripeCheckoutResponseError();
+  }
+  const expectedIdPrefix = config.mode === "test" ? "cs_test_" : "cs_live_";
+  if (!session.id.startsWith(expectedIdPrefix) || session.livemode !== (config.mode === "live")) {
+    throw new StripeCheckoutResponseError();
+  }
+  let checkoutUrl: URL;
+  try {
+    checkoutUrl = new URL(session.url);
+  } catch {
+    throw new StripeCheckoutResponseError();
+  }
+  if (
+    checkoutUrl.protocol !== "https:"
+    || checkoutUrl.port
+    || checkoutUrl.username
+    || checkoutUrl.password
+    || !config.allowedCheckoutHostnames.includes(checkoutUrl.hostname)
+  ) {
     throw new StripeCheckoutResponseError();
   }
   return {
     id: session.id,
     purchaseIntentId: session.client_reference_id,
-    url: session.url,
+    url: checkoutUrl.toString(),
     expiresAt: new Date(session.expires_at * 1000),
   };
 }

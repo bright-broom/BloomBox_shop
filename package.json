@@ -18,6 +18,7 @@
     "check:ci": "pnpm check:static && pnpm test && pnpm build",
     "check:release": "pnpm check:ci && pnpm audit --prod --audit-level high && pnpm check:production",
     "db:migrate": "node scripts/migrate-database.mjs",
+    "stripe:verify:test": "node scripts/verify-stripe-test-mode.mjs",
     "test:database": "vitest run --config vitest.database.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

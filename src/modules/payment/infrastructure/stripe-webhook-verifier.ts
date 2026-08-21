@@ -15,6 +15,7 @@ const eventSchema = z.object({
   account: z.string().startsWith("acct_").optional(),
   api_version: z.string().nullable(),
   created: z.number().int().nonnegative(),
+  livemode: z.boolean(),
   data: z.object({ object: z.record(z.string(), z.unknown()) }),
 });
 
@@ -108,7 +109,7 @@ export class StripeWebhookVerifier implements ProviderWebhookVerifier {
   private readonly stripe: Stripe;
 
   constructor(private readonly config: StripeConfig) {
-    this.stripe = new Stripe(config.secretKey, {
+    this.stripe = new Stripe(config.checkoutSecretKey, {
       apiVersion: config.apiVersion,
       maxNetworkRetries: 0,
       telemetry: false,
@@ -137,6 +138,12 @@ export class StripeWebhookVerifier implements ProviderWebhookVerifier {
     if (event.data.account && event.data.account !== this.config.accountId) {
       throw new InvalidProviderWebhookError();
     }
+    if (
+      event.data.livemode !== (this.config.mode === "live")
+      || event.data.api_version !== this.config.apiVersion
+    ) {
+      throw new InvalidProviderWebhookError();
+    }
 
     const mapped = mapEventPayload(event.data.type, event.data.data.object);
     if (!mapped) return null;
@@ -146,7 +153,7 @@ export class StripeWebhookVerifier implements ProviderWebhookVerifier {
       externalEventId: event.data.id,
       eventType: event.data.type,
       externalObjectId: mapped.externalObjectId,
-      apiVersion: event.data.api_version ?? this.config.apiVersion,
+      apiVersion: event.data.api_version,
       occurredAt: new Date(event.data.created * 1000),
       payload: mapped.payload,
     };

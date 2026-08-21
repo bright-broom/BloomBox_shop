@@ -1,0 +1,48 @@
+name: Stripe Test Mode Readiness
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stripe-test-mode-readiness
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify account contract and Checkout probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: stripe-test
+    env:
+      BLOOMBOX_PUBLIC_ORIGIN: ${{ vars.STRIPE_TEST_PUBLIC_ORIGIN }}
+      STRIPE_MODE: test
+      STRIPE_CHECKOUT_SECRET_KEY: ${{ secrets.STRIPE_CHECKOUT_SECRET_KEY }}
+      STRIPE_RECONCILIATION_SECRET_KEY: ${{ secrets.STRIPE_RECONCILIATION_SECRET_KEY }}
+      STRIPE_READINESS_SECRET_KEY: ${{ secrets.STRIPE_READINESS_SECRET_KEY }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+      STRIPE_ACCOUNT_ID: ${{ vars.STRIPE_ACCOUNT_ID }}
+      STRIPE_SHIPPING_RATE_ID: ${{ vars.STRIPE_SHIPPING_RATE_ID }}
+      STRIPE_TAX_BEHAVIOR: ${{ vars.STRIPE_TAX_BEHAVIOR }}
+      STRIPE_AUTOMATIC_TAX_ENABLED: ${{ vars.STRIPE_AUTOMATIC_TAX_ENABLED }}
+      STRIPE_TERMS_ACCEPTANCE: ${{ vars.STRIPE_TERMS_ACCEPTANCE }}
+      STRIPE_CHECKOUT_CUSTOM_DOMAIN: ${{ vars.STRIPE_CHECKOUT_CUSTOM_DOMAIN }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify Stripe Test Mode
+        run: |
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          pnpm --silent stripe:verify:test | tee --append "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

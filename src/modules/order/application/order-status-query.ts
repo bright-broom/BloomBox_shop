@@ -5,6 +5,8 @@ export const ORDER_STATUS_POLL_INTERVAL_MS = 4_000;
 
 export type OrderProgress =
   | "PROCESSING"
+  | "PAYMENT_FAILED"
+  | "CHECKOUT_EXPIRED"
   | "CONFIRMED"
   | "FULFILLING"
   | "SHIPPED"
@@ -21,6 +23,7 @@ export type OrderStatusRecord = Readonly<{
   orderStatus?: string;
   paymentStatus?: string;
   fulfillmentStatus?: string;
+  productId: string;
   productName: string;
   quantity: number;
   deliveryDate: string;
@@ -32,6 +35,7 @@ export type OrderStatusRecord = Readonly<{
 export type PublicOrderStatus = Readonly<{
   progress: OrderProgress;
   displayId: string;
+  productId: string;
   productName: string;
   quantity: number;
   deliveryDate: string;
@@ -63,6 +67,7 @@ export class GetOrderStatus {
     return {
       progress: resolveProgress(record),
       displayId: record.orderDisplayId ?? record.purchaseIntentDisplayId,
+      productId: record.productId,
       productName: record.productName,
       quantity: record.quantity,
       deliveryDate: record.deliveryDate,
@@ -74,6 +79,8 @@ export class GetOrderStatus {
 }
 
 function resolveProgress(record: OrderStatusRecord): OrderProgress {
+  if (record.purchaseIntentStatus === "ABANDONED") return "PAYMENT_FAILED";
+  if (record.purchaseIntentStatus === "EXPIRED") return "CHECKOUT_EXPIRED";
   if (
     ["DISPUTED", "FAILED", "CANCELLED"].includes(record.paymentStatus ?? "")
     || record.fulfillmentStatus === "RETURNED"

@@ -30,7 +30,7 @@ export class StripeSdkEventSource implements StripeEventSource {
   private readonly stripe: Stripe;
 
   constructor(config: StripeConfig) {
-    this.stripe = new Stripe(config.secretKey, {
+    this.stripe = new Stripe(config.reconciliationSecretKey, {
       apiVersion: config.apiVersion,
       appInfo: { name: "BloomBox", version: "0.1.0" },
       maxNetworkRetries: 2,
