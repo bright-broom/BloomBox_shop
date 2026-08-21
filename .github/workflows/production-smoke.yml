@@ -37,13 +37,21 @@ jobs:
             '.status == "ok" and (.release | test("^[0-9a-f]{40}$"))' \
             <<< "$health" > /dev/null
 
-          for path in / /flowers /flowers/haru-no-hikari /gift/prod_haru_01 /about /guide /faq /shipping-returns /privacy /terms /commercial-transactions /contact /robots.txt /sitemap.xml /manifest.webmanifest; do
+          for path in / /flowers /flowers/haru-no-hikari /gift/prod_haru_01 /cart /checkout/test /checkout/test/review /checkout/test/payment /checkout/test/complete /about /guide /faq /shipping-returns /privacy /terms /commercial-transactions /contact /robots.txt /sitemap.xml /manifest.webmanifest; do
             curl --fail --silent --show-error --retry 2 --max-time 15 \
               "$base_url$path" > /dev/null
           done
 
           home=$(curl --fail --silent --show-error --retry 2 --max-time 15 "$base_url/")
           grep --fixed-strings --quiet "プレビュー版・注文と決済は発生しません" <<< "$home"
+
+          cart=$(curl --fail --silent --show-error --retry 2 --max-time 15 "$base_url/cart")
+          grep --fixed-strings --quiet 'data-checkout-page="cart"' <<< "$cart"
+
+          test_checkout=$(curl --fail --silent --show-error --retry 2 --max-time 15 \
+            "$base_url/checkout/test/payment")
+          grep --fixed-strings --quiet 'data-checkout-page="test-payment"' <<< "$test_checkout"
+          grep --fixed-strings --quiet "実カード情報を入力せず" <<< "$test_checkout"
 
           search=$(curl --fail --silent --show-error --retry 2 --max-time 15 \
             "$base_url/flowers?q=%E3%83%81%E3%83%A5%E3%83%BC%E3%83%AA%E3%83%83%E3%83%97")

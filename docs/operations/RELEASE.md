@@ -2,7 +2,7 @@
 
 ## Current status
 
-Preview builds and a public product-preview deployment are supported. The production composition now has a Shopify Storefront catalog adapter, durable PurchaseIntent storage, a disabled Stripe connector, storefront search, order-status projection, and validated customer-information pages. Production commerce activation remains intentionally blocked until account-backed contract, E2E, tax, privacy, legal, support, recovery, and activation-decision evidence is recorded in `config/production-commerce-activation.json`. Preview gift intents still return in the current browser response and are not persisted. `pnpm check:production` is the executable source of truth for commerce blockers.
+Preview builds and a public product-preview deployment are supported. The production composition now has a Shopify Storefront catalog adapter, durable PurchaseIntent storage, a disabled Stripe connector, storefront search, order-status projection, and validated customer-information pages. Production commerce activation remains intentionally blocked until account-backed contract, E2E, tax, privacy, legal, support, recovery, and activation-decision evidence is recorded in `config/production-commerce-activation.json`. Preview では、ギフト設定からカート、配送先、注文確認、ダミー決済、完了までを Test Mode として再現します。Preview の Purchase Intent と個人情報は永続化しません。`pnpm check:production` is the executable source of truth for commerce blockers.
 
 Do not disable or bypass that check. Complete the Shopify and Stripe runbooks and approve the provider activation ADR first.
 
@@ -28,7 +28,7 @@ Preview must be clearly distinguishable and must not send real notifications, ch
 
 The hosting provider must keep immutable deployment history so the frontend can roll back without changing accepted Shopify orders.
 
-`Production Smoke` runs after successful `main` CI, once per hour, and on demand. It verifies the release-shaped health response and the public home, catalog, product, and gift routes. A failure opens or refreshes one GitHub incident issue; a later successful run comments on and closes that issue automatically.
+`Production Smoke` runs after successful `main` CI, once per hour, and on demand. It verifies the release-shaped health response and the public home, catalog, product, gift, cart, and Test Mode checkout routes. A failure opens or refreshes one GitHub incident issue; a later successful run comments on and closes that issue automatically.
 
 ## Production exit criteria
 

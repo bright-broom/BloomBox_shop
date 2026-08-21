@@ -3,6 +3,7 @@ import { getEarliestDeliveryDate, getLatestDeliveryDate } from "@/modules/fulfil
 import { application } from "@/shared/infrastructure/composition-root";
 import { formatMoney } from "@/shared/domain/money";
 import { GiftForm } from "@/ui/gift-form";
+import { CheckoutProgress } from "@/ui/checkout-progress";
 import { randomUUID } from "node:crypto";
 import Image from "next/image";
 import { notFound } from "next/navigation";
@@ -12,32 +13,21 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 type GiftPageProps = {
   params: Promise<{ productId: string }>;
-  searchParams: Promise<{ checkout?: string | string[] }>;
 };
 
-export default async function GiftPage({ params, searchParams }: GiftPageProps) {
+export default async function GiftPage({ params }: GiftPageProps) {
   const { productId: rawProductId } = await params;
-  const { checkout } = await searchParams;
   const product = await application.getProduct.byId(productId(rawProductId));
   if (!product) notFound();
 
   return (
     <section className="gift-page section-shell">
-      <nav className="checkout-progress" aria-label="ギフト作成の進捗">
-        <span className="is-complete"><b>1</b> 花を選ぶ</span>
-        <span className="is-current" aria-current="step"><b>2</b> 想いを添える</span>
-        <span><b>3</b> 内容確認</span>
-      </nav>
+      <CheckoutProgress currentStep={2} />
       <header className="gift-header">
         <p className="eyebrow">MAKE IT PERSONAL</p>
         <h1>この花に、<br />あなたの想いを。</h1>
         <p>お届けする日と、花に添える言葉を教えてください。</p>
       </header>
-      {checkout === "cancelled" ? (
-        <p className="checkout-notice" role="status">
-          決済は行われていません。入力内容を確認して、もう一度お進みください。
-        </p>
-      ) : null}
       <div className="gift-layout">
         <aside className="order-summary">
           <div className="summary-image">
@@ -57,6 +47,7 @@ export default async function GiftPage({ params, searchParams }: GiftPageProps) 
         </aside>
         <GiftForm
           productId={product.id}
+          productName={product.name}
           unitPrice={product.price}
           minDeliveryDate={getEarliestDeliveryDate()}
           maxDeliveryDate={getLatestDeliveryDate()}

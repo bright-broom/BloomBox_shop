@@ -11,13 +11,22 @@ BloomBox は、商品発見、商品説明、ギフト設定、購入後の安�
 | 商品検索・贈る場面での絞り込み・並び替え | BloomBox | サーバー側で正規化し、商品名、花材、つくり手、贈る場面を検索 |
 | 商品、価格、販売可否 | Shopify | Storefront Adapter で取得し、購入直前に再確認 |
 | 数量、届け先、希望日、ギフトメッセージ | BloomBox | サーバー側ポリシーで検証し、価格を再計算 |
-| カート、割引、税、送料、支払方法、最終確認 | Commerce Provider | Hosted Checkout に委譲し、ブラウザーから価格を受け取らない |
+| カート | BloomBox | 1 商品・1 お届け先のギフト設定をタブ単位で保持し、決済開始時にサーバー側で商品・価格・販売可否を再検証 |
+| 割引、税、送料、支払方法、最終確認 | Commerce Provider | Hosted Checkout に委譲し、ブラウザーから価格を受け取らない |
 | 顧客アカウント、住所帳、注文履歴 | Shopify | 必要性と本人確認方式を承認後、Shopify Customer Account へ接続 |
 | 注文・決済・配送状況 | Shopify または Stripe の検証済み事実 | 高エントロピーな Checkout Reference を capability として、個人情報を含まない投影だけを表示 |
 | 注文・発送通知 | Commerce Provider | Provider 側通知を本番 E2E で検証。BloomBox Outbox から独自通知する場合は別の承認済み Adapter を追加 |
 | 法務、配送、返品、プライバシー、問い合わせ | Product / Legal / Support | 検証済みコンテンツから表示し、草案の間は本番ゲートを失敗させる |
 
 BloomBox は 1 回の注文につき 1 つのお届け先を扱います。これはギフト情報と受取人の境界を曖昧にしないための明示的な制約です。複数配送先は、Provider の注文分割、送料、キャンセル、返金、サポート手順を設計する ADR が承認されるまで、注文を分けて扱います。
+
+## Cart and Preview Test Mode
+
+購入導線は、ギフト設定、カート、お届け先入力、注文確認、決済、完了の順に統一します。Production では、カートの「購入手続きへ」からサーバー側で Purchase Intent を作成し、Stripe Checkout へ遷移します。Stripe Checkout を取り消した場合はカートへ戻し、タブ内のギフト設定を保持して再試行できるようにします。
+
+Preview では、同じカート入口から明示的な Test Mode に進みます。Test Mode は外部 API やカード会社を呼び出さず、固定のダミーカードで成功と失敗を再現します。実カード番号を入力する欄は設けません。テスト送料は Preview 専用ポリシーとして表示し、実際の送料とはみなしません。
+
+カート、ギフト情報、ご注文者、配送先はブラウザーの `sessionStorage` にだけ保存し、すべての読み出し時に Schema 検証します。この情報はタブを閉じると失われます。テスト完了時にはカート、ご注文者、配送先、同意状態を削除し、個人情報を含まない最小限のテスト控えだけをタブ内に残します。ブラウザー内の価格は表示用であり、Production の決済金額には使用しません。
 
 ## Customer-facing information
 
@@ -37,7 +46,7 @@ BloomBox は 1 回の注文につき 1 つのお届け先を扱います。こ�
 ## Search, SEO, and indexing
 
 - Preview は `robots.txt` で全面的に Index を拒否します。
-- Production は Checkout、Gift、Order、API を Crawl 対象外にします。
+- Production は Cart、Checkout、Gift、Order、API を Crawl 対象外にします。
 - Sitemap は公開情報ページと、Provider から取得した販売可能商品だけを含みます。
 - 商品ページは Canonical、Open Graph、Product JSON-LD を出力します。
 - `BLOOMBOX_PUBLIC_ORIGIN` は Production で HTTPS Origin が必須です。

@@ -141,7 +141,7 @@ export class StripeSdkCheckoutApi implements StripeCheckoutApi {
       metadata: { purchase_intent_id: request.purchaseIntentId },
       expires_at: Math.floor(request.expiresAt.getTime() / 1000),
       success_url: `${this.config.publicOrigin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${this.config.publicOrigin}/gift/${encodeURIComponent(request.productId)}?checkout=cancelled`,
+      cancel_url: `${this.config.publicOrigin}/cart?checkout=cancelled`,
     }, { idempotencyKey: request.idempotencyKey });
     return mapStripeSession(session, this.config);
   }

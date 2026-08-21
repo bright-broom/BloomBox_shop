@@ -86,7 +86,7 @@ describe("StripeSdkCheckoutApi", () => {
       shipping_options: [{ shipping_rate: "shr_example" }],
       phone_number_collection: { enabled: true },
       success_url: "https://shop.example.com/checkout/success?session_id={CHECKOUT_SESSION_ID}",
-      cancel_url: "https://shop.example.com/gift/prod_haru_01?checkout=cancelled",
+      cancel_url: "https://shop.example.com/cart?checkout=cancelled",
       line_items: [{
         price_data: expect.objectContaining({
           currency: "jpy",
