@@ -77,7 +77,7 @@ The application, worker, migration, test, and live Stripe credentials are separa
 1. The server recalculates product price and creates an encrypted PurchaseIntent plus Outbox Event in one PostgreSQL transaction.
 2. The Stripe Checkout Session is created outside the database transaction with a deterministic idempotency key.
 3. BloomBox records the provider Session ID and API version with an optimistic status predicate.
-4. Stripe returns the customer to `/checkout/success`, which deliberately reports only that verification is in progress.
+4. Stripe returns the customer to `/checkout/success`. The page treats the Session ID as a high-entropy capability, reads only BloomBox's PII-free order-status projection, and never treats the browser return as payment confirmation. While the verified event is pending, the page reports processing and refreshes for a bounded period.
 5. The signed webhook is verified from the unmodified raw body, minimized, encrypted, and deduplicated in the Inbox before the endpoint acknowledges receipt. No Order or Payment work runs on the request path.
 6. The protected worker claims Inbox rows with `SKIP LOCKED`, reclaims stale locks, and uses bounded exponential retry. A paid Checkout event creates exactly one Order, Payment, Attempt, Fulfillment, immutable gift snapshot, balanced ledger transaction, audit record, and Outbox Event in one database transaction. An event moves to `FAILED` after 12 unsuccessful attempts and causes the workflow incident to remain open.
 7. Refund and dispute events update their independent entities and payment projection idempotently.

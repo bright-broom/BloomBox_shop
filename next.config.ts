@@ -11,10 +11,34 @@ const remoteImageHosts = new Set([
 const remotePatterns = [...remoteImageHosts].map(
   (hostname) => ({ protocol: "https" as const, hostname }),
 );
+const securityHeaders = [
+  { key: "Content-Security-Policy", value: "base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'" },
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  { key: "Permissions-Policy", value: "camera=(), geolocation=(), microphone=()" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  ...(process.env.BLOOMBOX_RUNTIME_MODE === "production" ? [{
+    key: "Strict-Transport-Security",
+    value: "max-age=31536000; includeSubDomains",
+  }] : []),
+];
 
 const nextConfig: NextConfig = {
   images: {
     remotePatterns,
+  },
+  async headers() {
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      {
+        source: "/checkout/:path*",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store, max-age=0" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
+    ];
   },
 };
 

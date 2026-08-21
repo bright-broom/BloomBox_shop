@@ -2,7 +2,7 @@
 
 ## Current status
 
-Preview builds and a public product-preview deployment are supported. The production composition now has a Shopify Storefront catalog adapter, durable PurchaseIntent storage, and a disabled Stripe connector. Production commerce activation remains intentionally blocked until account-backed contract, E2E, tax, privacy, recovery, and activation-decision evidence is recorded in `config/production-commerce-activation.json`. Preview gift intents still return in the current browser response and are not persisted. `pnpm check:production` is the executable source of truth for commerce blockers.
+Preview builds and a public product-preview deployment are supported. The production composition now has a Shopify Storefront catalog adapter, durable PurchaseIntent storage, a disabled Stripe connector, storefront search, order-status projection, and validated customer-information pages. Production commerce activation remains intentionally blocked until account-backed contract, E2E, tax, privacy, legal, support, recovery, and activation-decision evidence is recorded in `config/production-commerce-activation.json`. Preview gift intents still return in the current browser response and are not persisted. `pnpm check:production` is the executable source of truth for commerce blockers.
 
 Do not disable or bypass that check. Complete the Shopify and Stripe runbooks and approve the provider activation ADR first.
 
@@ -37,6 +37,7 @@ The hosting provider must keep immutable deployment history so the frontend can 
 - Provider input is runtime-validated; webhook signatures, API versions, timeouts, rate limits, idempotency, and retries are tested.
 - Critical E2E tests pass against an isolated Shopify test store, including duplicate submission, changed price, unavailable inventory, checkout cancellation, and provider outage.
 - Customer and recipient PII, gift metadata, logging, retention, deletion, and support access are documented and approved.
+- Legal disclosure, shipping, returns, terms, privacy, support hours, and transactional notifications are approved and contain no Preview placeholders.
 - Production secrets and environment protection are configured; no production secret reaches preview.
 - Monitoring identifies failed checkout handoff, provider errors, latency, and invalid webhook rates without logging PII.
 - If Stripe is activated, the test-mode evidence and account-side checklist in `STRIPE.md` are complete, Event reconciliation is healthy, and the live credentials are isolated from Preview.

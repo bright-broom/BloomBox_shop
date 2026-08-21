@@ -6,6 +6,7 @@ const violations = [];
 const requiredFiles = [
   "AGENTS.md",
   "config/production-commerce-activation.json",
+  "content/storefront.json",
   "SECURITY.md",
   "docs/architecture/ARCHITECTURE.md",
   "docs/architecture/adr/0000-template.md",
@@ -15,6 +16,7 @@ const requiredFiles = [
   "docs/operations/GOVERNANCE.md",
   "docs/operations/RELEASE.md",
   "docs/operations/SHOPIFY.md",
+  "docs/operations/STOREFRONT.md",
   ".semgrep.yml",
   ".github/CODEOWNERS",
   ".github/pull_request_template.md",

@@ -22,13 +22,15 @@ describe("CreatePurchaseIntent", () => {
     const intent = await useCase.execute({
       requestId: "12345678-abcd-4000-8000-123456789012",
       productId: "prod_haru_01",
+      quantity: 2,
       recipientName: "花子",
       deliveryDate: "2026-08-25",
       giftMessage: "おめでとう",
     });
 
     expect(intent.item.unitPriceSnapshot.amount).toBe(6600);
-    expect(intent.item.subtotal.amount).toBe(6600);
+    expect(intent.item.quantity).toBe(2);
+    expect(intent.item.subtotal.amount).toBe(13200);
     expect(intent.item.externalProductReference).toBe("prod_haru_01");
     expect(intent.status).toBe("READY_FOR_CHECKOUT");
     expect(intent.displayId).toBe("BBI-20260819-1234");
@@ -47,6 +49,13 @@ describe("CreatePurchaseIntent", () => {
     const useCase = createUseCase();
 
     await expect(useCase.execute(validInput({ giftMessage: "花".repeat(GIFT_MESSAGE_MAX_LENGTH + 1) })))
+      .rejects.toBeInstanceOf(InvalidPurchaseIntentInputError);
+  });
+
+  it("enforces quantity policy outside the presentation layer", async () => {
+    const useCase = createUseCase();
+
+    await expect(useCase.execute(validInput({ quantity: 0 })))
       .rejects.toBeInstanceOf(InvalidPurchaseIntentInputError);
   });
 
@@ -72,6 +81,7 @@ function validInput(overrides: Partial<Parameters<CreatePurchaseIntent["execute"
   return {
     requestId: "12345678-abcd-4000-8000-123456789012",
     productId: "prod_haru_01",
+    quantity: 1,
     recipientName: "花子",
     deliveryDate: "2026-08-25",
     giftMessage: "おめでとう",

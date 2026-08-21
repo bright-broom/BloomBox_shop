@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { money } from "@/shared/domain/money";
 
 const { execute } = vi.hoisted(() => ({ execute: vi.fn() }));
@@ -12,7 +12,13 @@ vi.mock("@/shared/infrastructure/composition-root", () => ({
 import { createPurchaseIntentAction } from "./actions";
 
 describe("createPurchaseIntentAction", () => {
-  beforeEach(() => execute.mockReset());
+  beforeEach(() => {
+    execute.mockReset();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-21T00:00:00.000Z"));
+  });
+
+  afterEach(() => vi.useRealTimers());
 
   it("returns a non-persistent preview summary without recipient PII", async () => {
     execute.mockResolvedValue({
@@ -24,7 +30,7 @@ describe("createPurchaseIntentAction", () => {
         },
         recipient: {
           name: "花子",
-          deliveryDate: "2099-01-01",
+          deliveryDate: "2026-08-28",
         },
       },
     });
@@ -35,7 +41,7 @@ describe("createPurchaseIntentAction", () => {
       draft: {
         displayId: "BBI-20990101-1234",
         productName: "春のひかり",
-        deliveryDate: "2099-01-01",
+        deliveryDate: "2026-08-28",
         formattedTotal: "￥6,600",
       },
     });
@@ -58,8 +64,9 @@ function formData(): FormData {
   const data = new FormData();
   data.set("requestId", "12345678-abcd-4000-8000-123456789012");
   data.set("productId", "prod_haru_01");
+  data.set("quantity", "1");
   data.set("recipientName", "花子");
-  data.set("deliveryDate", "2099-01-01");
+  data.set("deliveryDate", "2026-08-28");
   data.set("giftMessage", "おめでとう");
   return data;
 }

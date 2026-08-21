@@ -9,6 +9,7 @@ import {
   purchaseIntentId,
 } from "../domain/purchase-intent";
 import {
+  giftQuantity,
   giftMessage,
   recipientName,
 } from "../domain/purchase-intent-policy";
@@ -25,6 +26,7 @@ export class ProductUnavailableError extends Error {
 export type CreatePurchaseIntentInput = Readonly<{
   requestId: string;
   productId: string;
+  quantity: number;
   recipientName: string;
   deliveryDate: string;
   giftMessage: string;
@@ -41,8 +43,15 @@ export class CreatePurchaseIntent {
     const id = purchaseIntentId(input.requestId);
     const normalizedRecipientName = recipientName(input.recipientName);
     const normalizedGiftMessage = giftMessage(input.giftMessage);
+    const normalizedQuantity = giftQuantity(input.quantity);
     const existing = await this.intents.findById(id);
-    if (existing) return assertIdempotentMatch(existing, input, normalizedRecipientName, normalizedGiftMessage);
+    if (existing) return assertIdempotentMatch(
+      existing,
+      input,
+      normalizedRecipientName,
+      normalizedGiftMessage,
+      normalizedQuantity,
+    );
 
     const product = await this.products.findById(productId(input.productId));
     if (!product?.available) {
@@ -58,9 +67,9 @@ export class CreatePurchaseIntent {
         productId: catalogProductReference(product.id),
         externalProductReference: commerceProductReference(product.externalReference),
         productName: product.name,
-        quantity: 1,
+        quantity: normalizedQuantity,
         unitPriceSnapshot: product.price,
-        subtotal: multiplyMoney(product.price, 1),
+        subtotal: multiplyMoney(product.price, normalizedQuantity),
       },
       recipient: {
         name: normalizedRecipientName,
@@ -82,6 +91,7 @@ export class CreatePurchaseIntent {
         input,
         normalizedRecipientName,
         normalizedGiftMessage,
+        normalizedQuantity,
       );
     }
     return intent;
@@ -100,9 +110,11 @@ function assertIdempotentMatch(
   input: CreatePurchaseIntentInput,
   normalizedRecipientName: ReturnType<typeof recipientName>,
   normalizedGiftMessage: ReturnType<typeof giftMessage>,
+  normalizedQuantity: number,
 ): PurchaseIntent {
   if (
     existing.item.productId !== input.productId
+    || existing.item.quantity !== normalizedQuantity
     || existing.recipient.name !== normalizedRecipientName
     || existing.recipient.deliveryDate !== input.deliveryDate
     || existing.giftMessage !== normalizedGiftMessage

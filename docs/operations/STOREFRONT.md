@@ -1,0 +1,65 @@
+# Storefront operations
+
+## Scope and ownership
+
+BloomBox は、商品発見、商品説明、ギフト設定、購入後の安全な状況確認、案内ページを所有します。Shopify は商品、価格、在庫、顧客、注文、返金の正本です。Stripe を有効化する場合は ADR 0002 の独立した決済境界を使用し、在庫確保方式が承認されるまで本番決済を開始しません。
+
+通常のショップで必要になる機能は、次のように分担します。
+
+| 機能 | 所有者 | BloomBox での実装 |
+| --- | --- | --- |
+| 商品検索・贈る場面での絞り込み・並び替え | BloomBox | サーバー側で正規化し、商品名、花材、つくり手、贈る場面を検索 |
+| 商品、価格、販売可否 | Shopify | Storefront Adapter で取得し、購入直前に再確認 |
+| 数量、届け先、希望日、ギフトメッセージ | BloomBox | サーバー側ポリシーで検証し、価格を再計算 |
+| カート、割引、税、送料、支払方法、最終確認 | Commerce Provider | Hosted Checkout に委譲し、ブラウザーから価格を受け取らない |
+| 顧客アカウント、住所帳、注文履歴 | Shopify | 必要性と本人確認方式を承認後、Shopify Customer Account へ接続 |
+| 注文・決済・配送状況 | Shopify または Stripe の検証済み事実 | 高エントロピーな Checkout Reference を capability として、個人情報を含まない投影だけを表示 |
+| 注文・発送通知 | Commerce Provider | Provider 側通知を本番 E2E で検証。BloomBox Outbox から独自通知する場合は別の承認済み Adapter を追加 |
+| 法務、配送、返品、プライバシー、問い合わせ | Product / Legal / Support | 検証済みコンテンツから表示し、草案の間は本番ゲートを失敗させる |
+
+BloomBox は 1 回の注文につき 1 つのお届け先を扱います。これはギフト情報と受取人の境界を曖昧にしないための明示的な制約です。複数配送先は、Provider の注文分割、送料、キャンセル、返金、サポート手順を設計する ADR が承認されるまで、注文を分けて扱います。
+
+## Customer-facing information
+
+`content/storefront.json` が、About、ご利用ガイド、FAQ、配送・返品、Privacy Policy、利用規約、特定商取引法に基づく表記、問い合わせ案内の正本です。編集後は `pnpm check:content` を実行します。
+
+`publicationStatus` を `approved` に変更できるのは、販売事業者と担当者の実在情報、送料、支払時期、引渡時期、キャンセル、返品の可否・期限・条件・費用負担、個人情報取扱事業者、委託先、越境移転、保存期間、問い合わせ窓口が承認された後だけです。未確定表現が残る場合、`pnpm check:production` は失敗します。
+
+消費者庁の通信販売ガイドでは、販売価格と送料、支払時期・方法、引渡時期、返品条件、事業者名、住所、電話番号、責任者などの表示が必要とされています。返品特約は可否だけでなく、期間、条件、送料負担を明確にし、最終確認画面でも確認できる必要があります。
+
+- [通信販売に対する規制](https://www.no-trouble.caa.go.jp/what/mailorder/index.html)
+- [通信販売広告について](https://www.no-trouble.caa.go.jp/what/mailorder/advertising.html)
+- [通信販売の申込み段階における表示](https://www.caa.go.jp/policies/policy/consumer_transaction/amendment/2021/notice02/index.html)
+- [個人情報保護法の法令・ガイドライン](https://www.ppc.go.jp/personalinfo/legal/)
+
+法令適合性の最終判断は、販売事業者と法務担当者が行います。
+
+## Search, SEO, and indexing
+
+- Preview は `robots.txt` で全面的に Index を拒否します。
+- Production は Checkout、Gift、Order、API を Crawl 対象外にします。
+- Sitemap は公開情報ページと、Provider から取得した販売可能商品だけを含みます。
+- 商品ページは Canonical、Open Graph、Product JSON-LD を出力します。
+- `BLOOMBOX_PUBLIC_ORIGIN` は Production で HTTPS Origin が必須です。
+
+## Order-status privacy boundary
+
+注文状況ページは、Stripe Checkout Session ID を推測困難な capability として利用します。画面と Query は、受付番号、商品名、数量、希望日、合計、状態、配送番号だけを返します。氏名、住所、メール、電話、ギフトメッセージ、Provider Customer ID は返しません。
+
+注文番号だけを使う公開検索は実装しません。注文番号は短く、人による問い合わせには適していますが、認可 Token にはなりません。将来の注文履歴は、Shopify Customer Account の本人確認済み Session を使います。
+
+## Release evidence
+
+本番前に、最低限次を証跡として残します。
+
+- Mobile、Desktop、200% Zoom、Keyboard、Screen Reader の主要導線
+- 検索 0 件、在庫なし、Provider 障害、決済キャンセル、決済処理中、注文確定、発送、返金
+- Shopify Test Store または Stripe Test Mode の最終確認画面に、商品、数量、税、送料、支払総額、返品条件が正しく表示されること
+- 注文・発送・返金メールが正しい宛先へ 1 回だけ送られ、Recipient が Marketing 対象にならないこと
+- 特定商取引法、配送・返品、Privacy、利用規約、問い合わせ窓口の承認
+- Order Status が PII を返さず、無効な Reference を拒否すること
+- Provider 障害、DB 障害、Frontend Rollback 後も、受理済み注文が失われないこと
+
+## Rollback
+
+表示や検索の問題は、直前の Frontend Revision へ戻します。Provider が受理した注文、決済、返金、在庫を削除または書き換えません。法務表示に誤りが見つかった場合は、新規 Checkout を停止し、修正と再承認が完了するまで Preview Mode に戻します。

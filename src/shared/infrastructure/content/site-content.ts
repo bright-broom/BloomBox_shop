@@ -7,9 +7,11 @@ const siteContentSchema = z.object({
   titleTemplate: z.string().includes("%s"),
   description: z.string().trim().min(1).max(200),
   contactEmail: z.email(),
+  previewServiceMessage: z.string().trim().min(1).max(80),
   serviceMessages: z.array(z.string().trim().min(1).max(80)).min(1).max(4),
   catalog: z.object({
     emptyMessage: z.string().trim().min(1).max(160),
+    noResultsMessage: z.string().trim().min(1).max(160),
   }),
   hero: z.object({
     eyebrow: z.string().trim().min(1).max(80),

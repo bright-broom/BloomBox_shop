@@ -4,13 +4,15 @@
   "titleTemplate": "%s | BloomBox",
   "description": "贈る理由から、ぴったりの花とことばを選ぶギフト体験。",
   "contactEmail": "hello@bloombox.jp",
+  "previewServiceMessage": "プレビュー版・注文と決済は発生しません",
   "serviceMessages": [
-    "プレビュー版・注文と決済は発生しません",
+    "季節の花をつくり手から",
     "お届け日を指定できます",
     "メッセージカード付き"
   ],
   "catalog": {
-    "emptyMessage": "ただいまご案内できる花を準備しています。少し時間をおいて、もう一度ご覧ください。"
+    "emptyMessage": "ただいまご案内できる花を準備しています。少し時間をおいて、もう一度ご覧ください。",
+    "noResultsMessage": "条件に合う花が見つかりませんでした。言葉を変えるか、条件をクリアしてお探しください。"
   },
   "hero": {
     "eyebrow": "FLOWERS FOR EVERY FEELING",

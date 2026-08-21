@@ -4,23 +4,53 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { loadSiteUrlConfig } from "@/shared/infrastructure/config/site-url-config";
+import {
+  createProductStructuredData,
+  serializeStructuredData,
+} from "@/shared/infrastructure/seo/structured-data";
+import { ProductCard } from "@/ui/product-card";
+import { cache } from "react";
 
 type ProductPageProps = { params: Promise<{ slug: string }> };
+const getProductBySlug = cache((slug: string) => application.getProduct.bySlug(slug));
+const listProducts = cache(() => application.listProducts.execute());
 
 export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const product = await application.getProduct.bySlug(slug);
-  return product ? { title: product.name, description: product.description } : {};
+  const product = await getProductBySlug(slug);
+  return product ? {
+    title: product.name,
+    description: product.description,
+    alternates: { canonical: `/flowers/${product.slug}` },
+    openGraph: {
+      type: "website",
+      title: product.name,
+      description: product.description,
+      images: [{ url: product.imageUrl, alt: product.imageAlt }],
+    },
+  } : {};
 }
 
 export default async function ProductPage({ params }: ProductPageProps) {
   const { slug } = await params;
-  const product = await application.getProduct.bySlug(slug);
+  const product = await getProductBySlug(slug);
   if (!product) notFound();
+  const relatedProducts = (await listProducts())
+    .filter((candidate) => candidate.id !== product.id
+      && candidate.occasion.some((occasion) => product.occasion.includes(occasion)))
+    .slice(0, 2);
+  const jsonLd = createProductStructuredData(product, loadSiteUrlConfig().origin);
 
   return (
-    <article className="detail-page">
-      <div className="detail-image">
+    <article>
+      <script
+        type="application/ld+json"
+      >
+        {serializeStructuredData(jsonLd)}
+      </script>
+      <div className="detail-page">
+        <div className="detail-image">
         <Image
           src={product.imageUrl}
           alt={product.imageAlt}
@@ -29,8 +59,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
           sizes="(max-width: 760px) 100vw, 54vw"
         />
         <Link className="back-link" href="/flowers">← 一覧へ</Link>
-      </div>
-      <div className="detail-copy">
+        </div>
+        <div className="detail-copy">
+        <nav className="breadcrumbs detail-breadcrumbs" aria-label="パンくずリスト">
+          <Link href="/">ホーム</Link><span aria-hidden="true">/</span>
+          <Link href="/flowers">季節の花</Link><span aria-hidden="true">/</span>
+          <span>{product.name}</span>
+        </nav>
         <div className="detail-kicker">
           <p className="eyebrow">{product.palette}</p>
           <span className={`availability-badge${product.available ? "" : " is-unavailable"}`}>
@@ -49,7 +84,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
             <ul className="purchase-notes" aria-label="お届けについて">
               <li>最短3日後からお届け</li>
               <li>メッセージカード無料</li>
+              <li>安全な外部決済</li>
             </ul>
+            <p className="purchase-policy-links">
+              <Link href="/guide">ご利用ガイド</Link>
+              <Link href="/shipping-returns">配送・返品について</Link>
+            </p>
           </>
         ) : (
           <p className="unavailable-note">次回の入荷まで、いましばらくお待ちください。</p>
@@ -59,7 +99,23 @@ export default async function ProductPage({ params }: ProductPageProps) {
           <div><dt>つくり手</dt><dd>{product.grower}</dd></div>
           <div><dt>おすすめ</dt><dd>{product.occasion.join(" / ")}</dd></div>
         </dl>
+        </div>
       </div>
+      {relatedProducts.length > 0 ? (
+        <section className="related-products section-shell" aria-labelledby="related-heading">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">YOU MAY ALSO LIKE</p>
+              <h2 id="related-heading">この想いに似合う花</h2>
+            </div>
+          </div>
+          <div className="product-grid">
+            {relatedProducts.map((candidate, index) => (
+              <ProductCard key={candidate.id} product={candidate} index={index} />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </article>
   );
 }

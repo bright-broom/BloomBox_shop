@@ -1,8 +1,10 @@
 export {
   assertAvailableDeliveryDate,
   DeliveryDateUnavailableError,
+  DELIVERY_BOOKING_WINDOW_DAYS,
   DELIVERY_LEAD_TIME_DAYS,
   getEarliestDeliveryDate,
+  getLatestDeliveryDate,
   isAvailableDeliveryDate,
 } from "./domain/delivery-date";
 export {

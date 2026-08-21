@@ -3,8 +3,10 @@ import { application } from "@/shared/infrastructure/composition-root";
 import { siteContent } from "@/shared/infrastructure/content/site-content";
 import Image from "next/image";
 import Link from "next/link";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default async function HomePage() {
   const products = await application.listProducts.execute();
