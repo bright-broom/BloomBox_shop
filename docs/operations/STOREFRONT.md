@@ -28,6 +28,18 @@ Preview では、同じカート入口から明示的な Test Mode に進みま�
 
 カート、ギフト情報、ご注文者、配送先はブラウザーの `sessionStorage` にだけ保存し、すべての読み出し時に Schema 検証します。この情報はタブを閉じると失われます。テスト完了時にはカート、ご注文者、配送先、同意状態を削除し、個人情報を含まない最小限のテスト控えだけをタブ内に残します。ブラウザー内の価格は表示用であり、Production の決済金額には使用しません。
 
+### Postal code address lookup
+
+配送先フォームは、郵便番号を NFKC 正規化し、ハイフンと空白を除いた 7 桁の数字として検証します。7 桁が揃うと自動検索し、都道府県、市区町村、町域を入力します。同一郵便番号に複数の町域がある場合は、先頭候補だけで確定せず、利用者が候補を選択できるようにします。検索で存在しないことを確認した郵便番号は続行を止めます。
+
+住所検索は、`fulfillment` Module の Port を介して zipcloud Adapter に接続します。zipcloud は日本郵便の公開データを検索 API として提供しており、API キーは不要です。Provider へのリクエストは 2.5 秒で打ち切り、成功結果を 24 時間 Cache します。Provider 障害、Timeout、不正レスポンスは購入の停止理由にせず、住所の手入力へフォールバックします。Provider の URL、レスポンス、郵便番号は Log に残しません。
+
+ブラウザーからの検索は、郵便番号を URL やアクセスログへ載せないよう、同一 Origin の `POST /api/postal-code` を使います。Route は Content Type、実 Body Size、Schema、Cross-site Request を検証し、Provider の詳細を Client へ返しません。日本郵便公式 API へ移行する場合は、Application と UI を変えずに Adapter と認証付き Server Configuration を差し替えます。
+
+- [zipcloud 郵便番号検索 API](https://zipcloud.ibsnet.co.jp/doc/api)
+- [zipcloud 郵便番号検索 API 利用規約](https://zipcloud.ibsnet.co.jp/rule/api)
+- [日本郵便 郵便番号・デジタルアドレス API](https://guide-biz.da.pf.japanpost.jp/api/)
+
 ## Customer-facing information
 
 `content/storefront.json` が、About、ご利用ガイド、FAQ、配送・返品、Privacy Policy、利用規約、特定商取引法に基づく表記、問い合わせ案内の正本です。編集後は `pnpm check:content` を実行します。

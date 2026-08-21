@@ -317,6 +317,13 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .checkout-form .form-intro { margin-bottom: 2px; }
 .checkout-form select { width: 100%; min-height: 52px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 0; background: var(--paper); color: var(--ink); }
 .checkout-form select:focus { border-color: var(--coral); outline: 1px solid var(--coral); outline-offset: 1px; }
+.postal-code-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; }
+.postal-code-controls input { min-width: 0; }
+.postal-code-button { min-width: 116px; white-space: nowrap; }
+.postal-code-button:disabled { cursor: wait; opacity: .6; }
+.postal-code-status { min-height: 1.8em; margin: 0; color: var(--ink-soft); font-size: 10px; }
+.postal-code-status.is-success { color: var(--positive); }
+.postal-code-status.is-error { color: var(--danger); }
 .review-section { margin-bottom: 46px; }
 .review-section-heading { display: flex; justify-content: space-between; align-items: end; padding-bottom: 18px; border-bottom: 1px solid var(--ink); }
 .review-section-heading .eyebrow { margin-bottom: 6px; }
@@ -471,6 +478,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .checkout-details div { grid-template-columns: 100px 1fr; gap: 14px; }
   .checkout-totals { padding: 24px 20px; }
   .test-mode-banner { flex-direction: column; gap: 9px; }
+  .postal-code-controls { grid-template-columns: 1fr; }
+  .postal-code-button { width: 100%; }
   .dummy-card { border-radius: 13px; }
   .gift-header { margin-bottom: 46px; }
   .gift-layout { grid-template-columns: 1fr; gap: 46px; }

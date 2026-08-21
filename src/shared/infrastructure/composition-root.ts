@@ -36,6 +36,8 @@ import { StripeEventReconciler } from "@/modules/payment/infrastructure/stripe-e
 import { PostgresDataRetentionJob } from "./database/data-retention-job";
 import { GetOrderStatus, type OrderStatusQuery } from "@/modules/order/public";
 import { PostgresOrderStatusQuery } from "@/modules/order/infrastructure/postgres-order-status-query";
+import { LookupPostalCode } from "@/modules/fulfillment/public";
+import { ZipcloudPostalAddressRepository } from "@/modules/fulfillment/infrastructure/zipcloud-postal-address-repository";
 
 const productRepository = createProductRepository();
 const purchaseIntentRepository = createPurchaseIntentRepository();
@@ -49,6 +51,7 @@ export const application = {
   createPurchaseIntent,
   preparePurchase: new PreparePurchase(createPurchaseIntent, startCheckout),
   getOrderStatus: new GetOrderStatus(createOrderStatusQuery()),
+  lookupPostalCode: new LookupPostalCode(new ZipcloudPostalAddressRepository()),
 };
 
 function createOrderStatusQuery(): OrderStatusQuery {
