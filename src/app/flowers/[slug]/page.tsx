@@ -46,8 +46,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
     <article>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: serializeStructuredData(jsonLd) }}
-      />
+      >
+        {serializeStructuredData(jsonLd)}
+      </script>
       <div className="detail-page">
         <div className="detail-image">
         <Image
