@@ -37,13 +37,27 @@ jobs:
             '.status == "ok" and (.release | test("^[0-9a-f]{40}$"))' \
             <<< "$health" > /dev/null
 
-          for path in / /flowers /flowers/haru-no-hikari /gift/prod_haru_01; do
+          for path in / /flowers /flowers/haru-no-hikari /gift/prod_haru_01 /about /guide /faq /shipping-returns /privacy /terms /commercial-transactions /contact /robots.txt /sitemap.xml /manifest.webmanifest; do
             curl --fail --silent --show-error --retry 2 --max-time 15 \
               "$base_url$path" > /dev/null
           done
 
           home=$(curl --fail --silent --show-error --retry 2 --max-time 15 "$base_url/")
           grep --fixed-strings --quiet "プレビュー版・注文と決済は発生しません" <<< "$home"
+
+          search=$(curl --fail --silent --show-error --retry 2 --max-time 15 \
+            "$base_url/flowers?q=%E3%83%81%E3%83%A5%E3%83%BC%E3%83%AA%E3%83%83%E3%83%97")
+          grep --fixed-strings --quiet "検索結果" <<< "$search"
+          grep --fixed-strings --quiet "春のひかり" <<< "$search"
+
+          legal=$(curl --fail --silent --show-error --retry 2 --max-time 15 \
+            "$base_url/commercial-transactions")
+          grep --fixed-strings --quiet "現在は Preview 版のため販売を行っていません" <<< "$legal"
+
+          headers=$(curl --fail --silent --show-error --retry 2 --max-time 15 \
+            --dump-header - --output /dev/null "$base_url/")
+          grep --ignore-case --fixed-strings --quiet "x-content-type-options: nosniff" <<< "$headers"
+          grep --ignore-case --fixed-strings --quiet "x-frame-options: DENY" <<< "$headers"
 
       - name: Open or refresh production incident
         if: failure()

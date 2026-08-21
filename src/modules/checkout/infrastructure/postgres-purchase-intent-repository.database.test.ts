@@ -11,6 +11,7 @@ import { ProcessProviderInbox } from "@/modules/payment/application/process-prov
 import { StripeCommerceEventProcessor } from "@/modules/payment/infrastructure/stripe-commerce-event-processor";
 import { StripeEventReconciler } from "@/modules/payment/infrastructure/stripe-event-reconciler";
 import { StripeWebhookVerifier } from "@/modules/payment/infrastructure/stripe-webhook-verifier";
+import { PostgresOrderStatusQuery } from "@/modules/order/infrastructure/postgres-order-status-query";
 import type { StripeConfig } from "@/shared/infrastructure/config/stripe-config";
 import {
   catalogProductReference,
@@ -253,6 +254,21 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       ledger_transaction_count: 1,
     });
     expect(rows[0].address_ciphertext.toString("utf8")).not.toContain("花子");
+
+    const publicStatus = await new PostgresOrderStatusQuery(sql)
+      .findByCheckoutReference(checkoutId);
+    expect(publicStatus).toMatchObject({
+      purchaseIntentStatus: "CONVERTED",
+      orderStatus: "CONFIRMED",
+      paymentStatus: "CAPTURED",
+      fulfillmentStatus: "UNFULFILLED",
+      productName: "春のひかり",
+      quantity: 1,
+      deliveryDate: "2026-08-28",
+      total: money(7100),
+    });
+    expect(JSON.stringify(publicStatus)).not.toContain("花子");
+    expect(JSON.stringify(publicStatus)).not.toContain("buyer@example.test");
 
     const refundEvent = {
       provider: "STRIPE" as const,

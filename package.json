@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "check:architecture": "node scripts/check-architecture.mjs",
     "check:database": "node scripts/check-database-migrations.mjs",
-    "check:content": "vitest run src/modules/catalog/infrastructure/catalog-content.test.ts src/shared/infrastructure/content/site-content.test.ts",
+    "check:content": "vitest run src/modules/catalog/infrastructure/catalog-content.test.ts src/shared/infrastructure/content/site-content.test.ts src/shared/infrastructure/content/storefront-content.test.ts",
     "check:design": "node scripts/check-design-tokens.mjs",
     "check:hardcoding": "node scripts/check-hardcoding.mjs",
     "check:repository": "node scripts/check-repository.mjs",

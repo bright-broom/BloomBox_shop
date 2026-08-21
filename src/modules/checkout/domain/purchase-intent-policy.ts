@@ -1,5 +1,7 @@
 export const GIFT_MESSAGE_MAX_LENGTH = 180;
 export const RECIPIENT_NAME_MAX_LENGTH = 80;
+export const GIFT_QUANTITY_MIN = 1;
+export const GIFT_QUANTITY_MAX = 5;
 export const PURCHASE_INTENT_EXPIRY_HOURS = 24;
 export const PURCHASE_INTENT_PII_RETENTION_DAYS = 30;
 
@@ -20,6 +22,13 @@ export function recipientName(value: string): RecipientName {
     throw new InvalidPurchaseIntentInputError("お届け先のお名前を確認してください。");
   }
   return normalized as RecipientName;
+}
+
+export function giftQuantity(value: number): number {
+  if (!Number.isInteger(value) || value < GIFT_QUANTITY_MIN || value > GIFT_QUANTITY_MAX) {
+    throw new InvalidPurchaseIntentInputError("数量を確認してください。");
+  }
+  return value;
 }
 
 export class InvalidPurchaseIntentInputError extends Error {

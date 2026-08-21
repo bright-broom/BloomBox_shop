@@ -2,6 +2,7 @@ import { isIP } from "node:net";
 import { headers } from "next/headers";
 import { GetProduct } from "@/modules/catalog/application/get-product";
 import { ListProducts } from "@/modules/catalog/application/list-products";
+import { SearchProducts } from "@/modules/catalog/application/search-products";
 import { InMemoryProductRepository } from "@/modules/catalog/infrastructure/in-memory-product-repository";
 import type { ProductRepository } from "@/modules/catalog/public";
 import { ShopifyProductRepository } from "@/modules/catalog/infrastructure/shopify-product-repository";
@@ -33,6 +34,8 @@ import { StripeWebhookVerifier } from "@/modules/payment/infrastructure/stripe-w
 import { StripeCommerceEventProcessor } from "@/modules/payment/infrastructure/stripe-commerce-event-processor";
 import { StripeEventReconciler } from "@/modules/payment/infrastructure/stripe-event-reconciler";
 import { PostgresDataRetentionJob } from "./database/data-retention-job";
+import { GetOrderStatus, type OrderStatusQuery } from "@/modules/order/public";
+import { PostgresOrderStatusQuery } from "@/modules/order/infrastructure/postgres-order-status-query";
 
 const productRepository = createProductRepository();
 const purchaseIntentRepository = createPurchaseIntentRepository();
@@ -41,10 +44,19 @@ const startCheckout = createStartCheckout(purchaseIntentRepository);
 
 export const application = {
   listProducts: new ListProducts(productRepository),
+  searchProducts: new SearchProducts(productRepository),
   getProduct: new GetProduct(productRepository),
   createPurchaseIntent,
   preparePurchase: new PreparePurchase(createPurchaseIntent, startCheckout),
+  getOrderStatus: new GetOrderStatus(createOrderStatusQuery()),
 };
+
+function createOrderStatusQuery(): OrderStatusQuery {
+  if (loadRuntimeMode() === "preview") {
+    return { findByCheckoutReference: async () => null };
+  }
+  return new PostgresOrderStatusQuery(getApplicationDatabaseClient());
+}
 
 function createProductRepository(): ProductRepository {
   if (loadRuntimeMode() === "preview") return new InMemoryProductRepository();

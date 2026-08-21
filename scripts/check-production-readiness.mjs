@@ -4,6 +4,7 @@ const compositionRoot = await readFile("src/shared/infrastructure/composition-ro
 const activation = JSON.parse(
   await readFile("config/production-commerce-activation.json", "utf8"),
 );
+const storefront = JSON.parse(await readFile("content/storefront.json", "utf8"));
 const blockers = [];
 const requiredEvidence = [
   "activationDecisionAdr",
@@ -12,6 +13,7 @@ const requiredEvidence = [
   "inventoryReservationStrategy",
   "taxShippingReview",
   "privacySupportReview",
+  "storefrontLegalSupportApproval",
   "backupRollbackIncidentRehearsal",
 ];
 
@@ -24,6 +26,15 @@ if (!compositionRoot.includes("new PostgresPurchaseIntentRepository")) {
 if (!compositionRoot.includes("new ShopifyProductRepository")) {
   blockers.push(
     "The production composition does not contain the Shopify Storefront catalog adapter.",
+  );
+}
+
+if (
+  storefront.publicationStatus !== "approved"
+  || JSON.stringify(storefront).includes("正式公開前に確定")
+) {
+  blockers.push(
+    "Customer-facing legal, shipping, returns, privacy, and support content is not approved.",
   );
 }
 

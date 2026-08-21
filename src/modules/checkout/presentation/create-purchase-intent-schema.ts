@@ -2,12 +2,15 @@ import { isAvailableDeliveryDate } from "@/modules/fulfillment/public";
 import { z } from "zod";
 import {
   GIFT_MESSAGE_MAX_LENGTH,
+  GIFT_QUANTITY_MAX,
+  GIFT_QUANTITY_MIN,
   RECIPIENT_NAME_MAX_LENGTH,
 } from "../domain/purchase-intent-policy";
 
 export const createPurchaseIntentSchema = z.object({
   requestId: z.string().uuid(),
   productId: z.string().trim().min(1),
+  quantity: z.coerce.number().int().min(GIFT_QUANTITY_MIN).max(GIFT_QUANTITY_MAX),
   recipientName: z
     .string()
     .trim()

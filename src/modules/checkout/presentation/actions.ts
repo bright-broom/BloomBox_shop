@@ -18,6 +18,7 @@ export async function createPurchaseIntentAction(
   const parsed = createPurchaseIntentSchema.safeParse({
     requestId: formData.get("requestId"),
     productId: formData.get("productId"),
+    quantity: formData.get("quantity"),
     recipientName: formData.get("recipientName"),
     deliveryDate: formData.get("deliveryDate"),
     giftMessage: formData.get("giftMessage"),
