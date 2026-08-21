@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  formatPostalCode,
+  isValidPostalCode,
+  JAPAN_PREFECTURES,
+} from "@/modules/fulfillment/public";
 import { createPurchaseIntentSchema } from "./create-purchase-intent-schema";
 
 const CART_STORAGE_KEY = "bloombox.checkout.cart.v1";
@@ -11,16 +16,6 @@ export const CHECKOUT_SESSION_CHANGED_EVENT = "bloombox:checkout-session-changed
 export const PREVIEW_SHIPPING_AMOUNT = 1_100;
 export const PREVIEW_PAYMENT_LAST_FOUR = "4242";
 
-export const JAPAN_PREFECTURES = [
-  "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
-  "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
-  "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県",
-  "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県",
-  "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県",
-  "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県",
-  "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県",
-] as const;
-
 const cartItemSchema = createPurchaseIntentSchema.extend({
   version: z.literal(1),
   productName: z.string().trim().min(1).max(80),
@@ -31,10 +26,12 @@ export const previewBuyerSchema = z.object({
   buyerName: z.string().trim().min(1, "ご注文者のお名前を入力してください。").max(80),
   email: z.string().trim().pipe(z.email("メールアドレスを正しく入力してください。")),
   phone: z.string().trim().regex(/^0\d{1,4}-?\d{1,4}-?\d{3,4}$/, "電話番号を正しく入力してください。"),
-  postalCode: z.string().trim().regex(/^\d{3}-?\d{4}$/, "郵便番号を正しく入力してください。"),
+  postalCode: z.string().trim()
+    .refine(isValidPostalCode, "郵便番号は 7 桁の数字で入力してください。")
+    .transform(formatPostalCode),
   prefecture: z.enum(JAPAN_PREFECTURES, { error: "都道府県を選択してください。" }),
   city: z.string().trim().min(1, "市区町村を入力してください。").max(100),
-  addressLine1: z.string().trim().min(1, "番地を入力してください。").max(120),
+  addressLine1: z.string().trim().min(1, "町名・番地を入力してください。").max(120),
   addressLine2: z.string().trim().max(120),
 });
 

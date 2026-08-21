@@ -64,6 +64,12 @@ describe("browser checkout session", () => {
     expect(readCart(storage)).toBeNull();
   });
 
+  it("normalizes a full-width postal code before storing buyer data", () => {
+    storePreviewBuyer(storage, { ...buyer, postalCode: "１００－０００１" });
+
+    expect(readPreviewBuyer(storage)?.postalCode).toBe("100-0001");
+  });
+
   it("replaces the one-destination cart and clears stale checkout progress", () => {
     storePreviewBuyer(storage, buyer);
     storePreviewDraft(storage, previewDraft("BB-OLD"));
