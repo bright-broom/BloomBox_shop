@@ -38,7 +38,9 @@ export async function createPurchaseIntentAction(
       draft: {
         displayId: intent.displayId,
         productName: intent.item.productName,
+        quantity: intent.item.quantity,
         deliveryDate: intent.recipient.deliveryDate,
+        subtotalAmount: intent.item.subtotal.amount,
         formattedTotal: formatMoney(intent.item.subtotal),
       },
     };

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { siteContent } from "@/shared/infrastructure/content/site-content";
 import { loadRuntimeMode } from "@/shared/infrastructure/config/runtime-config";
 import { loadSiteUrlConfig } from "@/shared/infrastructure/config/site-url-config";
+import { HeaderCartLink } from "@/ui/header-cart-link";
 import "./globals.css";
 
 const sans = Noto_Sans_JP({
@@ -47,7 +48,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="ja">
       <body className={`${sans.variable} ${serif.variable}`}>
         <a className="skip-link" href="#main-content">本文へ移動</a>
-        <div className="service-bar" aria-label="BloomBoxのサービス情報">
+        <div className="service-bar" aria-label="BloomBox のサービス情報">
           {(loadRuntimeMode() === "preview"
             ? [siteContent.previewServiceMessage, ...siteContent.serviceMessages.slice(1)]
             : siteContent.serviceMessages
@@ -72,12 +73,16 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <Link href="/about">私たちについて</Link>
               <Link href="/guide">ご利用ガイド</Link>
               <Link href="/faq">よくあるご質問</Link>
+              <Link href="/cart">カート</Link>
             </nav>
           </details>
-          <Link className="header-cta" href="/flowers">
-            ギフトをつくる
-            <span aria-hidden="true">↗</span>
-          </Link>
+          <div className="header-actions">
+            <HeaderCartLink />
+            <Link className="header-cta" href="/flowers">
+              ギフトをつくる
+              <span aria-hidden="true">↗</span>
+            </Link>
+          </div>
         </header>
         <main id="main-content">{children}</main>
         <footer className="site-footer">

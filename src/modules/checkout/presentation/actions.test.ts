@@ -26,6 +26,7 @@ describe("createPurchaseIntentAction", () => {
         displayId: "BBI-20990101-1234",
         item: {
           productName: "春のひかり",
+          quantity: 1,
           subtotal: money(6600),
         },
         recipient: {
@@ -41,7 +42,9 @@ describe("createPurchaseIntentAction", () => {
       draft: {
         displayId: "BBI-20990101-1234",
         productName: "春のひかり",
+        quantity: 1,
         deliveryDate: "2026-08-28",
+        subtotalAmount: 6600,
         formattedTotal: "￥6,600",
       },
     });
