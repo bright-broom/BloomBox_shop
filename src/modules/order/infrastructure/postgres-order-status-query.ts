@@ -21,6 +21,7 @@ const rowSchema = z.object({
     "UNFULFILLED", "SCHEDULED", "PROCESSING", "READY", "SHIPPED", "DELIVERED",
     "CANCELLED", "RETURNED",
   ]).nullable(),
+  catalog_product_id: z.string().min(1),
   total_minor: z.union([z.number(), z.string(), z.bigint()]).nullable(),
   currency: z.literal("JPY").nullable(),
   carrier_code: z.string().nullable(),
@@ -49,6 +50,7 @@ export class PostgresOrderStatusQuery implements OrderStatusQuery {
         orders.status AS order_status,
         payment.status AS payment_status,
         fulfillment.status AS fulfillment_status,
+        item.catalog_product_id,
         orders.total_minor,
         orders.currency,
         shipment.carrier_code,
@@ -91,6 +93,7 @@ export class PostgresOrderStatusQuery implements OrderStatusQuery {
     return {
       purchaseIntentStatus: row.purchase_intent_status,
       purchaseIntentDisplayId: row.purchase_intent_display_id,
+      productId: row.catalog_product_id,
       productName: row.product_name,
       quantity: row.quantity,
       deliveryDate: row.delivery_date,

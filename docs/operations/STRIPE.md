@@ -7,20 +7,24 @@ This runbook prepares the dormant Stripe connector defined by ADR 0002. Do not e
 - API version: `2026-07-29.dahlia`, pinned by the installed Stripe SDK and checked-in configuration.
 - Checkout model: hosted Stripe Checkout Session in `payment` mode.
 - Currency: JPY.
+- Tax model: `automatic_tax` and the price/shipping `tax_behavior` are configured as one invariant. `inclusive` or `exclusive` requires automatic tax; `unspecified` requires it to be disabled.
+- Customer consent: the Checkout terms checkbox is controlled explicitly. `required` is rejected by Stripe unless the account business profile has a valid terms URL.
 - Checkout metadata: BloomBox purchase-intent and catalog product identifiers only. Recipient, address, phone, email, and gift message are excluded.
 - Customer model: guest-first. A Stripe Customer is not automatically treated as a BloomBox customer account.
 - Payment authority: verified Stripe webhook or authenticated Stripe Events API response, never the browser success URL.
 - Provider assignment: one PurchaseIntent uses one provider after Checkout creation and cannot switch in flight.
+- Redirect authority: Checkout URLs must be HTTPS and use `checkout.stripe.com` or one explicitly configured custom Checkout hostname. Mode and Session ID prefixes must agree.
 
 ## Account-side setup
 
 Create and record the owner for each resource in the private credential inventory:
 
 1. A Stripe test account and a separate live account or mode-specific access policy.
-2. A restricted secret key with only the Checkout Session, Event, PaymentIntent, Refund, and Dispute permissions required by this connector.
+2. Separate restricted server keys. The application key has Checkout Session write/read access. The worker key has Event read access. They must not be the same key. Restricted keys beginning with `rk_test_` or `rk_live_` are supported; publishable keys are not.
 3. One shipping rate for Japan. Record its `shr_` identifier as `STRIPE_SHIPPING_RATE_ID`.
-4. A reviewed `inclusive`, `exclusive`, or `unspecified` tax behavior. The public price copy and Stripe tax configuration must agree before live activation.
-5. A webhook endpoint at `/api/webhooks/stripe`, pinned to the API version above and subscribed only to:
+4. A reviewed `inclusive`, `exclusive`, or `unspecified` tax behavior. The shipping-rate behavior must match the price behavior. Enable Stripe Tax for explicit tax behavior and confirm the public price copy agrees.
+5. A business-profile terms URL before setting `STRIPE_TERMS_ACCEPTANCE=required`. Configure payment receipts and branding in the Dashboard; these Dashboard-only settings remain a manual review item.
+6. A webhook endpoint at `/api/webhooks/stripe`, pinned to the API version above and subscribed only to:
    - `checkout.session.completed`
    - `checkout.session.async_payment_succeeded`
    - `checkout.session.async_payment_failed`
@@ -33,7 +37,7 @@ Create and record the owner for each resource in the private credential inventor
    - `refund.failed`
    - `charge.dispute.created`
    - `charge.dispute.closed`
-6. The webhook signing secret and expected `acct_` account ID.
+7. The webhook signing secret and expected `acct_` account ID.
 
 Direct Stripe payment must not be activated until the provider activation ADR defines how Shopify-authoritative inventory is reserved before payment and reconciled after cancellation, expiry, refund, and provider outage. The current connector deliberately does not invent an inventory write policy.
 
@@ -53,11 +57,15 @@ DATABASE_SSL_MODE=verify-full
 DATABASE_MAX_CONNECTIONS=5
 BLOOMBOX_PII_KEYRING=<versioned-keyring-json>
 STRIPE_MODE=test
-STRIPE_SECRET_KEY=<restricted-test-secret>
+STRIPE_CHECKOUT_SECRET_KEY=<restricted-test-checkout-key>
+STRIPE_RECONCILIATION_SECRET_KEY=<restricted-test-events-key>
 STRIPE_WEBHOOK_SECRET=<test-webhook-secret>
 STRIPE_ACCOUNT_ID=<expected-account-id>
 STRIPE_SHIPPING_RATE_ID=<shipping-rate-id>
 STRIPE_TAX_BEHAVIOR=<inclusive|exclusive|unspecified>
+STRIPE_AUTOMATIC_TAX_ENABLED=<true|false>
+STRIPE_TERMS_ACCEPTANCE=<required|none>
+# STRIPE_CHECKOUT_CUSTOM_DOMAIN=<exact-hostname-without-scheme>
 COMMERCE_WORKER_SECRET=<random-32-plus-character-secret>
 ```
 
@@ -72,6 +80,30 @@ GitHub secret: COMMERCE_WORKER_SECRET
 
 The application, worker, migration, test, and live Stripe credentials are separate. Never expose any of them through `NEXT_PUBLIC_*` or Preview Environment inheritance.
 
+## Automated Test Mode account verification
+
+The `Stripe Test Mode Readiness` workflow is a manual, account-backed gate using the protected `stripe-test` GitHub Environment. In addition to the runtime keys above, configure a third, test-only `STRIPE_READINESS_SECRET_KEY`. It needs read access to the current Account, Shipping Rates, Webhook Endpoints, and Tax Settings. It is not deployed with the application.
+
+Configure these Environment values:
+
+```text
+Secret: STRIPE_CHECKOUT_SECRET_KEY
+Secret: STRIPE_RECONCILIATION_SECRET_KEY
+Secret: STRIPE_READINESS_SECRET_KEY
+Secret: STRIPE_WEBHOOK_SECRET
+Variable: STRIPE_TEST_PUBLIC_ORIGIN
+Variable: STRIPE_ACCOUNT_ID
+Variable: STRIPE_SHIPPING_RATE_ID
+Variable: STRIPE_TAX_BEHAVIOR
+Variable: STRIPE_AUTOMATIC_TAX_ENABLED
+Variable: STRIPE_TERMS_ACCEPTANCE
+Optional variable: STRIPE_CHECKOUT_CUSTOM_DOMAIN
+```
+
+The workflow refuses every live credential. It verifies credential separation, account identity, the active JPY shipping rate, matching shipping tax behavior, Stripe Tax readiness, the business-profile terms URL, one exact webhook endpoint, exact event subscriptions, and the pinned endpoint version. It then creates, retrieves, validates, and expires a no-customer-data Checkout Session. The expired Session ID and account contract are written to the workflow summary as evidence.
+
+This probe does not submit a payment method and is not a substitute for the browser E2E matrix below. Run it first so account configuration failures are separated from customer-flow failures.
+
 ## Automated flow
 
 1. The server recalculates product price and creates an encrypted PurchaseIntent plus Outbox Event in one PostgreSQL transaction.
@@ -83,12 +115,15 @@ The application, worker, migration, test, and live Stripe credentials are separa
 7. Refund and dispute events update their independent entities and payment projection idempotently.
 8. GitHub Actions invokes the protected commerce worker every five minutes. It drains the Inbox, reads authenticated Stripe Events with a ten-minute overlap, stores newly discovered events, drains the Inbox again, purges expired transient encrypted payloads, and opens one deduplicated incident issue on failure.
 
+An expired Checkout or an asynchronous payment failure leaves no Order and moves the PurchaseIntent to a terminal state. The return page displays the specific non-charge state and links to a fresh purchase flow for the same catalog product instead of remaining indefinitely in “processing.”
+
 Webhook payloads and terminal PurchaseIntent personal data are cryptographically protected at rest and purged after 30 days. Unstarted PurchaseIntents are automatically expired after 24 hours with an Outbox Event and audit record. Confirmed Order gift and delivery snapshots follow the separately approved order-retention policy and are not deleted by this transient-data job.
 
 ## Test-mode activation evidence
 
 Before changing `STRIPE_MODE` to `live`, record all of the following in the activation PR:
 
+- a successful `Stripe Test Mode Readiness` workflow run for the exact test deployment revision;
 - successful, failed, canceled, expired, and asynchronous Checkout Sessions;
 - duplicate form submission, provider timeout after Session creation, duplicate Webhook, invalid signature, delayed delivery, and reversed event order;
 - full and partial refund, failed refund, dispute opened and dispute closed;
@@ -97,6 +132,8 @@ Before changing `STRIPE_MODE` to `live`, record all of the following in the acti
 - encrypted address and gift data, log inspection, retention expiry, access controls, and data-subject workflow;
 - database backup restoration, frontend rollback, Inbox retry, Event reconciliation, and incident alert recovery;
 - Stripe Dashboard totals reconciled to BloomBox Payment, Refund, and Ledger records.
+
+Use Stripe test payment methods only in a Stripe Sandbox/Test Mode. Never test with real payment details in live mode. A browser E2E is considered complete only after the verified webhook has created the BloomBox Order and the customer return page shows the same display ID and total.
 
 ## Emergency controls
 

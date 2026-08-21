@@ -22,6 +22,7 @@ describe("GetOrderStatus", () => {
     await expect(useCase.execute("cs_test_12345678")).resolves.toEqual({
       progress: "SHIPPED",
       displayId: "BB-20260821-123456",
+      productId: "prod_sora_01",
       productName: "空の余白",
       quantity: 1,
       deliveryDate: "2026-08-28",
@@ -38,6 +39,18 @@ describe("GetOrderStatus", () => {
       progress: "PROCESSING",
       displayId: "BBI-20260821-1234",
     });
+  });
+
+  it.each([
+    ["ABANDONED", "PAYMENT_FAILED"],
+    ["EXPIRED", "CHECKOUT_EXPIRED"],
+  ] as const)("turns terminal checkout status %s into a recoverable customer state", async (
+    purchaseIntentStatus,
+    progress,
+  ) => {
+    const useCase = new GetOrderStatus(query({ purchaseIntentStatus }));
+
+    await expect(useCase.execute("cs_test_12345678")).resolves.toMatchObject({ progress });
   });
 
   it("reports partial refunds independently of order fulfillment", async () => {
@@ -66,6 +79,7 @@ function query(overrides: Partial<OrderStatusRecord> = {}): OrderStatusQuery {
     findByCheckoutReference: async () => ({
       purchaseIntentStatus: "CHECKOUT_CREATED",
       purchaseIntentDisplayId: "BBI-20260821-1234",
+      productId: "prod_sora_01",
       productName: "空の余白",
       quantity: 1,
       deliveryDate: "2026-08-28",

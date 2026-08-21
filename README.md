@@ -14,7 +14,7 @@
 - Canonical、Open Graph、Product JSON-LD、Sitemap、環境別 Robots
 - Mobile 表示、Keyboard 操作、入力エラー、404、予期しないエラーの表示
 
-Preview では個人情報や購入情報を永続保存せず、金銭も発生しません。Production 用の Shopify Catalog、PostgreSQL、Stripe Adapter は実装済みですが、実アカウントの E2E、在庫確保、税・送料、法務・Privacy・Support の承認が完了するまで、本番 Commerce のリリース判定は必ず失敗する設計です。
+Preview では個人情報や購入情報を永続保存せず、金銭も発生しません。Production 用の Shopify Catalog、PostgreSQL、Stripe Adapter、Stripe Test Mode のアカウント契約検証は実装済みですが、実アカウントの決済 E2E、在庫確保、税・送料、法務・Privacy・Support の承認が完了するまで、本番 Commerce のリリース判定は必ず失敗する設計です。
 
 ## 開発
 

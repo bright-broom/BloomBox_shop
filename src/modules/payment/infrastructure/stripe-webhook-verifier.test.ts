@@ -8,11 +8,15 @@ import { InvalidProviderWebhookError } from "../application/receive-provider-web
 
 const config: StripeConfig = {
   mode: "test",
-  secretKey: "sk_test_example_only",
+  checkoutSecretKey: "rk_test_checkout_example",
+  reconciliationSecretKey: "rk_test_reconciliation_example",
   webhookSecret: "whsec_example_only_123",
   accountId: "acct_example",
   shippingRateId: "shr_example",
   taxBehavior: "inclusive",
+  automaticTaxEnabled: true,
+  termsAcceptance: "required",
+  allowedCheckoutHostnames: ["checkout.stripe.com"],
   publicOrigin: "http://localhost:3000",
   apiVersion: "2026-07-29.dahlia",
 };
@@ -74,6 +78,23 @@ describe("StripeWebhookVerifier", () => {
       .toThrow(InvalidProviderWebhookError);
   });
 
+  it("rejects a signed event from the wrong mode or API version", () => {
+    const wrongMode = JSON.stringify({
+      ...event({ type: "payment_intent.succeeded", object: paymentIntent() }),
+      livemode: true,
+    });
+    const wrongVersion = JSON.stringify({
+      ...event({ type: "payment_intent.succeeded", object: paymentIntent() }),
+      api_version: "2026-06-24.dahlia",
+    });
+    const verifier = new StripeWebhookVerifier(config);
+
+    expect(() => verifier.verify(wrongMode, signature(wrongMode)))
+      .toThrow(InvalidProviderWebhookError);
+    expect(() => verifier.verify(wrongVersion, signature(wrongVersion)))
+      .toThrow(InvalidProviderWebhookError);
+  });
+
   it("acknowledges but does not retain unneeded signed event types", () => {
     const payload = JSON.stringify(event({
       type: "customer.created",
@@ -116,7 +137,7 @@ function paymentIntent() {
 }
 
 function signature(payload: string): string {
-  const stripe = new Stripe(config.secretKey, { apiVersion: config.apiVersion });
+  const stripe = new Stripe(config.checkoutSecretKey, { apiVersion: config.apiVersion });
   return stripe.webhooks.generateTestHeaderString({
     payload,
     secret: config.webhookSecret,

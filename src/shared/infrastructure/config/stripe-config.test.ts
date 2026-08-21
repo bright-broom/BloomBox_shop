@@ -9,11 +9,14 @@ import { InvalidWorkerConfigurationError, loadCommerceWorkerSecret } from "./wor
 
 const validEnvironment = {
   STRIPE_MODE: "test",
-  STRIPE_SECRET_KEY: "sk_test_example_only",
+  STRIPE_CHECKOUT_SECRET_KEY: "rk_test_checkout_example",
+  STRIPE_RECONCILIATION_SECRET_KEY: "rk_test_reconciliation_example",
   STRIPE_WEBHOOK_SECRET: "whsec_example_only_123",
   STRIPE_ACCOUNT_ID: "acct_example",
   STRIPE_SHIPPING_RATE_ID: "shr_example",
   STRIPE_TAX_BEHAVIOR: "inclusive",
+  STRIPE_AUTOMATIC_TAX_ENABLED: "true",
+  STRIPE_TERMS_ACCEPTANCE: "required",
   BLOOMBOX_PUBLIC_ORIGIN: "http://localhost:3000",
 } as const;
 
@@ -22,7 +25,21 @@ describe("Stripe configuration", () => {
     expect(loadStripeConfig(validEnvironment)).toMatchObject({
       mode: "test",
       publicOrigin: "http://localhost:3000",
+      automaticTaxEnabled: true,
+      termsAcceptance: "required",
+      allowedCheckoutHostnames: ["checkout.stripe.com"],
       apiVersion: STRIPE_API_VERSION,
+    });
+  });
+
+  it("accepts separate restricted keys and one exact custom Checkout hostname", () => {
+    expect(loadStripeConfig({
+      ...validEnvironment,
+      STRIPE_CHECKOUT_CUSTOM_DOMAIN: "pay.example.com",
+    })).toMatchObject({
+      checkoutSecretKey: "rk_test_checkout_example",
+      reconciliationSecretKey: "rk_test_reconciliation_example",
+      allowedCheckoutHostnames: ["checkout.stripe.com", "pay.example.com"],
     });
   });
 
@@ -38,6 +55,29 @@ describe("Stripe configuration", () => {
       ...validEnvironment,
       BLOOMBOX_PUBLIC_ORIGIN: "http://example.com",
     })).toThrow(InvalidStripeConfigurationError);
+  });
+
+  it("rejects shared credentials and malformed custom domains", () => {
+    expect(() => loadStripeConfig({
+      ...validEnvironment,
+      STRIPE_RECONCILIATION_SECRET_KEY: validEnvironment.STRIPE_CHECKOUT_SECRET_KEY,
+    })).toThrow(InvalidStripeConfigurationError);
+    expect(() => loadStripeConfig({
+      ...validEnvironment,
+      STRIPE_CHECKOUT_CUSTOM_DOMAIN: "https://pay.example.com/path",
+    })).toThrow(InvalidStripeConfigurationError);
+  });
+
+  it("requires automatic tax and price tax behavior to be configured together", () => {
+    expect(() => loadStripeConfig({
+      ...validEnvironment,
+      STRIPE_AUTOMATIC_TAX_ENABLED: "false",
+    })).toThrow(InvalidStripeConfigurationError);
+    expect(loadStripeConfig({
+      ...validEnvironment,
+      STRIPE_TAX_BEHAVIOR: "unspecified",
+      STRIPE_AUTOMATIC_TAX_ENABLED: "false",
+    })).toMatchObject({ automaticTaxEnabled: false, taxBehavior: "unspecified" });
   });
 
   it("keeps Stripe disabled unless selected explicitly", () => {

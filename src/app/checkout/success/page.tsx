@@ -25,6 +25,16 @@ const progressCopy: Record<OrderProgress, Readonly<{ eyebrow: string; title: str
     title: "お支払い状況を確認しています。",
     body: "決済通知を安全に検証しています。ブラウザーを閉じても処理は継続されます。",
   },
+  PAYMENT_FAILED: {
+    eyebrow: "PAYMENT NOT COMPLETED",
+    title: "お支払いを完了できませんでした。",
+    body: "請求は確定していません。お支払い方法をご確認の上、もう一度ご注文ください。",
+  },
+  CHECKOUT_EXPIRED: {
+    eyebrow: "CHECKOUT EXPIRED",
+    title: "決済画面の有効期限が切れました。",
+    body: "請求は発生していません。最新の商品情報を確認して、もう一度ご注文ください。",
+  },
   CONFIRMED: {
     eyebrow: "ORDER CONFIRMED",
     title: "ご注文を承りました。",
@@ -79,7 +89,9 @@ export default async function CheckoutReturnPage({ searchParams }: CheckoutRetur
   return (
     <section className="confirmation-page section-shell">
       <div className="confirmation-mark" aria-hidden="true">
-        {progress === "ATTENTION" || progress === "CANCELLED" ? "!" : "✓"}
+        {[
+          "ATTENTION", "CANCELLED", "PAYMENT_FAILED", "CHECKOUT_EXPIRED",
+        ].includes(progress) ? "!" : "✓"}
       </div>
       <p className="eyebrow">{copy.eyebrow}</p>
       <h1>{copy.title}</h1>
@@ -100,9 +112,15 @@ export default async function CheckoutReturnPage({ searchParams }: CheckoutRetur
       ) : null}
       {reference && progress === "PROCESSING" ? <OrderStatusRefresh reference={reference} /> : null}
       <div className="confirmation-actions">
-        <Link className="primary-button" href="/flowers">
-          花を見る <span aria-hidden="true">→</span>
-        </Link>
+        {order && ["PAYMENT_FAILED", "CHECKOUT_EXPIRED"].includes(progress) ? (
+          <Link className="primary-button" href={`/gift/${encodeURIComponent(order.productId)}`}>
+            もう一度注文する <span aria-hidden="true">→</span>
+          </Link>
+        ) : (
+          <Link className="primary-button" href="/flowers">
+            花を見る <span aria-hidden="true">→</span>
+          </Link>
+        )}
         <Link className="text-link" href="/contact">注文について問い合わせる</Link>
       </div>
     </section>

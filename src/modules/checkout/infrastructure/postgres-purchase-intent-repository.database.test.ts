@@ -384,11 +384,15 @@ describeDatabase("PostgreSQL commerce foundation", () => {
 
     const stripeConfig: StripeConfig = {
       mode: "test",
-      secretKey: "sk_test_example_only",
+      checkoutSecretKey: "rk_test_checkout_example",
+      reconciliationSecretKey: "rk_test_reconciliation_example",
       webhookSecret: "whsec_example_only_123",
       accountId: "acct_example",
       shippingRateId: "shr_example",
       taxBehavior: "inclusive",
+      automaticTaxEnabled: true,
+      termsAcceptance: "required",
+      allowedCheckoutHostnames: ["checkout.stripe.com"],
       publicOrigin: "http://localhost:3000",
       apiVersion: "2026-07-29.dahlia",
     };
@@ -398,6 +402,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       account: "acct_example",
       api_version: stripeConfig.apiVersion,
       created: 1_787_270_400,
+      livemode: false,
       data: {
         object: {
           id: checkoutId,
