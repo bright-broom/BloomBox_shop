@@ -12,3 +12,4 @@ export {
 } from "./application/link-shopify-order";
 
 export { type ShopifyDeliveryPlan, type ShopifyDeliveryPlanQuery, ShopifyDeliveryPlanUnavailableError } from "./application/shopify-delivery-plan-query";
+export { type ShopifyPurchaseConversion, type ShopifyPurchaseConverter, ShopifyPurchaseConversionError } from "./application/convert-shopify-purchase";
