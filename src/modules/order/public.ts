@@ -15,3 +15,8 @@ export {
 } from "./application/order-status-query";
 
 export { assessOrderPricing, type OrderPricingFacts, type OrderPricingAssessment, type OrderPriceSnapshot, type OrderPriceComponent } from "./domain/order-pricing";
+export {
+  SHOPIFY_ORDER_ACCEPTANCE_POLICY, type ShopifyOrderAcceptance, type ShopifyOrderAcceptancePolicy,
+  type ShopifyOrderAcceptanceResult, type ShopifyOrderAcceptor,
+  ShopifyOrderAcceptanceConflictError, ShopifyOrderAcceptancePersistenceError,
+} from "./application/accept-shopify-order";
