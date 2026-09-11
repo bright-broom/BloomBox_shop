@@ -31,8 +31,8 @@ function pricedOrder() {
     subtotalPriceSet: bag("8000"), currentSubtotalPriceSet: bag("8000"), totalTaxSet: bag("727"), currentTotalTaxSet: bag("727"),
     currentShippingPriceSet: bag("0"), originalTotalDutiesSet: null, currentTotalDutiesSet: null,
     originalTotalAdditionalFeesSet: null, currentTotalAdditionalFeesSet: null, totalTipReceivedSet: bag("0"),
-    lineItems: { ...original.lineItems, nodes: original.lineItems.nodes.map((line) => ({ ...line, discountAllocations: [] })) },
-    shippingLines: { nodes: [{ originalPriceSet: bag("0"), discountedPriceSet: bag("0"), currentDiscountedPriceSet: bag("0"), isRemoved: false }], pageInfo: { hasNextPage: false } },
+    lineItems: { ...original.lineItems, nodes: original.lineItems.nodes.map((line) => ({ ...line, discountAllocations: [], taxLines: [{ priceSet: bag("727") }] })) },
+    shippingLines: { nodes: [{ originalPriceSet: bag("0"), discountedPriceSet: bag("0"), currentDiscountedPriceSet: bag("0"), isRemoved: false, taxLines: [] }], pageInfo: { hasNextPage: false } },
     transactions: [{ id: "gid://shopify/OrderTransaction/61", kind: "SALE", status: "SUCCESS", test: true, parentTransaction: null, amountSet: bag("8000") }],
   };
 }
@@ -387,6 +387,31 @@ describe("Shopify authenticated order lookup", () => {
     fetcher.mockResolvedValueOnce(response(pricedOrder()));
     await expect(useCase.execute(event)).rejects.toThrow("payment persistence unavailable");
     expect(fetcher).toHaveBeenCalledTimes(7);
+  });
+  it("reads complete per-component taxes and holds invalid allocation while retaining settlement", async () => {
+    const original = pricedOrder(); const { reader, fetcher } = client();
+    const event = { provider: "SHOPIFY" as const, providerAccountId: config.storeDomain, eventType: "shopify.order.changed", externalEventId: "verified-digest", externalObjectId: orderId,
+      apiVersion: config.apiVersion, occurredAt: new Date(), payload: { id: orderId, objectType: "shopify_order_reference" } };
+    const record = vi.fn().mockResolvedValue({ outcome: "APPLIED", status: "CAPTURED", version: 1 });
+    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link: async () => ({ purchaseIntentId: "intent", attemptId: "attempt", orderId }) }, { record }, true, { find: async () => null }, reader);
+    fetcher.mockResolvedValueOnce(response(original));
+    expect(await useCase.execute(event)).toMatchObject({ pricing: { status: "MATCHED", snapshot: {
+      additionalTax: 0, includedTax: 727, total: 8000, items: [{ includedTax: 727, additionalTax: 0, total: 8000 }], delivery: { includedTax: 0 },
+    } } });
+    for (const taxLines of [undefined, Array.from({ length: 101 }, () => ({ priceSet: bag("1") })),
+      [{ priceSet: bag("0.1") }], [{ priceSet: { ...bag("727"), presentmentMoney: { amount: "727", currencyCode: "USD" } } }]]) {
+      for (const target of ["lineItems", "shippingLines"] as const) {
+        fetcher.mockResolvedValueOnce(response({ ...original, [target]: { ...original[target], nodes: original[target].nodes.map((line) => ({ ...line, taxLines })) } }));
+        expect(await useCase.execute(event)).toMatchObject({ status: "CAPTURED", pricing: { status: "HELD", reason: "MISSING_PRICING" } });
+      }
+    }
+    fetcher.mockResolvedValueOnce(response({ ...original, lineItems: { ...original.lineItems,
+      nodes: original.lineItems.nodes.map((line) => ({ ...line, taxLines: [{ priceSet: bag("726") }] })) } }));
+    expect(await useCase.execute(event)).toMatchObject({ status: "CAPTURED", pricing: { status: "HELD", reason: "TAX_ALLOCATION_MISMATCH" } });
+    expect(record).toHaveBeenCalledTimes(10);
+    const body = JSON.parse(String(fetcher.mock.calls[0][1]?.body));
+    expect(body.query).toContain("taxLines(first: 101)"); expect(body.query).toContain("priceSet");
+    expect(body.query).not.toMatch(/ratePercentage|channelLiable/);
   });
   it("rejects a truncated or duplicate order transaction list", async () => {
     const transaction = { id: "gid://shopify/OrderTransaction/71", kind: "SALE", status: "SUCCESS", test: true, parentTransaction: null, amountSet: bag("8000") };

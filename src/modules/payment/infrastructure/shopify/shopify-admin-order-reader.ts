@@ -54,10 +54,12 @@ const pricingSchema = z.object({
   lineItems: z.object({ nodes: z.array(z.object({
     quantity: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     currentQuantity: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), originalUnitPriceSet: moneyBag,
+    taxLines: z.array(z.object({ priceSet: moneyBag })).max(MAX_ITEMS),
     discountAllocations: z.array(z.object({ allocatedAmountSet: moneyBag })).max(MAX_ITEMS),
   })).min(1).max(MAX_ITEMS), pageInfo: z.object({ hasNextPage: z.literal(false) }) }),
   shippingLines: z.object({ nodes: z.array(z.object({
     originalPriceSet: moneyBag, discountedPriceSet: moneyBag, currentDiscountedPriceSet: moneyBag, isRemoved: z.boolean(),
+    taxLines: z.array(z.object({ priceSet: moneyBag })).max(MAX_ITEMS),
   })).max(MAX_ITEMS), pageInfo: z.object({ hasNextPage: z.literal(false) }) }),
 }).transform((value): OrderPricingFacts => ({
   taxesIncluded: value.taxesIncluded, estimatedTaxes: value.estimatedTaxes, edited: value.edited,
@@ -69,9 +71,9 @@ const pricingSchema = z.object({
   additionalFees: value.originalTotalAdditionalFeesSet?.amount ?? 0, currentAdditionalFees: value.currentTotalAdditionalFeesSet?.amount ?? 0,
   tips: value.totalTipReceivedSet.amount,
   lines: value.lineItems.nodes.map((line) => ({ quantity: line.quantity, currentQuantity: line.currentQuantity,
-    unitPrice: line.originalUnitPriceSet.amount, discounts: line.discountAllocations.map((allocation) => allocation.allocatedAmountSet.amount) })),
+    unitPrice: line.originalUnitPriceSet.amount, taxes: line.taxLines.map((tax) => tax.priceSet.amount), discounts: line.discountAllocations.map((allocation) => allocation.allocatedAmountSet.amount) })),
   shipping: value.shippingLines.nodes.map((line) => ({ originalPrice: line.originalPriceSet.amount, discountedPrice: line.discountedPriceSet.amount,
-    currentDiscountedPrice: line.currentDiscountedPriceSet.amount, removed: line.isRemoved })),
+    currentDiscountedPrice: line.currentDiscountedPriceSet.amount, taxes: line.taxLines.map((tax) => tax.priceSet.amount), removed: line.isRemoved })),
 }));
 const refundSchema = z.object({
   id: gid("Refund"), updatedAt: date, order: orderSchema,
@@ -94,14 +96,14 @@ const ORDER_FIELDS = `id cartToken updatedAt test cancelledAt displayFinancialSt
   originalTotalAdditionalFeesSet { ${MONEY_FIELDS} } currentTotalAdditionalFeesSet { ${MONEY_FIELDS} }
   totalTipReceivedSet { ${MONEY_FIELDS} }
   shippingLines(first: ${MAX_ITEMS}) {
-    nodes { isRemoved originalPriceSet { ${MONEY_FIELDS} } discountedPriceSet { ${MONEY_FIELDS} } currentDiscountedPriceSet { ${MONEY_FIELDS} } }
+    nodes { taxLines { priceSet { ${MONEY_FIELDS} } } isRemoved originalPriceSet { ${MONEY_FIELDS} } discountedPriceSet { ${MONEY_FIELDS} } currentDiscountedPriceSet { ${MONEY_FIELDS} } }
     pageInfo { hasNextPage }
   }
   transactions(first: ${MAX_ITEMS + 1}) { ${TRANSACTION_FIELDS} }
   originalTotalPriceSet { ${MONEY_FIELDS} } currentTotalPriceSet { ${MONEY_FIELDS} }
   totalReceivedSet { ${MONEY_FIELDS} } totalRefundedSet { ${MONEY_FIELDS} }
   lineItems(first: ${MAX_ITEMS}) {
-    nodes { id quantity currentQuantity variant { id } originalUnitPriceSet { ${MONEY_FIELDS} } discountAllocations { allocatedAmountSet { ${MONEY_FIELDS} } } }
+    nodes { taxLines(first: ${MAX_ITEMS + 1}) { priceSet { ${MONEY_FIELDS} } } id quantity currentQuantity variant { id } originalUnitPriceSet { ${MONEY_FIELDS} } discountAllocations { allocatedAmountSet { ${MONEY_FIELDS} } } }
     pageInfo { hasNextPage }
   }`;
 const QUERY = `query BloomBoxCommerceReference($id: ID!) {
