@@ -356,7 +356,38 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
 @keyframes turn { to { transform: rotate(360deg); } }
 
 /* 960: navigation / commerce columns; 768: chapter rhythm; 520: single cards. */
+/* Operator review: one reading column and a quiet decision-history panel. */
+.fulfillment-review-page { padding-block: var(--space-8) var(--space-section); }
+.fulfillment-review-heading { max-width: var(--reading-max); margin-bottom: var(--space-7); }
+.fulfillment-review-heading h1 { font-size: var(--text-page); margin: 0 0 var(--space-5); }
+.fulfillment-review-heading > p:last-child { color: var(--ink-soft); }
+.fulfillment-preview-notice { padding: var(--space-5); background: var(--surface); border-radius: var(--radius-card); }
+.fulfillment-preview-notice p { margin: var(--space-2) 0 0; font-size: var(--text-small); }
+.fulfillment-scenarios { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-block: var(--space-5) var(--space-8); }
+.fulfillment-scenarios [aria-current="page"] { border-color: var(--accent); color: var(--accent); }
+.fulfillment-review-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: var(--space-8); align-items: start; }
+.fulfillment-review-section { margin-bottom: var(--space-8); }
+.fulfillment-review-section h2, .fulfillment-review-summary h2, .fulfillment-connection h2 { font-size: var(--text-section); margin: 0 0 var(--space-5); }
+.fulfillment-review-items { list-style: none; padding: 0; margin: 0 0 var(--space-5); }
+.fulfillment-review-items li { display: flex; justify-content: space-between; gap: var(--space-4); padding-block: var(--space-5); border-block: 1px solid var(--line); }
+.fulfillment-review-items li > span { overflow-wrap: anywhere; }
+.fulfillment-review-items strong { flex-shrink: 0; font-weight: 500; }
+.fulfillment-review-facts { margin: 0; }
+.fulfillment-review-facts > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: var(--space-4); padding-block: var(--space-3); }
+.fulfillment-review-facts dt { color: var(--ink-soft); font-size: var(--text-small); }
+.fulfillment-review-facts dd { margin: 0; text-align: right; overflow-wrap: anywhere; font-size: var(--text-small); }
+.fulfillment-reference { font-variant-numeric: tabular-nums; }
+.fulfillment-check { border-top: 1px solid var(--line); padding-block: var(--space-5); }
+.fulfillment-check h3 { font-size: var(--text-label); margin: 0 0 var(--space-3); }
+.fulfillment-check > p { font-size: var(--text-small); }
+.fulfillment-review-summary { background: var(--surface); border-radius: var(--radius-panel); padding: var(--space-6); }
+.fulfillment-review-summary > p { font-size: var(--text-small); }
+.fulfillment-review-summary .fulfillment-review-state { font-size: var(--text-label); font-weight: 500; }
+.fulfillment-approval-history { border-block: 1px solid var(--line); margin-block: var(--space-5); padding-block: var(--space-4); font-size: var(--text-small); }
+.fulfillment-connection { border-top: 1px solid var(--line); padding-top: var(--space-7); max-width: var(--reading-max); }
+
 @media (max-width: 959px) {
+  .fulfillment-review-grid { grid-template-columns: 1fr; gap: var(--space-5); }
   .site-header { gap: var(--space-5); }
   .main-nav { display: none; }
   .mobile-menu { display: block; margin-left: auto; }
@@ -431,6 +462,9 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
   .footer-note { flex-direction: column; gap: var(--space-3); }
 }
 @media (max-width: 519px) {
+  .fulfillment-review-summary { padding: var(--space-5); }
+  .fulfillment-review-facts > div { grid-template-columns: 1fr; gap: var(--space-1); }
+  .fulfillment-review-facts dd { text-align: left; }
   .product-grid { grid-template-columns: minmax(0, 1fr); }
   .catalog-tools { grid-template-columns: minmax(0, 1fr); }
   .catalog-search-field { grid-column: auto; }
@@ -439,3 +473,37 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+.fulfillment-inbox-search { display: grid; gap: var(--space-4); margin-bottom: var(--space-7); }
+.fulfillment-inbox-search > button { justify-self: start; }
+.fulfillment-inbox-results { margin: var(--space-7) 0; }
+.fulfillment-inbox-results > p { margin-top: var(--space-3); }
+.fulfillment-inbox-list { list-style: none; padding: 0; margin: var(--space-6) 0; }
+.fulfillment-inbox-list > li { border-top: 1px solid var(--line); }
+.fulfillment-inbox-list > li:last-child { border-bottom: 1px solid var(--line); }
+.fulfillment-inbox-entry { display: block; padding: var(--space-6) 0; overflow-wrap: anywhere; }
+.fulfillment-inbox-entry > h3 { font-size: var(--text-body); font-weight: 500; }
+.fulfillment-inbox-entry > span { display: inline-block; margin-top: var(--space-4); color: var(--accent); }
+.fulfillment-inbox-facts { display: flex; flex-wrap: wrap; gap: var(--space-5) var(--space-7); margin-top: var(--space-4); }
+.fulfillment-inbox-facts dt { color: var(--ink-soft); font-size: var(--text-small); }
+.fulfillment-inbox-facts dd { margin: var(--space-2) 0 0; }
+.fulfillment-inbox-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-5); }
+
+.fulfillment-inbox-page { padding-top: var(--space-6); }
+.fulfillment-inbox-page .content-header { margin-block: var(--space-5) var(--space-6); }
+.fulfillment-inbox-search .form-hint { margin: 0; }
+
+.fulfillment-approval-form { margin-top: var(--space-7); padding-top: var(--space-6); border-top: 1px solid var(--line); max-width: var(--reading-max); }
+.fulfillment-approval-form > p, .fulfillment-approval-form form { margin-top: var(--space-4); }
+.fulfillment-approval-acknowledgement { display: flex; gap: var(--space-3); align-items: start; margin-bottom: var(--space-5); cursor: pointer; }
+.fulfillment-approval-acknowledgement input { flex-shrink: 0; margin-top: var(--space-2); accent-color: var(--accent); }
+.permission-management-list { display: grid; gap: var(--space-6); margin-block: var(--space-6); }
+.permission-card { max-width: var(--reading-max); border-top: 1px solid var(--line); padding-top: var(--space-5); overflow-wrap: anywhere; }
+.permission-card dl { display: grid; gap: var(--space-4); }
+.permission-card dt { color: var(--ink-soft); font-size: var(--text-small); }
+.permission-card dd { margin: 0; }
+.permission-history, .permission-revocation-form { margin-top: var(--space-5); }
+.permission-revocation-form form { display: grid; gap: var(--space-4); }
+.permission-revocation-form .fulfillment-approval-acknowledgement { margin-bottom: 0; }
+.permission-revoke-button { justify-self: start; color: var(--danger); border-color: var(--danger); }
+.permission-revoke-button:hover { background: var(--danger); color: var(--paper); }

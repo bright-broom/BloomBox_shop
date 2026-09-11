@@ -5,6 +5,7 @@ import { loadRuntimeMode } from "@/shared/infrastructure/config/runtime-config";
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { FlowerLoading } from "@/ui/flower-loading";
 import { PreviewMetricsPanel } from "@/ui/preview-metrics-panel";
+import { fulfillmentReviewContent } from "@/shared/infrastructure/content/fulfillment-review-content";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "ギフト体験の確認", robots: { index: false, follow: false } };
@@ -17,6 +18,7 @@ export default function GiftExperiencePreview() {
       <Link className="primary-button" href="/flowers">{copy.catalogLabel}</Link>
       <Link className="text-link" href="/gift-next">{copy.recipientLabel}</Link>
       <Link className="text-link" href="/referrals">{copy.benefitLabel}</Link>
+      <Link className="text-link" href="/preview/fulfillment-review">{fulfillmentReviewContent.previewTitle}</Link>
     </nav>
     <PreviewMetricsPanel />
     <h2>{copy.loadingTitle}</h2><p>{copy.loadingNote}</p><FlowerLoading compact />
