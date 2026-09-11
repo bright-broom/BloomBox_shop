@@ -37,7 +37,7 @@ Auth.js の OIDC 検証（PKCE、state、nonce、issuer、audience、有効期�
 
 実ライブラリを通した合成 Google OIDC 応答で、署名付きログイン、CSRF、PKCE/state/nonce、署名改ざん、別 audience、期限切れ、不許可メール、暗号 Cookie 改ざん、絶対期限、許可取り消し、ログアウトを検証します。認証未設定／未登録の DB 接続拒否、Google 通信の上限、専用 DB 接続の必須化も回帰テストに含めます。
 
-NextAuth 5.0.0-beta.32 を固定採用しています。依存監査と合成プロバイダーテストは、実 Google の同意画面・本番コールバックを通した成功証跡の代用にはなりません。実接続、デプロイ先での Cookie/Origin、専用ロール設定、実店舗権限の失効を確認してから公開運用してください。[承認フォーム](OPERATOR_APPROVAL_FORM.md)は実装済みですが、事業条件 PENDING により操作は無効です。事業条件、操作頻度制限、Inbox 完了、本番 Gate、発送実行は引き続き別の確認・実装が必要です。
+NextAuth 5.0.0-beta.32 を固定採用しています。依存監査と合成プロバイダーテストは、実 Google の同意画面・本番コールバックを通した成功証跡の代用にはなりません。実接続、デプロイ先での Cookie/Origin、専用ロール設定、実店舗権限の失効を確認してから公開運用してください。[承認フォーム](OPERATOR_APPROVAL_FORM.md)は実装済みですが、事業条件 PENDING により操作は無効です。[承認送信の頻度制限](OPERATOR_APPROVAL_RATE_LIMIT.md)は実装済みです。事業条件、Inbox 完了、本番 Gate、発送実行は引き続き別の確認・実装が必要です。
 
 戻す場合は `AUTH_OPERATOR_ENABLED=false` を反映して入口を閉じ、対応付け削除または秘密値更新で既存セッションを無効化します。注文・承認・監査履歴の削除や DB の後退移行は不要です。
 

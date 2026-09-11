@@ -108,6 +108,8 @@ GRANT SELECT, INSERT, UPDATE ON bloombox.shopify_fulfillment_intakes TO bloombox
 GRANT UPDATE (status, version, updated_at) ON bloombox.fulfillments TO bloombox_worker;
 
 GRANT USAGE ON SCHEMA bloombox TO bloombox_fulfillment_approver;
+GRANT SELECT, INSERT ON bloombox.fulfillment_approval_submission_limits TO bloombox_fulfillment_approver;
+GRANT UPDATE (attempts, updated_at) ON bloombox.fulfillment_approval_submission_limits TO bloombox_fulfillment_approver;
 GRANT SELECT ON bloombox.fulfillment_operator_permissions, bloombox.fulfillment_operator_approvals,
   bloombox.shopify_fulfillment_intakes, bloombox.fulfillments, bloombox.shopify_payment_evidence,
   bloombox.shopify_payment_projections, bloombox.payments, bloombox.orders, bloombox.order_items,

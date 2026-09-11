@@ -14,7 +14,7 @@ export interface ShopifyFulfillmentApprover {
   approve(input: FulfillmentApprovalRequest): Promise<FulfillmentApprovalReceipt>;
 }
 export class FulfillmentApprovalError extends Error {
-  constructor(readonly code: "INVALID_REQUEST" | "NOT_AUTHORIZED" | "REVIEW_REQUIRED" | "CONFLICT" | "UNAVAILABLE") {
+  constructor(readonly code: "INVALID_REQUEST" | "NOT_AUTHORIZED" | "REVIEW_REQUIRED" | "CONFLICT" | "UNAVAILABLE" | "RATE_LIMITED") {
     super(`Fulfillment approval: ${code}`); this.name = "FulfillmentApprovalError";
   }
 }

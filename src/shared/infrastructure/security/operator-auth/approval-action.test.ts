@@ -14,7 +14,7 @@ describe("approval server action", () => {
     expect(mocks.record).toHaveBeenCalledWith(form, "https://operators.example");
     expect(mocks.revalidate).toHaveBeenCalledWith("/operations/fulfillments/verified/target");
   });
-  it.each(["INVALID_REQUEST", "NOT_AUTHORIZED", "REVIEW_REQUIRED", "CONFLICT", "UNAVAILABLE"] as const)("translates %s without falsely refreshing or claiming success", async (code) => {
+  it.each(["INVALID_REQUEST", "NOT_AUTHORIZED", "REVIEW_REQUIRED", "CONFLICT", "UNAVAILABLE", "RATE_LIMITED"] as const)("translates %s without falsely refreshing or claiming success", async (code) => {
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.record.mockRejectedValue(new FulfillmentApprovalError(code));
     expect(await recordFulfillmentApproval({ status: "RECORDED" }, new FormData())).toEqual({ status: code });

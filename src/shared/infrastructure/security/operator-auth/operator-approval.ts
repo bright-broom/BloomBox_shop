@@ -2,6 +2,7 @@ import { FulfillmentApprovalError, FulfillmentReviewError, FULFILLMENT_INTAKE_PO
   type ApprovalFormControl, type FulfillmentApprovalReceipt } from "@/modules/fulfillment/public";
 import { PostgresFulfillmentReviewQuery } from "@/modules/fulfillment/infrastructure/postgres-fulfillment-review-query";
 import { PostgresShopifyFulfillmentApprover } from "@/modules/fulfillment/infrastructure/postgres-shopify-fulfillment-approver";
+import { PostgresApprovalSubmissionLimiter } from "@/modules/fulfillment/infrastructure/postgres-approval-submission-limiter";
 import { getOperatorDatabaseClient } from "../../database/database-connections";
 import { getOperatorAuth } from "./operator-auth";
 import { GoogleFulfillmentOperatorIdentity } from "./google-operator-identity";
@@ -45,7 +46,9 @@ export async function recordOperatorApproval(form: FormData, origin: string | nu
   }
   // A prepared form cannot lift the merchant-policy gate. No database write path while pending.
   if (FULFILLMENT_INTAKE_POLICY.approval !== "APPROVED") throw new FulfillmentApprovalError("REVIEW_REQUIRED");
+  const database = getOperatorDatabaseClient();
+  await new PostgresApprovalSubmissionLimiter(database, identity).consume();
   const request = await new OperatorApprovalIntent(service.config.secret, service.config.origin).read(token, actor, service.config.testMode);
-  const receipt = await new PostgresShopifyFulfillmentApprover(getOperatorDatabaseClient(), service.config.testMode, identity).approve(request);
+  const receipt = await new PostgresShopifyFulfillmentApprover(database, service.config.testMode, identity).approve(request);
   return { receipt, reviewPath: `/operations/fulfillments/${request.shop}/${request.fulfillmentId}` };
 }
