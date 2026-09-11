@@ -12,6 +12,7 @@ vi.mock("@/shared/infrastructure/observability/report-unexpected-error", () => (
 import { quotePreviewReferralAction, settlePreviewReferralAction, simulateReferralOrderAction } from "./preview-referral-actions";
 import { readReferralAction, updateReferralAction } from "@/modules/referral/presentation/actions";
 import { getPreviewReferralProgram } from "@/shared/infrastructure/referral/preview-referral-runtime";
+import { loadCatalog } from "@/modules/catalog/infrastructure/catalog-content";
 
 const input = { requestId: "12345678-abcd-4000-8000-123456789012", productId: "prod_haru_01", quantity: 1 };
 const runtime = globalThis as typeof globalThis & { bloomBoxPreviewReferrals?: unknown };
@@ -25,6 +26,27 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); delete runtime.bloomBoxPreviewReferrals; });
 
 describe("preview referral checkout boundaries", () => {
+  it.each([["M", 4000, 1000, 0, 5000], ["L", 8000, 0, 500, 7500]])("settles launch %s using catalog shipping and eligible discounts", async (size, subtotal, shipping, discount, total) => {
+    const owner = await updateReferralAction({ operation: "enroll" });
+    await updateReferralAction({ operation: "new_test_member" });
+    await updateReferralAction({ operation: "join", code: owner.snapshot!.inviteCode });
+    const product = loadCatalog().find((product) => product.previewOffer?.size === size)!;
+    mocks.getProduct.mockResolvedValue(product);
+    const cart = { ...input, productId: product.id };
+    const quote = (await quotePreviewReferralAction({ ...cart, shippingAmount: 99999, discountAmount: 99999 })).quote!;
+    expect(quote).toMatchObject({ subtotalAmount: subtotal, shippingAmount: shipping, discountAmount: discount, totalAmount: total });
+    expect((await settlePreviewReferralAction({ ...cart, couponId: quote.couponId, expectedSubtotal: subtotal, expectedShipping: 777 })).error).toBeTruthy();
+    expect(getPreviewReferralProgram().orderCount).toBe(0);
+    const request = { ...cart, couponId: quote.couponId, expectedSubtotal: subtotal, expectedShipping: shipping };
+    const result = await settlePreviewReferralAction(request);
+    expect(result.quote).toEqual(quote);
+    expect(await settlePreviewReferralAction(request)).toEqual(result);
+    mocks.getProduct.mockResolvedValue({ ...product, previewOffer: { ...product.previewOffer!, shippingAmount: Number(shipping) + 1 } });
+    expect((await settlePreviewReferralAction({ ...request, expectedShipping: Number(shipping) + 1 })).error).toBeTruthy();
+    expect((await quotePreviewReferralAction({ ...cart, quantity: 2 })).error).toBeTruthy();
+    expect((await settlePreviewReferralAction({ ...request, quantity: 2, expectedSubtotal: Number(subtotal) * 2 })).error).toBeTruthy();
+  });
+
   it.each([
     ["production", "preview"], ["preview", "stripe"], ["production", "stripe"],
   ])("blocks every action outside an entirely preview environment (%s/%s)", async (mode, provider) => {
@@ -34,7 +56,7 @@ describe("preview referral checkout boundaries", () => {
     expect((await updateReferralAction({ operation: "switch_test_member" })).error).toBeTruthy();
     expect((await readReferralAction()).error).toBeTruthy();
     expect((await quotePreviewReferralAction(input)).error).toBeTruthy();
-    expect((await settlePreviewReferralAction({ ...input, couponId: null, expectedSubtotal: 6600 })).error).toBeTruthy();
+    expect((await settlePreviewReferralAction({ ...input, couponId: null, expectedSubtotal: 6600, expectedShipping: 1100 })).error).toBeTruthy();
     expect((await simulateReferralOrderAction({ requestId: input.requestId, operation: "delivered" })).error).toBeTruthy();
     expect(mocks.setCookie).not.toHaveBeenCalled(); expect(mocks.getProduct).not.toHaveBeenCalled();
   });
@@ -51,7 +73,7 @@ describe("preview referral checkout boundaries", () => {
     const result = await quotePreviewReferralAction({ ...input, price: 1, discount: 99999, buyerId: "forged" });
     expect(result.quote).toMatchObject({ subtotalAmount: 6600, discountAmount: 500, tracked: true });
     expect(JSON.stringify(result)).not.toContain(friendCookie);
-    const request = { ...input, couponId: result.quote!.couponId, expectedSubtotal: 6600 };
+    const request = { ...input, couponId: result.quote!.couponId, expectedSubtotal: 6600, expectedShipping: 1100 };
     const paid = await settlePreviewReferralAction(request);
     expect(paid.quote?.discountAmount).toBe(500);
     expect(await settlePreviewReferralAction(request)).toEqual(paid);
@@ -60,7 +82,7 @@ describe("preview referral checkout boundaries", () => {
     expect((await readReferralAction()).snapshot).toMatchObject({ rewardedCount: 1, coupons: [{ status: "AVAILABLE" }] });
     const second = { ...input, requestId: "12345678-abcd-4000-8000-123456789013" };
     const reward = (await quotePreviewReferralAction(second)).quote!;
-    expect((await settlePreviewReferralAction({ ...second, couponId: reward.couponId, expectedSubtotal: 6600 })).quote?.discountAmount).toBe(500);
+    expect((await settlePreviewReferralAction({ ...second, couponId: reward.couponId, expectedSubtotal: 6600, expectedShipping: 1100 })).quote?.discountAmount).toBe(500);
     expect((await simulateReferralOrderAction({ requestId: input.requestId, operation: "refunded" })).error).toBeTruthy();
     await updateReferralAction({ operation: "switch_test_member" });
     await simulateReferralOrderAction({ requestId: input.requestId, operation: "refunded" });
@@ -75,15 +97,15 @@ describe("preview referral checkout boundaries", () => {
     await updateReferralAction({ operation: "join", code: owner.snapshot!.inviteCode });
     const quote = (await quotePreviewReferralAction(input)).quote!;
     mocks.getProduct.mockResolvedValue({ available: true, price: { amount: 7000, currency: "JPY" } });
-    expect((await settlePreviewReferralAction({ ...input, couponId: quote.couponId, expectedSubtotal: 6600 })).error).toBeTruthy();
+    expect((await settlePreviewReferralAction({ ...input, couponId: quote.couponId, expectedSubtotal: 6600, expectedShipping: 1100 })).error).toBeTruthy();
     mocks.getProduct.mockResolvedValue({ available: false, price: { amount: 6600, currency: "JPY" } });
-    expect((await settlePreviewReferralAction({ ...input, couponId: quote.couponId, expectedSubtotal: 6600 })).error).toBeTruthy();
+    expect((await settlePreviewReferralAction({ ...input, couponId: quote.couponId, expectedSubtotal: 6600, expectedShipping: 1100 })).error).toBeTruthy();
     expect((await readReferralAction()).snapshot?.coupons[0].status).toBe("AVAILABLE");
   });
 
   it("replays an existing order at the storage limit while refusing new orders", async () => {
     await updateReferralAction({ operation: "enroll" });
-    const request = { ...input, couponId: null, expectedSubtotal: 6600 };
+    const request = { ...input, couponId: null, expectedSubtotal: 6600, expectedShipping: 1100 };
     const paid = await settlePreviewReferralAction(request);
     expect(paid.quote).toBeDefined();
     vi.spyOn(getPreviewReferralProgram(), "orderCount", "get").mockReturnValue(5000);
@@ -101,7 +123,7 @@ describe("preview referral checkout boundaries", () => {
     await updateReferralAction({ operation: "join", code: owner.snapshot!.inviteCode });
     const quote = (await quotePreviewReferralAction(input)).quote!;
     await updateReferralAction({ operation: "switch_test_member" });
-    expect((await settlePreviewReferralAction({ ...input, couponId: quote.couponId, expectedSubtotal: 6600 })).error).toBeTruthy();
+    expect((await settlePreviewReferralAction({ ...input, couponId: quote.couponId, expectedSubtotal: 6600, expectedShipping: 1100 })).error).toBeTruthy();
     expect(getPreviewReferralProgram().orderCount).toBe(0);
   });
 
@@ -109,6 +131,6 @@ describe("preview referral checkout boundaries", () => {
     mocks.jar.set("bloombox_referral_preview", "forged");
     expect((await readReferralAction()).snapshot).toBeNull();
     expect((await quotePreviewReferralAction(input)).quote).toMatchObject({ discountAmount: 0, tracked: false });
-    expect((await settlePreviewReferralAction({ ...input, couponId: "welcome:forged", expectedSubtotal: 6600 })).error).toBeTruthy();
+    expect((await settlePreviewReferralAction({ ...input, couponId: "welcome:forged", expectedSubtotal: 6600, expectedShipping: 1100 })).error).toBeTruthy();
   });
 });

@@ -1,3 +1,5 @@
+import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
+import { PreviewMetric } from "@/ui/preview-metric";
 import { productId } from "@/modules/catalog/public";
 import { getEarliestDeliveryDate, getLatestDeliveryDate } from "@/modules/fulfillment/public";
 import { application } from "@/shared/infrastructure/composition-root";
@@ -19,9 +21,11 @@ export default async function GiftPage({ params }: GiftPageProps) {
   const { productId: rawProductId } = await params;
   const product = await application.getProduct.byId(productId(rawProductId));
   if (!product) notFound();
+  const sizeOptions = product.previewOffer ? (await application.listProducts.execute()).filter((candidate) => candidate.previewOffer?.family === product.previewOffer?.family).map((candidate) => ({ id: candidate.id, name: candidate.name, size: candidate.previewOffer!.size, price: candidate.price, shippingAmount: candidate.previewOffer!.shippingAmount })) : [];
 
   return (
     <section className="gift-page section-shell">
+      {product.previewOffer ? <PreviewMetric event={{ name: "gift_start", productId: product.id }} /> : null}
       <CheckoutProgress currentStep={2} />
       <header className="gift-header">
         <p className="eyebrow">MAKE IT PERSONAL</p>
@@ -40,12 +44,13 @@ export default async function GiftPage({ params }: GiftPageProps) {
             />
           </div>
           <div className="summary-copy">
-            <div><p className="eyebrow">YOUR SELECTION</p><h2>{product.name}</h2></div>
-            <p>{formatMoney(product.price)}</p>
+            <div><p className="eyebrow">YOUR SELECTION</p><h2>{product.previewOffer ? "BLOOM BOX" : product.name}</h2></div>
+            {!product.previewOffer ? <p>{formatMoney(product.price)}</p> : null}
           </div>
-          <p className="summary-note">税込・送料別</p>
+          <p className="summary-note">{product.previewOffer ? giftExperienceContent.launch.notice : "税込・送料別"}</p>
         </aside>
         {product.available ? <GiftForm
+          sizeOptions={sizeOptions}
           productId={product.id}
           productName={product.name}
           unitPrice={product.price}
