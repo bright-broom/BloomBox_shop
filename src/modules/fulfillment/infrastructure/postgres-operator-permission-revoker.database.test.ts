@@ -5,6 +5,8 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { PermissionRevocationError, type PermissionRevocationRequest } from "../application/revoke-operator-permission";
 import { PostgresOperatorPermissionRevoker } from "./postgres-operator-permission-revoker";
+import { PostgresOperatorPermissionQuery } from "./postgres-operator-permission-query";
+import { PostgresApprovalSubmissionLimiter } from "./postgres-approval-submission-limiter";
 import { PostgresFulfillmentReviewQuery } from "./postgres-fulfillment-review-query";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -27,15 +29,15 @@ describeDatabase("audited operator permission revocation", () => {
     await sql.unsafe((await readFile("database/roles.sql", "utf8")).replace(/^\\set ON_ERROR_STOP on$/m, ""));
   });
   afterAll(async () => { await managerSql.end(); await sql.end(); });
-  async function fixture() {
+  async function fixture(scope = shop) {
     const managerId = randomUUID(); const actorId = randomUUID(); const targetId = randomUUID(); const permissionId = randomUUID();
     const expiresAt = new Date(Date.now() + 600_000);
     await sql`INSERT INTO bloombox.fulfillment_permission_managers (id, operator_id, provider_scope, enabled, valid_until, created_at, updated_at)
-      VALUES (${managerId}, ${actorId}, ${shop}, true, ${expiresAt}, clock_timestamp() - interval '1 minute', clock_timestamp())`;
+      VALUES (${managerId}, ${actorId}, ${scope}, true, ${expiresAt}, clock_timestamp() - interval '1 minute', clock_timestamp())`;
     await sql`INSERT INTO bloombox.fulfillment_operator_permissions (id, operator_id, provider_scope, enabled, valid_until, created_at, updated_at)
-      VALUES (${permissionId}, ${targetId}, ${shop}, true, ${expiresAt}, clock_timestamp() - interval '1 minute', clock_timestamp())`;
+      VALUES (${permissionId}, ${targetId}, ${scope}, true, ${expiresAt}, clock_timestamp() - interval '1 minute', clock_timestamp())`;
     const identity = { current: async () => ({ operatorId: actorId, expiresAt }) };
-    const request: PermissionRevocationRequest = { shop, permissionId, reviewedVersion: 1, reason: "ROLE_CHANGE", idempotencyKey: randomUUID() };
+    const request: PermissionRevocationRequest = { shop: scope, permissionId, reviewedVersion: 1, reason: "ROLE_CHANGE", idempotencyKey: randomUUID() };
     return { managerId, actorId, targetId, permissionId, expiresAt, identity, request, revoker: new PostgresOperatorPermissionRevoker(managerSql, identity) };
   }
   async function permission(id: string) {
@@ -192,6 +194,56 @@ describeDatabase("audited operator permission revocation", () => {
       });
       expect(await pending).toEqual(new PermissionRevocationError(changed === "permission" ? "REVIEW_REQUIRED" : "NOT_AUTHORIZED"));
       expect(await sql`SELECT id FROM bloombox.fulfillment_permission_revocations WHERE permission_id = ${f.permissionId}`).toHaveLength(0);
+    } finally { await pending; await waiting.end(); }
+  });
+  it("lists a scoped bounded page, keeps reads free of writes and exposes minimal historical evidence", async () => {
+    const scope = `scope-${randomUUID()}.myshopify.com`; const f = await fixture(scope);
+    for (let i = 0; i < 20; i++) await sql`INSERT INTO bloombox.fulfillment_operator_permissions (id, operator_id, provider_scope, enabled, valid_until, created_at, updated_at)
+      VALUES (${randomUUID()}, ${randomUUID()}, ${scope}, true, ${f.expiresAt}, clock_timestamp(), clock_timestamp())`;
+    const query = new PostgresOperatorPermissionQuery(managerSql, f.identity);
+    const [before] = await sql`SELECT count(*)::int AS count FROM bloombox.audit_logs`;
+    const first = await query.list({}); expect(first.shop).toBe(scope); expect(first.entries).toHaveLength(20); expect(first.nextCursor).not.toBeNull();
+    const last = await query.list({ shop: scope, cursor: first.nextCursor! }); expect(last.entries).toHaveLength(1); expect(last.nextCursor).toBeNull();
+    expect(new Set([...first.entries, ...last.entries].map((entry) => entry.id)).size).toBe(21);
+    expect(Object.keys(first.entries[0]).sort()).toEqual(["enabled", "id", "latestRevocation", "operatorId", "validUntil", "version"]);
+    expect((await sql`SELECT count(*)::int AS count FROM bloombox.audit_logs`)[0].count).toBe(before.count);
+    const receipt = await f.revoker.revoke(f.request);
+    const entries = [...(await query.list({ shop: scope })).entries, ...(await query.list({ shop: scope, cursor: first.nextCursor! })).entries];
+    expect(entries.find((entry) => entry.id === f.permissionId)).toMatchObject({ enabled: false, version: 2,
+      latestRevocation: { operatorId: f.actorId, version: 2, reason: "ROLE_CHANGE", revokedAt: receipt.revokedAt.toISOString() } });
+    const other = await fixture(); await expect(query.list({ shop: other.request.shop })).rejects.toMatchObject({ code: "NOT_AUTHORIZED" });
+  });
+  it("rejects permission listing without manager authority, after expiry and with invalid positions", async () => {
+    const f = await fixture(); const query = new PostgresOperatorPermissionQuery(managerSql, f.identity);
+    await expect(query.list({ cursor: randomUUID() })).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+    await expect(query.list({ shop, cursor: "invalid" })).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+    await expect(new PostgresOperatorPermissionQuery(managerSql, { current: async () => null }).list({})).rejects.toMatchObject({ code: "NOT_AUTHORIZED" });
+    await expect(new PostgresOperatorPermissionQuery(managerSql, { current: async () => ({ operatorId: f.targetId, expiresAt: f.expiresAt }) }).list({})).rejects.toMatchObject({ code: "NOT_AUTHORIZED" });
+    await sql`UPDATE bloombox.fulfillment_permission_managers SET valid_until = clock_timestamp() - interval '1 second', version = version + 1 WHERE id = ${f.managerId}`;
+    await expect(query.list({ shop })).rejects.toMatchObject({ code: "NOT_AUTHORIZED" });
+  });
+  it("shares the operator submission allowance between approval and manager credentials", async () => {
+    const f = await fixture(); const approval = postgres(safeUrl(), { max: 1, ssl: false, connection: { role: "bloombox_fulfillment_approver" } });
+    try {
+      const a = new PostgresApprovalSubmissionLimiter(approval, f.identity);
+      const b = new PostgresApprovalSubmissionLimiter(managerSql, f.identity);
+      for (let i = 0; i < 10; i++) await (i % 2 ? a : b).consume();
+      await expect(a.consume()).rejects.toMatchObject({ code: "RATE_LIMITED" });
+      await expect(b.consume()).rejects.toMatchObject({ code: "RATE_LIMITED" });
+    } finally { await approval.end(); }
+  });
+  it("rechecks manager expiry after a blocked read instead of exposing a stale snapshot", async () => {
+    const f = await fixture(); const waiting = postgres(safeUrl(), { max: 1, ssl: false, connection: { role: "bloombox_permission_manager" } });
+    let pending: Promise<unknown> = Promise.resolve();
+    try {
+      const [{ pid }] = await waiting`SELECT pg_backend_pid() AS pid`;
+      await sql.begin(async (tx) => {
+        await tx`SELECT id FROM bloombox.fulfillment_permission_managers WHERE id = ${f.managerId} FOR UPDATE`;
+        pending = new PostgresOperatorPermissionQuery(waiting, f.identity).list({ shop }).then(() => "exposed", (error: unknown) => error);
+        await vi.waitFor(async () => { expect((await sql`SELECT wait_event_type FROM pg_stat_activity WHERE pid = ${pid}`)[0].wait_event_type).toBe("Lock"); }, { timeout: 500, interval: 10 });
+        await tx`UPDATE bloombox.fulfillment_permission_managers SET enabled = false, version = version + 1 WHERE id = ${f.managerId}`;
+      });
+      expect(await pending).toEqual(new PermissionRevocationError("NOT_AUTHORIZED"));
     } finally { await pending; await waiting.end(); }
   });
 });

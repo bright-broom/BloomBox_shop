@@ -5,6 +5,7 @@ import { getOperatorAuth } from "@/shared/infrastructure/security/operator-auth/
 import { GoogleFulfillmentOperatorIdentity } from "@/shared/infrastructure/security/operator-auth/google-operator-identity";
 import { operatorLoginContent as copy } from "@/shared/infrastructure/content/operator-login-content";
 import { fulfillmentInboxContent } from "@/shared/infrastructure/content/fulfillment-inbox-content";
+import { operatorPermissionsContent } from "@/shared/infrastructure/content/operator-permissions-content";
 import { startOperatorLogin, endOperatorLogin } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,7 @@ export default async function OperatorLogin({ searchParams }: { searchParams: Pr
         {!state.enabled ? <p>{copy.disabledNote}</p> : state.subject ? <>
           <p>{state.bound ? copy.boundNote : copy.unboundNote}</p>
           {state.bound ? <Link className="primary-button" href="/operations/fulfillments">{fulfillmentInboxContent.title}</Link> : null}
+          {state.bound ? <Link className="text-link" prefetch={false} href="/operations/permissions">{operatorPermissionsContent.title}</Link> : null}
           {!state.bound ? <details><summary>{copy.registration}</summary><p>{copy.registrationNote}</p><code>{state.subject}</code></details> : null}
           <form action={endOperatorLogin}><button className="secondary-button" type="submit">{copy.signOut}</button></form>
         </> : <form action={startOperatorLogin}><button className="primary-button" type="submit">{copy.signIn}</button></form>}

@@ -127,6 +127,9 @@ GRANT UPDATE (payment_id) ON bloombox.shopify_payment_projections TO bloombox_fu
 GRANT UPDATE (fulfillment_id) ON bloombox.shopify_fulfillment_intakes TO bloombox_fulfillment_approver;
 
 GRANT USAGE ON SCHEMA bloombox TO bloombox_permission_manager;
+-- Approval and permission-revocation submissions share the same operator allowance.
+GRANT SELECT, INSERT ON bloombox.fulfillment_approval_submission_limits TO bloombox_permission_manager;
+GRANT UPDATE (attempts, updated_at) ON bloombox.fulfillment_approval_submission_limits TO bloombox_permission_manager;
 GRANT SELECT ON bloombox.fulfillment_permission_managers, bloombox.fulfillment_operator_permissions,
   bloombox.fulfillment_permission_revocations TO bloombox_permission_manager;
 GRANT UPDATE (id) ON bloombox.fulfillment_permission_managers, bloombox.fulfillment_operator_permissions TO bloombox_permission_manager;
