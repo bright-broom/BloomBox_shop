@@ -16,11 +16,20 @@ const jpy = z.object({ currencyCode: z.literal("JPY"), amount: z.string().max(32
 const moneyBag = z.object({ shopMoney: jpy, presentmentMoney: jpy })
   .refine((value) => value.shopMoney.amount === value.presentmentMoney.amount)
   .transform((value) => money(value.shopMoney.amount));
+const transactionSchema = z.object({
+  id: gid("OrderTransaction"),
+  kind: z.enum(["AUTHORIZATION", "CAPTURE", "CHANGE", "EMV_AUTHORIZATION", "REFUND", "SALE", "SUGGESTED_REFUND", "VOID"]),
+  status: z.enum(["AWAITING_RESPONSE", "ERROR", "FAILURE", "PENDING", "SUCCESS", "UNKNOWN"]),
+  parentTransaction: z.object({ id: gid("OrderTransaction") }).nullable(),
+  test: z.boolean(), amountSet: moneyBag,
+});
 const orderSchema = z.object({
   id: gid("Order"), cartToken: z.string().min(1).max(128_000).nullable(), updatedAt: date, test: z.boolean(), cancelledAt: date.nullable(),
   displayFinancialStatus: z.enum(["AUTHORIZED", "EXPIRED", "PAID", "PARTIALLY_PAID", "PARTIALLY_REFUNDED", "PENDING", "REFUNDED", "VOIDED"]).nullable(),
   originalTotalPriceSet: moneyBag, currentTotalPriceSet: moneyBag,
   totalReceivedSet: moneyBag, totalRefundedSet: moneyBag,
+  transactions: z.array(transactionSchema).max(MAX_ITEMS)
+    .refine((values) => new Set(values.map((value) => value.id)).size === values.length),
   lineItems: z.object({
     nodes: z.array(z.object({
       id: gid("LineItem"), variant: z.object({ id: gid("ProductVariant") }).nullable(),
@@ -30,12 +39,6 @@ const orderSchema = z.object({
     })).max(MAX_ITEMS),
     pageInfo: z.object({ hasNextPage: z.literal(false) }),
   }).refine((value) => new Set(value.nodes.map((line) => line.id)).size === value.nodes.length),
-});
-const transactionSchema = z.object({
-  id: gid("OrderTransaction"),
-  kind: z.enum(["AUTHORIZATION", "CAPTURE", "CHANGE", "EMV_AUTHORIZATION", "REFUND", "SALE", "SUGGESTED_REFUND", "VOID"]),
-  status: z.enum(["AWAITING_RESPONSE", "ERROR", "FAILURE", "PENDING", "SUCCESS", "UNKNOWN"]),
-  test: z.boolean(), amountSet: moneyBag,
 });
 const refundSchema = z.object({
   id: gid("Refund"), updatedAt: date, order: orderSchema,
@@ -49,7 +52,9 @@ const envelopeSchema = z.object({
   data: z.object({ shop: z.object({ myshopifyDomain: z.string() }), node: z.unknown() }),
 });
 const MONEY_FIELDS = "shopMoney { amount currencyCode } presentmentMoney { amount currencyCode }";
+const TRANSACTION_FIELDS = `id kind status test parentTransaction { id } amountSet { ${MONEY_FIELDS} }`;
 const ORDER_FIELDS = `id cartToken updatedAt test cancelledAt displayFinancialStatus
+  transactions(first: ${MAX_ITEMS + 1}) { ${TRANSACTION_FIELDS} }
   originalTotalPriceSet { ${MONEY_FIELDS} } currentTotalPriceSet { ${MONEY_FIELDS} }
   totalReceivedSet { ${MONEY_FIELDS} } totalRefundedSet { ${MONEY_FIELDS} }
   lineItems(first: ${MAX_ITEMS}) {
@@ -64,7 +69,7 @@ const QUERY = `query BloomBoxCommerceReference($id: ID!) {
     ... on Refund {
       id updatedAt order { ${ORDER_FIELDS} }
       transactions(first: ${MAX_ITEMS}) {
-        nodes { id kind status test amountSet { ${MONEY_FIELDS} } }
+        nodes { ${TRANSACTION_FIELDS} }
         pageInfo { hasNextPage }
       }
     }
@@ -93,6 +98,7 @@ export class ShopifyAdminOrderReader implements ShopifyOrderReader {
         shop: this.config.storeDomain, apiVersion: this.config.apiVersion,
         order: {
           id: order.id, cartToken: order.cartToken, updatedAt: order.updatedAt, test: order.test, cancelledAt: order.cancelledAt,
+          transactions: order.transactions.map(mapTransaction),
           financialStatus: order.displayFinancialStatus, originalTotal: order.originalTotalPriceSet,
           currentTotal: order.currentTotalPriceSet, received: order.totalReceivedSet, refunded: order.totalRefundedSet,
           lines: order.lineItems.nodes.map((line) => ({
@@ -101,10 +107,7 @@ export class ShopifyAdminOrderReader implements ShopifyOrderReader {
           })),
         },
         refund: refund ? { id: refund.id, updatedAt: refund.updatedAt,
-          transactions: refund.transactions.nodes.map((transaction) => ({
-            id: transaction.id, kind: transaction.kind, status: transaction.status,
-            test: transaction.test, amount: transaction.amountSet,
-          })) } : null,
+          transactions: refund.transactions.nodes.map(mapTransaction) } : null,
       };
     } catch (error) {
       if (error instanceof ShopifyOrderNotFoundError) throw error;
@@ -162,4 +165,9 @@ export class ShopifyAdminOrderReader implements ShopifyOrderReader {
       }
     }
   }
+}
+
+function mapTransaction(transaction: z.infer<typeof transactionSchema>) {
+  return { id: transaction.id, kind: transaction.kind, status: transaction.status,
+    parentId: transaction.parentTransaction?.id ?? null, test: transaction.test, amount: transaction.amountSet };
 }

@@ -1,3 +1,6 @@
+import { PostgresShopifyPaymentEvidence } from "@/modules/payment/infrastructure/shopify/postgres-shopify-payment-evidence";
+import { SettlementEvidenceConflictError, type SettlementSnapshot } from "@/modules/payment/domain/settlement-evidence";
+import { ShopifyPaymentEvidencePersistenceError } from "@/modules/payment/application/reconcile-shopify-payment";
 import { PostgresShopifyOrderLinker } from "./postgres-shopify-order-linker";
 import { shopifyCartTokenDigest } from "./shopify-cart-identity";
 import { ShopifyOrderLinkUnresolvedError, ShopifyOrderLinkPersistenceError, type ShopifyOrderLinkInput } from "../../application/link-shopify-order";
@@ -141,6 +144,71 @@ describeDatabase("durable Shopify checkout attempts", () => {
       await expect(new PostgresShopifyOrderLinker(worker).link(linkInput(intent, "gid://shopify/Order/1501"))).resolves.toMatchObject({ purchaseIntentId: intent.id });
       const privileges = await sql`SELECT has_table_privilege('bloombox_worker', 'bloombox.shopify_order_links', 'UPDATE') AS update_link, has_table_privilege('bloombox_worker', 'bloombox.shopify_checkout_attempts', 'UPDATE') AS update_cart`;
       expect(privileges[0]).toEqual({ update_link: false, update_cart: false });
+    } finally { await worker.end({ timeout: 5 }); }
+  });
+
+  const saleTransaction = { id: "gid://shopify/OrderTransaction/7001", kind: "SALE" as const, status: "SUCCEEDED" as const, parentId: null, amount: 4000 };
+  function paidSnapshot(): SettlementSnapshot {
+    return { updatedAt: "2026-09-11T10:00:00Z", cancelledAt: null, test: true, requested: 4000, received: 4000, refunded: 0, transactions: [saleTransaction] };
+  }
+  function refundedSnapshot(amount = 500): SettlementSnapshot {
+    return { ...paidSnapshot(), updatedAt: "2026-09-11T11:00:00Z", refunded: amount,
+      transactions: [saleTransaction, { id: "gid://shopify/OrderTransaction/7002", kind: "REFUND", status: "SUCCEEDED", parentId: saleTransaction.id, amount }] };
+  }
+  async function linkedForPayment(orderId: string) {
+    const intent = await prepare(); await flow(intent).useCase.execute(intent.id);
+    const link = await new PostgresShopifyOrderLinker(sql).link(linkInput(intent, orderId));
+    return { intent, link };
+  }
+  it("persists financial evidence once across concurrent retries and ignores older paid snapshots", async () => {
+    const { intent, link } = await linkedForPayment("gid://shopify/Order/7001");
+    const store = new PostgresShopifyPaymentEvidence(sql);
+    const initial = await Promise.all(Array.from({ length: 6 }, () => store.record(link, scope, paidSnapshot())));
+    expect(initial.filter((result) => result.outcome === "APPLIED")).toHaveLength(1);
+    expect(initial.filter((result) => result.outcome === "DUPLICATE")).toHaveLength(5);
+    const results = await Promise.all(Array.from({ length: 6 }, (_, index) => store.record(link, scope, index % 2 ? refundedSnapshot() : paidSnapshot())));
+    expect(results.some((result) => result.outcome === "APPLIED")).toBe(true);
+    expect(await store.record(link, scope, paidSnapshot())).toMatchObject({ outcome: "STALE", status: "PARTIALLY_REFUNDED", version: 2 });
+    const rows = await sql`SELECT status, captured_minor, refunded_minor, version FROM bloombox.shopify_payment_evidence WHERE purchase_intent_id = ${intent.id}`;
+    expect(rows[0]).toMatchObject({ status: "PARTIALLY_REFUNDED", captured_minor: "4000", refunded_minor: "500", version: 2 });
+    const events = await sql`SELECT payload FROM bloombox.outbox_events WHERE aggregate_id = ${intent.id} AND event_type = 'payment.shopify_evidence.updated'`;
+    const audits = await sql`SELECT safe_metadata FROM bloombox.audit_logs WHERE resource_id = ${intent.id} AND action = 'payment.shopify_evidence.updated'`;
+    expect(events).toHaveLength(2); expect(audits).toHaveLength(2);
+    expect(JSON.stringify([events, audits])).not.toMatch(/opaque-|secret-key|cartToken|transactions/);
+    expect(await sql`SELECT * FROM bloombox.orders WHERE purchase_intent_id = ${intent.id}`).toHaveLength(0);
+  });
+  it("preserves successful money facts when newer snapshots downgrade or alter a transaction", async () => {
+    const { link } = await linkedForPayment("gid://shopify/Order/7002"); const store = new PostgresShopifyPaymentEvidence(sql);
+    await store.record(link, scope, refundedSnapshot());
+    await expect(store.record(link, scope, { ...paidSnapshot(), updatedAt: "2026-09-11T12:00:00Z" })).rejects.toBeInstanceOf(SettlementEvidenceConflictError);
+    await expect(store.record(link, scope, { ...refundedSnapshot(600), updatedAt: "2026-09-11T12:00:00Z" })).rejects.toBeInstanceOf(SettlementEvidenceConflictError);
+    const full: SettlementSnapshot = { ...refundedSnapshot(), updatedAt: "2026-09-11T12:00:00Z", refunded: 4000,
+      transactions: [...refundedSnapshot().transactions, { id: "gid://shopify/OrderTransaction/7003", kind: "REFUND", status: "SUCCEEDED", parentId: saleTransaction.id, amount: 3500 }] };
+    expect(await store.record(link, scope, full)).toMatchObject({ outcome: "APPLIED", status: "REFUNDED", version: 2 });
+    expect(await store.record(link, scope, full)).toMatchObject({ outcome: "DUPLICATE", version: 2 });
+  });
+  it("requires the exact existing order association and rejects inconsistent provider amounts", async () => {
+    const { link } = await linkedForPayment("gid://shopify/Order/7003"); const store = new PostgresShopifyPaymentEvidence(sql);
+    for (const candidate of [{ ...link, orderId: "gid://shopify/Order/7999" }, { ...link, purchaseIntentId: randomUUID() }]) {
+      await expect(store.record(candidate, scope, paidSnapshot())).rejects.toBeInstanceOf(SettlementEvidenceConflictError);
+    }
+    await expect(store.record(link, "another-shop.myshopify.com", paidSnapshot())).rejects.toBeInstanceOf(SettlementEvidenceConflictError);
+    await expect(store.record(link, scope, { ...paidSnapshot(), received: 3999 })).rejects.toBeInstanceOf(SettlementEvidenceConflictError);
+    expect(await sql`SELECT * FROM bloombox.shopify_payment_evidence WHERE purchase_intent_id = ${link.purchaseIntentId}`).toHaveLength(0);
+  });
+  it("atomically rolls back financial evidence when the worker cannot persist its Outbox", async () => {
+    const { link } = await linkedForPayment("gid://shopify/Order/7004"); const worker = postgres(safeUrl(), { max: 1, ssl: false });
+    try {
+      await worker`SET ROLE bloombox_worker`;
+      const store = new PostgresShopifyPaymentEvidence(worker);
+      await store.record(link, scope, paidSnapshot());
+      await sql`REVOKE INSERT ON bloombox.outbox_events FROM bloombox_worker`;
+      try {
+        await expect(store.record(link, scope, refundedSnapshot())).rejects.toBeInstanceOf(ShopifyPaymentEvidencePersistenceError);
+        expect((await sql`SELECT version, refunded_minor FROM bloombox.shopify_payment_evidence WHERE purchase_intent_id = ${link.purchaseIntentId}`)[0]).toEqual({ version: 1, refunded_minor: "0" });
+        expect(await sql`SELECT * FROM bloombox.audit_logs WHERE resource_id = ${link.purchaseIntentId} AND action = 'payment.shopify_evidence.updated'`).toHaveLength(1);
+      } finally { await sql`GRANT INSERT ON bloombox.outbox_events TO bloombox_worker`; }
+      expect(await store.record(link, scope, refundedSnapshot())).toMatchObject({ status: "PARTIALLY_REFUNDED", version: 2 });
     } finally { await worker.end({ timeout: 5 }); }
   });
 
