@@ -5,3 +5,8 @@ export {
   RECIPIENT_NAME_MAX_LENGTH,
 } from "./domain/purchase-intent-policy";
 export { previewTotals, LAUNCH_PREVIEW_QUANTITY } from "./domain/preview-pricing";
+
+export {
+  type ShopifyOrderLinker, type ShopifyOrderLinkInput, type ShopifyOrderLink,
+  ShopifyOrderLinkUnresolvedError, ShopifyOrderLinkPersistenceError,
+} from "./application/link-shopify-order";

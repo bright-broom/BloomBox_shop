@@ -1,3 +1,4 @@
+import { AssociateShopifyOrder } from "../../application/associate-shopify-order";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   InvalidShopifyReferenceError, ShopifyOrderNotFoundError, ShopifyOrderUnavailableError,
@@ -14,7 +15,7 @@ const reference = { shop: config.storeDomain, kind: "ORDER", id: orderId } as co
 const bag = (amount: string) => ({ shopMoney: { amount, currencyCode: "JPY" }, presentmentMoney: { amount, currencyCode: "JPY" } });
 function order() {
   return {
-    __typename: "Order", id: orderId, updatedAt: "2026-09-11T10:00:00Z", test: true, cancelledAt: null,
+    __typename: "Order", id: orderId, cartToken: "opaque-cart-token", updatedAt: "2026-09-11T10:00:00Z", test: true, cancelledAt: null,
     displayFinancialStatus: "PAID", originalTotalPriceSet: bag("8000.00"), currentTotalPriceSet: bag("7500"),
     totalReceivedSet: bag("8000"), totalRefundedSet: bag("500"),
     lineItems: { nodes: [{ id: "gid://shopify/LineItem/31", variant: { id: "gid://shopify/ProductVariant/41" }, quantity: 1, currentQuantity: 1, originalUnitPriceSet: bag("8000") }], pageInfo: { hasNextPage: false } },
@@ -158,12 +159,23 @@ describe("Shopify authenticated order lookup", () => {
     const event = new ShopifyWebhookVerifier({ storeDomain: config.storeDomain, webhookSecret: secret, apiVersion: config.apiVersion }).verify(raw, {
       signature: createHmac("sha256", secret).update(raw).digest("base64"), shop: config.storeDomain, topic: "orders/paid", apiVersion: config.apiVersion,
     })!;
-    const { reader, fetcher } = client(response({ ...order(), displayFinancialStatus: "REFUNDED" }));
+    const { reader, fetcher } = client();
+    fetcher.mockImplementation(async () => response({ ...order(), displayFinancialStatus: "REFUNDED" }));
     const useCase = new ReadShopifyReference(reader);
     expect((await useCase.execute(event)).order.financialStatus).toBe("REFUNDED");
     for (const overrides of [{ provider: "STRIPE" as const }, { eventType: "orders/paid" }, { externalObjectId: "gid://shopify/Order/2" }, { payload: {} }]) {
       await expect(useCase.execute({ ...event, ...overrides })).rejects.toBeInstanceOf(InvalidShopifyReferenceError);
     }
     expect(fetcher).toHaveBeenCalledTimes(1);
+    const link = vi.fn().mockResolvedValue({ purchaseIntentId: "local-intent", attemptId: "local-attempt", orderId });
+    const association = new AssociateShopifyOrder(useCase, { link });
+    const linked = await association.execute({ ...event, payload: { ...event.payload, cartToken: "forged-browser-token" } });
+    expect(link).toHaveBeenCalledWith(expect.objectContaining({ shop: config.storeDomain, orderId, cartToken: "opaque-cart-token" }));
+    expect(JSON.stringify(linked)).not.toContain("opaque-cart-token");
+    link.mockRejectedValueOnce(new Error("unresolved association"));
+    await expect(association.execute(event)).rejects.toThrow("unresolved association");
+    fetcher.mockResolvedValueOnce(response(null));
+    await expect(association.execute(event)).rejects.toBeInstanceOf(ShopifyOrderNotFoundError);
+    expect(link).toHaveBeenCalledTimes(2);
   });
 });

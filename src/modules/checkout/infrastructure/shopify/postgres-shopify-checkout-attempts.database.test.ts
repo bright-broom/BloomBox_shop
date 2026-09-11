@@ -1,3 +1,6 @@
+import { PostgresShopifyOrderLinker } from "./postgres-shopify-order-linker";
+import { shopifyCartTokenDigest } from "./shopify-cart-identity";
+import { ShopifyOrderLinkUnresolvedError, ShopifyOrderLinkPersistenceError, type ShopifyOrderLinkInput } from "../../application/link-shopify-order";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -45,6 +48,101 @@ describeDatabase("durable Shopify checkout attempts", () => {
     const provider = { scope, create: vi.fn(async () => cart), retrieve: vi.fn(async () => cart) };
     return { provider, useCase: new StartShopifyCheckout(intents, repo, provider, randomUUID, () => now, enabled) };
   }
+
+  function linkInput(intent: PurchaseIntent, orderId = "gid://shopify/Order/" + Date.now()) : ShopifyOrderLinkInput {
+    return { shop: scope, orderId, apiVersion: "2026-07", cartToken: `opaque-${intent.id}`,
+      lines: [{ variantId: intent.item.externalProductReference, quantity: 1, originalUnitPrice: money(4000) }] };
+  }
+
+  it("links concurrently exactly once with atomic audit/Outbox and no commerce transitions", async () => {
+    const intent = await prepare(); await flow(intent).useCase.execute(intent.id);
+    const input = linkInput(intent, "gid://shopify/Order/1001");
+    const linker = new PostgresShopifyOrderLinker(sql, () => now);
+    const results = await Promise.all(Array.from({ length: 6 }, () => linker.link(input)));
+    expect(results.every((result) => result.purchaseIntentId === intent.id)).toBe(true);
+    expect(JSON.stringify(results)).not.toContain(`opaque-${intent.id}`);
+    const rows = await sql`SELECT cart_token_digest FROM bloombox.shopify_checkout_attempts WHERE purchase_intent_id = ${intent.id}`;
+    expect(rows[0].cart_token_digest).toBe(shopifyCartTokenDigest(`opaque-${intent.id}`));
+    const links = await sql`SELECT * FROM bloombox.shopify_order_links WHERE purchase_intent_id = ${intent.id}`;
+    const events = await sql`SELECT payload FROM bloombox.outbox_events WHERE aggregate_id = ${intent.id} AND event_type = 'checkout.shopify_order.linked'`;
+    const audits = await sql`SELECT safe_metadata FROM bloombox.audit_logs WHERE resource_id = ${intent.id} AND action = 'checkout.shopify_order.linked'`;
+    expect(links).toHaveLength(1); expect(events).toHaveLength(1); expect(audits).toHaveLength(1);
+    expect(JSON.stringify([links, events, audits])).not.toMatch(/secret-key|cartToken|cart_token_digest|opaque-/);
+    expect((await sql`SELECT status FROM bloombox.purchase_intents WHERE id = ${intent.id}`)[0].status).toBe("CHECKOUT_CREATED");
+    expect(await sql`SELECT id FROM bloombox.orders WHERE purchase_intent_id = ${intent.id}`).toHaveLength(0);
+    await expect(linker.link({ ...input, orderId: "gid://shopify/Order/1002" })).rejects.toBeInstanceOf(ShopifyOrderLinkUnresolvedError);
+  });
+
+  it("rejects wrong cart/shop/API/item facts and absent tokens without creating links", async () => {
+    const intent = await prepare(); await flow(intent).useCase.execute(intent.id);
+    const input = linkInput(intent, "gid://shopify/Order/1101"); const linker = new PostgresShopifyOrderLinker(sql);
+    const candidates: ShopifyOrderLinkInput[] = [
+      { ...input, cartToken: null }, { ...input, cartToken: "someone-elses-cart" },
+      { ...input, shop: "another-shop.myshopify.com" }, { ...input, apiVersion: "2026-04" },
+      { ...input, lines: [] }, { ...input, lines: [input.lines[0], input.lines[0]] },
+      { ...input, lines: [{ ...input.lines[0], variantId: null }] },
+      { ...input, lines: [{ ...input.lines[0], variantId: "gid://shopify/ProductVariant/102" }] },
+      { ...input, lines: [{ ...input.lines[0], quantity: 2 }] },
+      { ...input, lines: [{ ...input.lines[0], originalUnitPrice: money(3999) }] },
+    ];
+    for (const value of candidates) await expect(linker.link(value)).rejects.toBeInstanceOf(ShopifyOrderLinkUnresolvedError);
+    expect(await sql`SELECT * FROM bloombox.shopify_order_links WHERE purchase_intent_id = ${intent.id}`).toHaveLength(0);
+  });
+
+  it("does not attach the same Shopify order to a second purchase attempt", async () => {
+    const first = await prepare(); const second = await prepare();
+    await flow(first).useCase.execute(first.id); await flow(second).useCase.execute(second.id);
+    const linker = new PostgresShopifyOrderLinker(sql);
+    const results = await Promise.allSettled([first, second].map((intent) => linker.link(linkInput(intent, "gid://shopify/Order/1201"))));
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(await sql`SELECT * FROM bloombox.shopify_order_links WHERE external_order_id = 'gid://shopify/Order/1201'`).toHaveLength(1);
+  });
+
+  it("prevents reusing a cart identity for a different intent and rolls back completion", async () => {
+    const first = await prepare(); const second = await prepare();
+    await flow(first).useCase.execute(first.id);
+    const secondAttempt = randomUUID(); await attempts.claim(second.id, secondAttempt, scope, now);
+    await expect(attempts.complete(second.id, secondAttempt, { ...cartFor(second), cartId: cartFor(first).cartId }, now)).rejects.toBeInstanceOf(ShopifyCheckoutPersistenceError);
+    expect((await sql`SELECT status FROM bloombox.shopify_checkout_attempts WHERE purchase_intent_id = ${second.id}`)[0].status).toBe("CREATING");
+    expect((await sql`SELECT status FROM bloombox.purchase_intents WHERE id = ${second.id}`)[0].status).toBe("READY_FOR_CHECKOUT");
+  });
+
+  it("holds legacy unindexed READY attempts until credentials are reverified on resume", async () => {
+    const intent = await prepare(); const attemptId = randomUUID(); await attempts.claim(intent.id, attemptId, scope, now);
+    const credential = protector.protect(cartFor(intent).cartId, `shopify-cart:${intent.id}:${attemptId}:${scope}:v1`);
+    await sql`UPDATE bloombox.shopify_checkout_attempts SET status = 'READY', credential_key_id = ${credential.keyId}, credential_ciphertext = ${credential.ciphertext}, api_version = '2026-07' WHERE purchase_intent_id = ${intent.id}`;
+    await sql`UPDATE bloombox.purchase_intents SET status = 'CHECKOUT_CREATED', provider_api_version = '2026-07', checkout_created_at = ${now} WHERE id = ${intent.id}`;
+    const linker = new PostgresShopifyOrderLinker(sql);
+    await expect(linker.link(linkInput(intent, "gid://shopify/Order/1301"))).rejects.toBeInstanceOf(ShopifyOrderLinkUnresolvedError);
+    await flow(intent).useCase.execute(intent.id);
+    await expect(linker.link(linkInput(intent, "gid://shopify/Order/1301"))).resolves.toMatchObject({ purchaseIntentId: intent.id });
+  });
+
+  it("keeps cart identities and order associations immutable in the database", async () => {
+    const intent = await prepare(); await flow(intent).useCase.execute(intent.id);
+    await new PostgresShopifyOrderLinker(sql).link(linkInput(intent, "gid://shopify/Order/1401"));
+    await expect(sql`UPDATE bloombox.shopify_checkout_attempts SET cart_token_digest = NULL WHERE purchase_intent_id = ${intent.id}`).rejects.toMatchObject({ code: "23514" });
+    await expect(sql`UPDATE bloombox.shopify_order_links SET external_order_id = 'gid://shopify/Order/1402' WHERE purchase_intent_id = ${intent.id}`).rejects.toMatchObject({ code: "23514" });
+    await expect(sql`DELETE FROM bloombox.shopify_order_links WHERE purchase_intent_id = ${intent.id}`).rejects.toMatchObject({ code: "23514" });
+  });
+
+  it("links with worker privileges and rolls back the link if its Outbox write fails", async () => {
+    const intent = await prepare(); await flow(intent).useCase.execute(intent.id);
+    const worker = postgres(safeUrl(), { max: 1, ssl: false });
+    try {
+      await worker`SET ROLE bloombox_worker`;
+      await worker`SET statement_timeout = '5s'`;
+      await sql`REVOKE INSERT ON bloombox.outbox_events FROM bloombox_worker`;
+      try {
+        await expect(new PostgresShopifyOrderLinker(worker).link(linkInput(intent, "gid://shopify/Order/1501"))).rejects.toBeInstanceOf(ShopifyOrderLinkPersistenceError);
+        expect(await sql`SELECT * FROM bloombox.shopify_order_links WHERE purchase_intent_id = ${intent.id}`).toHaveLength(0);
+        expect(await sql`SELECT * FROM bloombox.audit_logs WHERE resource_id = ${intent.id} AND action = 'checkout.shopify_order.linked'`).toHaveLength(0);
+      } finally { await sql`GRANT INSERT ON bloombox.outbox_events TO bloombox_worker`; }
+      await expect(new PostgresShopifyOrderLinker(worker).link(linkInput(intent, "gid://shopify/Order/1501"))).resolves.toMatchObject({ purchaseIntentId: intent.id });
+      const privileges = await sql`SELECT has_table_privilege('bloombox_worker', 'bloombox.shopify_order_links', 'UPDATE') AS update_link, has_table_privilege('bloombox_worker', 'bloombox.shopify_checkout_attempts', 'UPDATE') AS update_cart`;
+      expect(privileges[0]).toEqual({ update_link: false, update_cart: false });
+    } finally { await worker.end({ timeout: 5 }); }
+  });
 
   it("creates once across concurrent requests and resumes from a new repository instance", async () => {
     const intent = await prepare();
@@ -251,6 +349,6 @@ function makeIntent() {
   intent.transitionTo("READY_FOR_CHECKOUT"); return intent;
 }
 function cartFor(intent: PurchaseIntent) {
-  return { cartId: `gid://shopify/Cart/${intent.id}?key=secret-key`, checkoutUrl: "https://checkout.example.test/private",
+  return { cartId: `gid://shopify/Cart/opaque-${intent.id}?key=secret-key`, checkoutUrl: "https://checkout.example.test/private",
     purchaseIntentId: intent.id, apiVersion: "2026-07" };
 }

@@ -96,5 +96,6 @@ GRANT SELECT, INSERT ON
 TO bloombox_worker;
 
 GRANT SELECT ON bloombox.shopify_checkout_attempts TO bloombox_worker;
+GRANT SELECT, INSERT ON bloombox.shopify_order_links TO bloombox_worker;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA bloombox TO bloombox_readonly;
