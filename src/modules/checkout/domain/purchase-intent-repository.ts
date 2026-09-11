@@ -1,8 +1,9 @@
-import type { PurchaseIntent, PurchaseIntentId } from "./purchase-intent";
+import type { PurchaseIntent, PurchaseIntentId, CommerceProvider } from "./purchase-intent";
 
 export interface PurchaseIntentRepository {
   save(intent: PurchaseIntent): Promise<void>;
   findById(id: PurchaseIntentId): Promise<PurchaseIntent | null>;
+  claimCommerceProvider(id: PurchaseIntentId, provider: CommerceProvider): Promise<void>;
   saveCheckoutCreated(intent: PurchaseIntent): Promise<void>;
 }
 

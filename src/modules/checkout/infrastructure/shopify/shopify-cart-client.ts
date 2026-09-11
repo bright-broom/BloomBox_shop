@@ -1,3 +1,4 @@
+import type { ShopifyCartHandoff, ShopifyCartProvider } from "../../application/shopify-checkout-attempt";
 import { z } from "zod";
 import type { ShopifyCheckoutConfig } from "@/shared/infrastructure/config/shopify-checkout-config";
 import type { PurchaseIntent } from "../../domain/purchase-intent";
@@ -39,13 +40,7 @@ const cartSchema = z.object({
   }),
 });
 
-export type ShopifyCartHandoff = Readonly<{
-  // Contains a secret key. Encrypt at rest; never include in logs or analytics.
-  cartId: string;
-  checkoutUrl: string;
-  purchaseIntentId: string;
-  apiVersion: ShopifyCheckoutConfig["apiVersion"];
-}>;
+export type { ShopifyCartHandoff } from "../../application/shopify-checkout-attempt";
 
 export class ShopifyCartInputError extends Error {
   constructor() {
@@ -93,9 +88,10 @@ const RETRIEVE_CART = `query BloomBoxCart($id: ID!)
 
 /** Disabled infrastructure boundary: not wired to the live purchase flow.
  * Cart creation has no assumed idempotency or enforceable 24-hour expiry.
- * A durable attempt claim and verified Shopify order processing must precede activation.
+ * StartShopifyCheckout owns durable attempts; ownership checks and verified order processing still precede activation.
  */
-export class ShopifyCartClient {
+export class ShopifyCartClient implements ShopifyCartProvider {
+  get scope(): string { return this.config.storeDomain; }
   constructor(
     private readonly config: ShopifyCheckoutConfig,
     private readonly fetchImplementation: typeof fetch = fetch,
