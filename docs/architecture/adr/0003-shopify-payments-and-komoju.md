@@ -59,6 +59,8 @@ Before activation, revert the new disconnected adapter without changing checkout
 
 Rollout step 2 now has a disconnected application workflow and a PostgreSQL attempt repository: durable provider/attempt claim, encrypted cart credentials, transactional intent transition/audit/Outbox, safe retrieval, and conservative UNKNOWN handling. The expiring CheckoutSession workflow is Stripe-only and also pins its provider before I/O. Result-unknown reconciliation, ownership authorization, retention completion, verified order processing and live wiring remain pending. See [implementation and migration evidence](../../operations/SHOPIFY_CHECKOUT_ATTEMPTS.md).
 
+Rollout step 3 now has disabled-by-default signed webhook capture and provider/account-scoped encrypted Inbox storage. It stores minimal order/refund references, deduplicates by body digest rather than unsigned headers, and does not project commerce state. A future Admin API lookup using the pinned shop credentials must establish object ownership and authoritative state before matching the persisted checkout attempt. Processing, reconciliation, retention completion, and real-store evidence remain pending. See [webhook capture](../../operations/SHOPIFY_WEBHOOKS.md).
+
 ## Verification
 
 Implementation references: [Cart creation](https://shopify.dev/docs/api/storefront/2026-07/mutations/cartCreate), [cart token handling](https://shopify.dev/docs/storefronts/headless/building-with-the-storefront-api/cart/manage), and [API version response headers](https://shopify.dev/docs/api/usage/versioning).

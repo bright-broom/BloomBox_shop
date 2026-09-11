@@ -1,4 +1,9 @@
 import { isIP } from "node:net";
+import { loadShopifyWebhookConfig } from "./config/shopify-webhook-config";
+import {
+  ShopifyWebhookVerifier,
+  type ShopifyWebhookHeaders,
+} from "@/modules/payment/infrastructure/shopify-webhook-verifier";
 import { headers } from "next/headers";
 import { GetProduct } from "@/modules/catalog/application/get-product";
 import { ListProducts } from "@/modules/catalog/application/list-products";
@@ -127,7 +132,9 @@ export function getStripeWebhookReceiver(): ReceiveProviderWebhook {
   const protector = new AesGcmDataProtector(loadDataProtectionConfig());
   stripeWebhookReceiver = new ReceiveProviderWebhook(
     new StripeWebhookVerifier(config),
-    new PostgresWebhookInbox(getWorkerDatabaseClient(), protector),
+    new PostgresWebhookInbox(getWorkerDatabaseClient(), protector, undefined, undefined, {
+      provider: "STRIPE", accountId: config.accountId,
+    }),
   );
   return stripeWebhookReceiver;
 }
@@ -145,7 +152,9 @@ export function getStripeEventReconciler(): StripeEventReconciler {
   const config = loadStripeConfig();
   const protector = new AesGcmDataProtector(loadDataProtectionConfig());
   const sql = getWorkerDatabaseClient();
-  const inbox = new PostgresWebhookInbox(sql, protector);
+  const inbox = new PostgresWebhookInbox(sql, protector, undefined, undefined, {
+    provider: "STRIPE", accountId: config.accountId,
+  });
   stripeEventReconciler = new StripeEventReconciler(
     sql,
     new StripeWebhookVerifier(config),
@@ -165,7 +174,9 @@ export function getStripeInboxProcessor(): ProcessProviderInbox {
   const protector = new AesGcmDataProtector(loadDataProtectionConfig());
   const sql = getWorkerDatabaseClient();
   stripeInboxProcessor = new ProcessProviderInbox(
-    new PostgresWebhookInbox(sql, protector),
+    new PostgresWebhookInbox(sql, protector, undefined, undefined, {
+      provider: "STRIPE", accountId: config.accountId,
+    }),
     new StripeCommerceEventProcessor(sql, protector, config.taxBehavior),
   );
   return stripeInboxProcessor;
@@ -177,4 +188,17 @@ export function getCommerceDataRetentionJob(): PostgresDataRetentionJob {
   }
   commerceDataRetentionJob ??= new PostgresDataRetentionJob(getWorkerDatabaseClient());
   return commerceDataRetentionJob;
+}
+
+/** Capture-only receiver; deliberately no Shopify processor is composed into the worker. */
+export function getShopifyWebhookReceiver(): ReceiveProviderWebhook<Uint8Array, ShopifyWebhookHeaders> | null {
+  const config = loadShopifyWebhookConfig();
+  if (!config) return null;
+  const protector = new AesGcmDataProtector(loadDataProtectionConfig());
+  return new ReceiveProviderWebhook(
+    new ShopifyWebhookVerifier(config),
+    new PostgresWebhookInbox(getWorkerDatabaseClient(), protector, undefined, undefined, {
+      provider: "SHOPIFY", accountId: config.storeDomain,
+    }),
+  );
 }
