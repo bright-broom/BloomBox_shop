@@ -35,3 +35,8 @@ export {
   postalCodeLookupResponseSchema,
   type PostalCodeLookupApiResponse,
 } from "./presentation/postal-code-api-schema";
+export {
+  assessDeliveryDestination, isApprovedDeliveryCoverage, DELIVERY_COVERAGE_POLICY,
+  DELIVERY_ADDRESS_TEXT_MAX_LENGTH, DELIVERY_POSTAL_INPUT_MAX_LENGTH,
+  type DeliveryCoveragePolicy, type DeliveryAddress, type DeliveryDestinationAssessment,
+} from "./domain/delivery-destination";

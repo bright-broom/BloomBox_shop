@@ -1,3 +1,4 @@
+import { ShopifyDeliveryDestinationUnavailableError } from "../../application/shopify-delivery-destination-reader";
 import { ReconcileShopifyPayment } from "../../application/reconcile-shopify-payment";
 import { SettlementEvidenceConflictError } from "../../domain/settlement-evidence";
 import { AssociateShopifyOrder } from "../../application/associate-shopify-order";
@@ -30,10 +31,16 @@ function pricedOrder() {
     subtotalPriceSet: bag("8000"), currentSubtotalPriceSet: bag("8000"), totalTaxSet: bag("727"), currentTotalTaxSet: bag("727"),
     currentShippingPriceSet: bag("0"), originalTotalDutiesSet: null, currentTotalDutiesSet: null,
     originalTotalAdditionalFeesSet: null, currentTotalAdditionalFeesSet: null, totalTipReceivedSet: bag("0"),
-    lineItems: { ...original.lineItems, nodes: original.lineItems.nodes.map((line) => ({ ...line, discountAllocations: [] })) },
-    shippingLines: { nodes: [{ originalPriceSet: bag("0"), discountedPriceSet: bag("0"), currentDiscountedPriceSet: bag("0"), isRemoved: false }], pageInfo: { hasNextPage: false } },
+    lineItems: { ...original.lineItems, nodes: original.lineItems.nodes.map((line) => ({ ...line, discountAllocations: [], taxLines: [{ priceSet: bag("727") }] })) },
+    shippingLines: { nodes: [{ originalPriceSet: bag("0"), discountedPriceSet: bag("0"), currentDiscountedPriceSet: bag("0"), isRemoved: false, taxLines: [] }], pageInfo: { hasNextPage: false } },
     transactions: [{ id: "gid://shopify/OrderTransaction/61", kind: "SALE", status: "SUCCESS", test: true, parentTransaction: null, amountSet: bag("8000") }],
   };
+}
+const approvedCoverage = { approval: "APPROVED", prefectures: ["東京都", "北海道", "沖縄県"], excludedPostalPrefixes: ["10021"] } as const;
+const destinationReference = { shop: config.storeDomain, orderId, updatedAt: "2026-09-11T10:00:00Z", test: true };
+function destinationOrder() {
+  return { __typename: "Order", id: orderId, updatedAt: destinationReference.updatedAt, test: true, cancelledAt: null, requiresShipping: true,
+    shippingAddress: { countryCodeV2: "JP", provinceCode: "JP-13", zip: "100-0001", name: "宛名の秘密", city: "市区町村の秘密", address1: "番地の秘密" } };
 }
 function refund(status = "PENDING") {
   return { __typename: "Refund", id: refundId, updatedAt: "2026-09-11T10:01:00Z", order: order(), transactions: {
@@ -177,11 +184,11 @@ describe("Shopify authenticated order lookup", () => {
       apiVersion: config.apiVersion, occurredAt: new Date(), payload: { id: orderId, objectType: "shopify_order_reference" } };
     const link = vi.fn().mockResolvedValue({ purchaseIntentId: "intent", attemptId: "attempt", orderId });
     const record = vi.fn().mockResolvedValue({ outcome: "APPLIED", status: "PARTIALLY_REFUNDED", version: 1 });
-    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, true, { find: async () => null });
+    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, true, { find: async () => null }, reader);
     expect(await useCase.execute(event)).toMatchObject({ status: "PARTIALLY_REFUNDED" });
     expect(record).toHaveBeenCalledWith(expect.objectContaining({ orderId }), config.storeDomain, expect.objectContaining({ received: 8000, refunded: 500, transactions: expect.arrayContaining([expect.objectContaining({ kind: "REFUND", status: "SUCCEEDED", amount: 500 })]) }));
     expect(JSON.stringify(record.mock.calls)).not.toContain("opaque-cart-token");
-    await expect(new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, false, { find: async () => null }).execute(event)).rejects.toBeInstanceOf(SettlementEvidenceConflictError);
+    await expect(new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, false, { find: async () => null }, reader).execute(event)).rejects.toBeInstanceOf(SettlementEvidenceConflictError);
     fetcher.mockResolvedValueOnce(response({ ...paidOrder, totalReceivedSet: bag("7999") }));
     await expect(useCase.execute(event)).rejects.toBeInstanceOf(SettlementEvidenceConflictError);
     fetcher.mockResolvedValueOnce(response({ ...paidOrder, transactions: paidOrder.transactions.map((transaction) => ({ ...transaction, test: false })) }));
@@ -194,7 +201,7 @@ describe("Shopify authenticated order lookup", () => {
       apiVersion: config.apiVersion, occurredAt: new Date(), payload: { id: orderId, objectType: "shopify_order_reference", total: 1 } };
     const link = vi.fn().mockResolvedValue({ purchaseIntentId: "intent", attemptId: "attempt", orderId });
     const record = vi.fn().mockResolvedValue({ outcome: "APPLIED", status: "CAPTURED", version: 1 });
-    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, true, { find: async () => null });
+    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, true, { find: async () => null }, reader);
     expect(await useCase.execute(event)).toMatchObject({ status: "CAPTURED", pricing: { status: "MATCHED", totals: { total: 8000, tax: 727, taxesIncluded: true } } });
     record.mockResolvedValueOnce({ outcome: "DUPLICATE", status: "CAPTURED", version: 1 });
     expect(await useCase.execute(event)).toMatchObject({ outcome: "DUPLICATE", pricing: { status: "MATCHED" } });
@@ -241,7 +248,7 @@ describe("Shopify authenticated order lookup", () => {
     const link = vi.fn().mockResolvedValue(linked);
     const record = vi.fn().mockResolvedValue({ outcome: "APPLIED", status: "CAPTURED", version: 1 });
     const now = vi.fn(() => new Date("2026-09-11T14:59:59.999Z"));
-    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, true, { find }, now);
+    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, true, { find }, reader, now);
     expect(await useCase.execute(event)).toMatchObject({ deliveryTiming: { status: "WITHIN_WINDOW", deliveryDate: "2026-09-14" } });
     expect(find).toHaveBeenCalledWith(linked, config.storeDomain);
     record.mockResolvedValue({ outcome: "DUPLICATE", status: "CAPTURED", version: 1 });
@@ -276,7 +283,7 @@ describe("Shopify authenticated order lookup", () => {
     const event = { provider: "SHOPIFY" as const, providerAccountId: config.storeDomain, eventType: "shopify.order.changed", externalEventId: "verified-digest", externalObjectId: orderId,
       apiVersion: config.apiVersion, occurredAt: new Date(), payload: { id: orderId, objectType: "shopify_order_reference" } };
     const record = vi.fn(); const find = vi.fn();
-    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link: async () => ({ purchaseIntentId: "intent", attemptId: "attempt", orderId }) }, { record }, true, { find });
+    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link: async () => ({ purchaseIntentId: "intent", attemptId: "attempt", orderId }) }, { record }, true, { find }, reader);
     const pendingRefund = { id: "gid://shopify/OrderTransaction/62", kind: "REFUND", status: "PENDING", test: true, parentTransaction: { id: complete.transactions[0].id }, amountSet: bag("500") };
     for (const scenario of [
       { source: { ...complete, cancelledAt: "2026-09-11T10:01:00Z" }, status: "CAPTURED", outcome: "APPLIED", reason: "ORDER_CANCELLED" },
@@ -291,6 +298,120 @@ describe("Shopify authenticated order lookup", () => {
       expect(await useCase.execute(event)).toMatchObject({ deliveryTiming: { status: "HELD", reason: scenario.reason } });
     }
     expect(record).toHaveBeenCalledTimes(6); expect(find).not.toHaveBeenCalled();
+  });
+  it("does not fetch protected addresses until coverage is approved", async () => {
+    const { reader, fetcher } = client();
+    expect(await reader.assessDestination(destinationReference)).toEqual({ status: "HELD", reason: "COVERAGE_NOT_APPROVED" });
+    expect(fetcher).not.toHaveBeenCalled();
+    const invalid = new ShopifyAdminOrderReader(config, fetcher, { approval: "APPROVED", prefectures: [], excludedPostalPrefixes: [] });
+    expect(await invalid.assessDestination(destinationReference)).toEqual({ status: "HELD", reason: "COVERAGE_INVALID" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("uses province codes and discards every protected address field at the provider boundary", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => response(destinationOrder()));
+    const reader = new ShopifyAdminOrderReader(config, fetcher, approvedCoverage);
+    for (const provinceCode of ["JP-01", "JP-13", "JP-47"]) {
+      fetcher.mockResolvedValueOnce(response({ ...destinationOrder(), shippingAddress: { ...destinationOrder().shippingAddress, provinceCode } }));
+      expect(await reader.assessDestination(destinationReference)).toEqual({ status: "STRUCTURALLY_VALID_AND_COVERED" });
+    }
+    const body = JSON.parse(String(fetcher.mock.calls[0][1]?.body));
+    expect(body.query).toContain("shippingAddress"); expect(body.query).toContain("provinceCode");
+    expect(body.query).not.toMatch(/billingAddress|customer|email|phone|address2|formatted|latitude|longitude|cartToken/);
+    expect(body.variables).toEqual({ id: orderId });
+  });
+  it.each([
+    { orderId: "gid://shopify/Order/0" }, { shop: "other.myshopify.com" }, { updatedAt: "bad-date" },
+  ])("rejects unsafe destination references before I/O %j", async (overrides) => {
+    const fetcher = vi.fn<typeof fetch>(); const reader = new ShopifyAdminOrderReader(config, fetcher, approvedCoverage);
+    await expect(reader.assessDestination({ ...destinationReference, ...overrides })).rejects.toBeInstanceOf(InvalidShopifyReferenceError);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("holds address deficiencies, changed order versions and non-shipping orders without returning PII", async () => {
+    const original = destinationOrder();
+    const fetcher = vi.fn<typeof fetch>(); const reader = new ShopifyAdminOrderReader(config, fetcher, approvedCoverage);
+    for (const [overrides, reason] of [
+      [{ shippingAddress: null }, "ADDRESS_MISSING"],
+      [{ shippingAddress: { ...original.shippingAddress, name: "" } }, "ADDRESS_INCOMPLETE"],
+      [{ shippingAddress: { ...original.shippingAddress, provinceCode: "JP-48" } }, "PREFECTURE_UNRECOGNIZED"],
+      [{ shippingAddress: { ...original.shippingAddress, zip: "１００－２１０１" } }, "REGION_EXCLUDED"],
+      [{ shippingAddress: { ...original.shippingAddress, countryCodeV2: "US" } }, "COUNTRY_UNSUPPORTED"],
+      [{ updatedAt: "2026-09-11T10:00:01Z" }, "ORDER_CHANGED"],
+      [{ cancelledAt: "2026-09-11T10:00:00Z" }, "ORDER_CHANGED"],
+      [{ requiresShipping: false }, "SHIPPING_NOT_REQUIRED"],
+    ] as const) {
+      fetcher.mockResolvedValueOnce(response({ ...original, ...overrides }));
+      expect(await reader.assessDestination(destinationReference)).toEqual({ status: "HELD", reason });
+    }
+  });
+  it("sanitizes protected-data denial, transport failures and scope/version/malformed responses", async () => {
+    const original = destinationOrder();
+    const fetcher = vi.fn<typeof fetch>(); const reader = new ShopifyAdminOrderReader(config, fetcher, approvedCoverage);
+    for (const result of [response(null), response(original, { errors: [{ message: "宛名の秘密" }] }),
+      response(original, { status: 403 }), response(original, { status: 429 }), response(original, { version: "2026-04" }),
+      response(original, { shop: "other.myshopify.com" }), response({ ...original, id: "gid://shopify/Order/2" }),
+      response({ ...original, test: false }), response({ ...original, shippingAddress: undefined }),
+      response({ ...original, shippingAddress: { ...original.shippingAddress, name: "秘密".repeat(256) } }),
+    ]) {
+      fetcher.mockResolvedValueOnce(result);
+      await expect(reader.assessDestination(destinationReference)).rejects.toEqual(new ShopifyDeliveryDestinationUnavailableError());
+    }
+    fetcher.mockRejectedValueOnce(new Error("宛名の秘密"));
+    await expect(reader.assessDestination(destinationReference)).rejects.toEqual(new ShopifyDeliveryDestinationUnavailableError());
+  });
+  it("persists payment before the separate address read and rechecks timing after protected-data I/O", async () => {
+    const event = { provider: "SHOPIFY" as const, providerAccountId: config.storeDomain, eventType: "shopify.order.changed", externalEventId: "verified-digest", externalObjectId: orderId,
+      apiVersion: config.apiVersion, occurredAt: new Date(), payload: { id: orderId, objectType: "shopify_order_reference", shippingAddress: { countryCodeV2: "US" } } };
+    const record = vi.fn().mockResolvedValue({ outcome: "APPLIED", status: "CAPTURED", version: 1 });
+    const fetcher = vi.fn<typeof fetch>();
+    const reader = new ShopifyAdminOrderReader(config, fetcher, approvedCoverage);
+    const find = vi.fn().mockResolvedValue({ deliveryDate: "2026-09-14", status: "CHECKOUT_CREATED", detailsAvailable: true, retentionExpiresAt: new Date("2026-10-11T00:00:00Z") });
+    const now = vi.fn(() => new Date("2026-09-11T14:59:59Z"));
+    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link: async () => ({ purchaseIntentId: "intent", attemptId: "attempt", orderId }) }, { record }, true, { find }, reader, now);
+    fetcher.mockResolvedValueOnce(response(pricedOrder())).mockImplementationOnce(async () => {
+      expect(record).toHaveBeenCalledTimes(1);
+      return response(destinationOrder(), { errors: [{ message: "protected-data denied" }] });
+    });
+    await expect(useCase.execute(event)).rejects.toEqual(new ShopifyDeliveryDestinationUnavailableError());
+    record.mockResolvedValue({ outcome: "DUPLICATE", status: "CAPTURED", version: 1 });
+    fetcher.mockResolvedValueOnce(response(pricedOrder())).mockResolvedValueOnce(response(destinationOrder()));
+    const result = await useCase.execute(event);
+    expect(result).toMatchObject({ outcome: "DUPLICATE", destination: { status: "STRUCTURALLY_VALID_AND_COVERED" } });
+    expect(JSON.stringify(result)).not.toMatch(/秘密|100-0001|JP-13|shippingAddress/);
+    fetcher.mockResolvedValueOnce(response(pricedOrder())).mockImplementationOnce(async () => {
+      now.mockReturnValue(new Date("2026-09-11T15:00:00Z")); return response(destinationOrder());
+    });
+    expect(await useCase.execute(event)).toMatchObject({ deliveryTiming: { status: "HELD", reason: "INSUFFICIENT_LEAD_TIME" },
+      destination: { status: "HELD", reason: "PREREQUISITES_UNRESOLVED" } });
+    expect(record).toHaveBeenCalledTimes(3);
+    record.mockRejectedValueOnce(new Error("payment persistence unavailable"));
+    fetcher.mockResolvedValueOnce(response(pricedOrder()));
+    await expect(useCase.execute(event)).rejects.toThrow("payment persistence unavailable");
+    expect(fetcher).toHaveBeenCalledTimes(7);
+  });
+  it("reads complete per-component taxes and holds invalid allocation while retaining settlement", async () => {
+    const original = pricedOrder(); const { reader, fetcher } = client();
+    const event = { provider: "SHOPIFY" as const, providerAccountId: config.storeDomain, eventType: "shopify.order.changed", externalEventId: "verified-digest", externalObjectId: orderId,
+      apiVersion: config.apiVersion, occurredAt: new Date(), payload: { id: orderId, objectType: "shopify_order_reference" } };
+    const record = vi.fn().mockResolvedValue({ outcome: "APPLIED", status: "CAPTURED", version: 1 });
+    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link: async () => ({ purchaseIntentId: "intent", attemptId: "attempt", orderId }) }, { record }, true, { find: async () => null }, reader);
+    fetcher.mockResolvedValueOnce(response(original));
+    expect(await useCase.execute(event)).toMatchObject({ pricing: { status: "MATCHED", snapshot: {
+      additionalTax: 0, includedTax: 727, total: 8000, items: [{ includedTax: 727, additionalTax: 0, total: 8000 }], delivery: { includedTax: 0 },
+    } } });
+    for (const taxLines of [undefined, Array.from({ length: 101 }, () => ({ priceSet: bag("1") })),
+      [{ priceSet: bag("0.1") }], [{ priceSet: { ...bag("727"), presentmentMoney: { amount: "727", currencyCode: "USD" } } }]]) {
+      for (const target of ["lineItems", "shippingLines"] as const) {
+        fetcher.mockResolvedValueOnce(response({ ...original, [target]: { ...original[target], nodes: original[target].nodes.map((line) => ({ ...line, taxLines })) } }));
+        expect(await useCase.execute(event)).toMatchObject({ status: "CAPTURED", pricing: { status: "HELD", reason: "MISSING_PRICING" } });
+      }
+    }
+    fetcher.mockResolvedValueOnce(response({ ...original, lineItems: { ...original.lineItems,
+      nodes: original.lineItems.nodes.map((line) => ({ ...line, taxLines: [{ priceSet: bag("726") }] })) } }));
+    expect(await useCase.execute(event)).toMatchObject({ status: "CAPTURED", pricing: { status: "HELD", reason: "TAX_ALLOCATION_MISMATCH" } });
+    expect(record).toHaveBeenCalledTimes(10);
+    const body = JSON.parse(String(fetcher.mock.calls[0][1]?.body));
+    expect(body.query).toContain("taxLines(first: 101)"); expect(body.query).toContain("priceSet");
+    expect(body.query).not.toMatch(/ratePercentage|channelLiable/);
   });
   it("rejects a truncated or duplicate order transaction list", async () => {
     const transaction = { id: "gid://shopify/OrderTransaction/71", kind: "SALE", status: "SUCCESS", test: true, parentTransaction: null, amountSet: bag("8000") };

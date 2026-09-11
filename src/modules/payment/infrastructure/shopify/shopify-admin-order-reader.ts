@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { DELIVERY_ADDRESS_TEXT_MAX_LENGTH, DELIVERY_POSTAL_INPUT_MAX_LENGTH, JAPAN_PREFECTURES, assessDeliveryDestination, isApprovedDeliveryCoverage, DELIVERY_COVERAGE_POLICY, type DeliveryCoveragePolicy } from "@/modules/fulfillment/public";
+import { ShopifyDeliveryDestinationUnavailableError, type ShopifyDeliveryDestinationReader, type ShopifyDestinationReference, type ShopifyDestinationAssessment } from "../../application/shopify-delivery-destination-reader";
 import type { OrderPricingFacts } from "@/modules/order/public";
 import { money } from "@/shared/domain/money";
 import type { ShopifyAdminConfig } from "@/shared/infrastructure/config/shopify-admin-config";
@@ -52,10 +54,12 @@ const pricingSchema = z.object({
   lineItems: z.object({ nodes: z.array(z.object({
     quantity: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     currentQuantity: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), originalUnitPriceSet: moneyBag,
+    taxLines: z.array(z.object({ priceSet: moneyBag })).max(MAX_ITEMS),
     discountAllocations: z.array(z.object({ allocatedAmountSet: moneyBag })).max(MAX_ITEMS),
   })).min(1).max(MAX_ITEMS), pageInfo: z.object({ hasNextPage: z.literal(false) }) }),
   shippingLines: z.object({ nodes: z.array(z.object({
     originalPriceSet: moneyBag, discountedPriceSet: moneyBag, currentDiscountedPriceSet: moneyBag, isRemoved: z.boolean(),
+    taxLines: z.array(z.object({ priceSet: moneyBag })).max(MAX_ITEMS),
   })).max(MAX_ITEMS), pageInfo: z.object({ hasNextPage: z.literal(false) }) }),
 }).transform((value): OrderPricingFacts => ({
   taxesIncluded: value.taxesIncluded, estimatedTaxes: value.estimatedTaxes, edited: value.edited,
@@ -67,9 +71,9 @@ const pricingSchema = z.object({
   additionalFees: value.originalTotalAdditionalFeesSet?.amount ?? 0, currentAdditionalFees: value.currentTotalAdditionalFeesSet?.amount ?? 0,
   tips: value.totalTipReceivedSet.amount,
   lines: value.lineItems.nodes.map((line) => ({ quantity: line.quantity, currentQuantity: line.currentQuantity,
-    unitPrice: line.originalUnitPriceSet.amount, discounts: line.discountAllocations.map((allocation) => allocation.allocatedAmountSet.amount) })),
+    unitPrice: line.originalUnitPriceSet.amount, taxes: line.taxLines.map((tax) => tax.priceSet.amount), discounts: line.discountAllocations.map((allocation) => allocation.allocatedAmountSet.amount) })),
   shipping: value.shippingLines.nodes.map((line) => ({ originalPrice: line.originalPriceSet.amount, discountedPrice: line.discountedPriceSet.amount,
-    currentDiscountedPrice: line.currentDiscountedPriceSet.amount, removed: line.isRemoved })),
+    currentDiscountedPrice: line.currentDiscountedPriceSet.amount, taxes: line.taxLines.map((tax) => tax.priceSet.amount), removed: line.isRemoved })),
 }));
 const refundSchema = z.object({
   id: gid("Refund"), updatedAt: date, order: orderSchema,
@@ -92,14 +96,14 @@ const ORDER_FIELDS = `id cartToken updatedAt test cancelledAt displayFinancialSt
   originalTotalAdditionalFeesSet { ${MONEY_FIELDS} } currentTotalAdditionalFeesSet { ${MONEY_FIELDS} }
   totalTipReceivedSet { ${MONEY_FIELDS} }
   shippingLines(first: ${MAX_ITEMS}) {
-    nodes { isRemoved originalPriceSet { ${MONEY_FIELDS} } discountedPriceSet { ${MONEY_FIELDS} } currentDiscountedPriceSet { ${MONEY_FIELDS} } }
+    nodes { taxLines { priceSet { ${MONEY_FIELDS} } } isRemoved originalPriceSet { ${MONEY_FIELDS} } discountedPriceSet { ${MONEY_FIELDS} } currentDiscountedPriceSet { ${MONEY_FIELDS} } }
     pageInfo { hasNextPage }
   }
   transactions(first: ${MAX_ITEMS + 1}) { ${TRANSACTION_FIELDS} }
   originalTotalPriceSet { ${MONEY_FIELDS} } currentTotalPriceSet { ${MONEY_FIELDS} }
   totalReceivedSet { ${MONEY_FIELDS} } totalRefundedSet { ${MONEY_FIELDS} }
   lineItems(first: ${MAX_ITEMS}) {
-    nodes { id quantity currentQuantity variant { id } originalUnitPriceSet { ${MONEY_FIELDS} } discountAllocations { allocatedAmountSet { ${MONEY_FIELDS} } } }
+    nodes { taxLines(first: ${MAX_ITEMS + 1}) { priceSet { ${MONEY_FIELDS} } } id quantity currentQuantity variant { id } originalUnitPriceSet { ${MONEY_FIELDS} } discountAllocations { allocatedAmountSet { ${MONEY_FIELDS} } } }
     pageInfo { hasNextPage }
   }`;
 const QUERY = `query BloomBoxCommerceReference($id: ID!) {
@@ -117,9 +121,24 @@ const QUERY = `query BloomBoxCommerceReference($id: ID!) {
   }
 }`;
 
+const DESTINATION_QUERY = `query BloomBoxDeliveryDestination($id: ID!) {
+  shop { myshopifyDomain }
+  node(id: $id) { __typename ... on Order {
+    id updatedAt test cancelledAt requiresShipping
+    shippingAddress { countryCodeV2 provinceCode zip name city address1 }
+  } }
+}`;
+const addressText = z.string().max(DELIVERY_ADDRESS_TEXT_MAX_LENGTH).nullable();
+const destinationSchema = z.object({
+  __typename: z.literal("Order"), id: gid("Order"), updatedAt: date, test: z.boolean(), cancelledAt: date.nullable(), requiresShipping: z.boolean(),
+  shippingAddress: z.object({ countryCodeV2: z.string().max(2).nullable(), provinceCode: z.string().max(20).nullable(),
+    zip: z.string().max(DELIVERY_POSTAL_INPUT_MAX_LENGTH).nullable(), name: addressText, city: addressText, address1: addressText }).nullable(),
+});
+
 /** Disconnected, read-only provider boundary. Returned facts do not prove a local purchase-intent association. */
-export class ShopifyAdminOrderReader implements ShopifyOrderReader {
-  constructor(private readonly config: ShopifyAdminConfig, private readonly fetchImplementation: typeof fetch = fetch) {}
+export class ShopifyAdminOrderReader implements ShopifyOrderReader, ShopifyDeliveryDestinationReader {
+  constructor(private readonly config: ShopifyAdminConfig, private readonly fetchImplementation: typeof fetch = fetch,
+    private readonly coverage: DeliveryCoveragePolicy = DELIVERY_COVERAGE_POLICY) {}
 
   async read(reference: ShopifyReference): Promise<ShopifyReferenceSnapshot> {
     if (reference.shop !== this.config.storeDomain
@@ -158,7 +177,30 @@ export class ShopifyAdminOrderReader implements ShopifyOrderReader {
     }
   }
 
-  private async request(id: string): Promise<unknown> {
+  /** Separate protected-data read: errors cannot roll back the earlier settlement write. Returns no address text. */
+  async assessDestination(reference: ShopifyDestinationReference): Promise<ShopifyDestinationAssessment> {
+    if (reference.shop !== this.config.storeDomain || !gid("Order").safeParse(reference.orderId).success
+      || !date.safeParse(reference.updatedAt).success || typeof reference.test !== "boolean") throw new InvalidShopifyReferenceError();
+    // Unapproved/invalid coverage cannot justify fetching a recipient's protected address.
+    if (!isApprovedDeliveryCoverage(this.coverage)) return assessDeliveryDestination(null, this.coverage);
+    try {
+      const envelope = envelopeSchema.parse(await this.request(reference.orderId, DESTINATION_QUERY));
+      if (envelope.data.shop.myshopifyDomain !== reference.shop) throw new ShopifyDeliveryDestinationUnavailableError();
+      const order = destinationSchema.parse(envelope.data.node);
+      if (order.id !== reference.orderId || order.test !== reference.test) throw new ShopifyDeliveryDestinationUnavailableError();
+      if (new Date(order.updatedAt).getTime() !== new Date(reference.updatedAt).getTime() || order.cancelledAt !== null) {
+        return { status: "HELD", reason: "ORDER_CHANGED" };
+      }
+      if (!order.requiresShipping) return { status: "HELD", reason: "SHIPPING_NOT_REQUIRED" };
+      const address = order.shippingAddress;
+      return assessDeliveryDestination(address ? { countryCode: address.countryCodeV2, prefecture: japanesePrefecture(address.provinceCode),
+        postalCode: address.zip, recipientName: address.name, city: address.city, addressLine: address.address1 } : null, this.coverage);
+    } catch {
+      throw new ShopifyDeliveryDestinationUnavailableError();
+    }
+  }
+
+  private async request(id: string, query = QUERY): Promise<unknown> {
     const controller = new AbortController();
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     let response: Response | undefined;
@@ -170,7 +212,7 @@ export class ShopifyAdminOrderReader implements ShopifyOrderReader {
       response = await Promise.race([this.fetchImplementation(
         `https://${this.config.storeDomain}/admin/api/${this.config.apiVersion}/graphql.json`, {
           method: "POST", headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": this.config.accessToken },
-          body: JSON.stringify({ query: QUERY, variables: { id } }),
+          body: JSON.stringify({ query, variables: { id } }),
           signal: controller.signal, redirect: "error", cache: "no-store",
         }).then((result) => {
           // Also close a late response from a transport that ignored cancellation.
@@ -213,4 +255,10 @@ export class ShopifyAdminOrderReader implements ShopifyOrderReader {
 function mapTransaction(transaction: z.infer<typeof transactionSchema>) {
   return { id: transaction.id, kind: transaction.kind, status: transaction.status,
     parentId: transaction.parentTransaction?.id ?? null, test: transaction.test, amount: transaction.amountSet };
+}
+
+// Shopify uses ISO 3166-2 JP-01..JP-47; the shared prefecture list follows that standard order.
+function japanesePrefecture(code: string | null): string | null {
+  if (!code || !/^JP-(0[1-9]|[1-3]\d|4[0-7])$/.test(code)) return null;
+  return JAPAN_PREFECTURES[Number(code.slice(3)) - 1] ?? null;
 }

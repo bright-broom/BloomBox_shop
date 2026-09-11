@@ -2,6 +2,7 @@ import { assessOrderPricing, type OrderPricingAssessment } from "@/modules/order
 import { assessDeliveryDate, type DeliveryDateAssessment } from "@/modules/fulfillment/public";
 import type { ShopifyOrderLink, ShopifyOrderLinker, ShopifyDeliveryPlanQuery } from "@/modules/checkout/public";
 import { evaluateSettlement, SettlementEvidenceConflictError, type SettlementSnapshot, type SettlementStatus } from "../domain/settlement-evidence";
+import type { ShopifyDeliveryDestinationReader, ShopifyDestinationAssessment } from "./shopify-delivery-destination-reader";
 import type { ReadShopifyReference } from "./read-shopify-reference";
 import type { VerifiedProviderEvent } from "./receive-provider-webhook";
 export type ShopifyPaymentEvidenceResult = Readonly<{ outcome: "APPLIED" | "DUPLICATE" | "STALE"; status: SettlementStatus; version: number }>;
@@ -23,9 +24,10 @@ export class ReconcileShopifyPayment {
     private readonly store: ShopifyPaymentEvidenceStore,
     private readonly expectedTestMode: boolean,
     private readonly deliveryPlans: ShopifyDeliveryPlanQuery,
+    private readonly destinations: ShopifyDeliveryDestinationReader,
     private readonly now: () => Date = () => new Date(),
   ) {}
-  async execute(event: VerifiedProviderEvent): Promise<ShopifyPaymentEvidenceResult & { pricing: OrderPricingAssessment; deliveryTiming: ShopifyDeliveryTimingAssessment }> {
+  async execute(event: VerifiedProviderEvent): Promise<ShopifyPaymentEvidenceResult & { pricing: OrderPricingAssessment; deliveryTiming: ShopifyDeliveryTimingAssessment; destination: ShopifyDestinationAssessment }> {
     const source = await this.reader.execute(event);
     const order = source.order;
     if (order.test !== this.expectedTestMode || order.transactions.some((transaction) => transaction.test !== order.test)) {
@@ -47,8 +49,16 @@ export class ReconcileShopifyPayment {
     // A stale source must never authorize fresh commercial acceptance alongside newer stored payment facts.
     const pricing: OrderPricingAssessment = payment.outcome === "STALE"
       ? { status: "HELD", reason: "STALE_OBSERVATION" } : assessOrderPricing(order.pricing);
-    const deliveryTiming = await this.assessDeliveryTiming(link, source.shop, snapshot, payment, pricing);
-    return { ...payment, pricing, deliveryTiming };
+    let deliveryTiming = await this.assessDeliveryTiming(link, source.shop, snapshot, payment, pricing);
+    let destination: ShopifyDestinationAssessment = deliveryTiming.status === "WITHIN_WINDOW"
+      ? await this.destinations.assessDestination({ shop: source.shop, orderId: order.id, updatedAt: order.updatedAt, test: order.test })
+      : { status: "HELD", reason: "PREREQUISITES_UNRESOLVED" };
+    if (destination.status === "STRUCTURALLY_VALID_AND_COVERED") {
+      // The protected-data request can cross a delivery or retention cutoff; re-read before returning a usable result.
+      deliveryTiming = await this.assessDeliveryTiming(link, source.shop, snapshot, payment, pricing);
+      if (deliveryTiming.status !== "WITHIN_WINDOW") destination = { status: "HELD", reason: "PREREQUISITES_UNRESOLVED" };
+    }
+    return { ...payment, pricing, deliveryTiming, destination };
   }
 
   private async assessDeliveryTiming(link: ShopifyOrderLink, shop: string, source: SettlementSnapshot,

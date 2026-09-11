@@ -14,4 +14,4 @@ export {
   type PublicOrderStatus,
 } from "./application/order-status-query";
 
-export { assessOrderPricing, type OrderPricingFacts, type OrderPricingAssessment } from "./domain/order-pricing";
+export { assessOrderPricing, type OrderPricingFacts, type OrderPricingAssessment, type OrderPriceSnapshot, type OrderPriceComponent } from "./domain/order-pricing";
