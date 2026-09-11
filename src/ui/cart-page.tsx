@@ -2,11 +2,12 @@
 
 import { createPurchaseIntentAction } from "@/modules/checkout/presentation/actions";
 import {
-  readCart,
+  readRecoverableCart,
   removeCart,
   storePreviewDraft,
   type BrowserCartItem,
 } from "@/modules/checkout/presentation/browser-checkout-session";
+import { isAvailableDeliveryDate } from "@/modules/fulfillment/public";
 import { formatMoney, money, multiplyMoney } from "@/shared/domain/money";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -26,7 +27,7 @@ export function CartPage({
   const revision = useCheckoutSessionRevision();
   const cart: BrowserCartItem | null | undefined = revision === null
     ? undefined
-    : readCart(window.sessionStorage);
+    : readRecoverableCart(window.sessionStorage);
   const [state, formAction, pending] = useActionState(createPurchaseIntentAction, {});
 
   useEffect(() => {
@@ -65,13 +66,20 @@ export function CartPage({
     );
   }
 
+  const deliveryDateAvailable = isAvailableDeliveryDate(cart.deliveryDate);
   const unitPrice = money(cart.unitAmount);
   const subtotal = multiplyMoney(unitPrice, cart.quantity);
 
   return (
     <div className="cart-layout">
       <div className="cart-main">
-        {added ? <p className="checkout-notice" role="status">ギフトをカートに追加しました。</p> : null}
+        {!deliveryDateAvailable ? (
+          <div className="checkout-notice" role="alert">
+            <p>お届け希望日を選び直してください。お名前とメッセージは保存されています。</p>
+            <Link className="text-link" href={`/gift/${encodeURIComponent(cart.productId)}`}>お届け希望日を変更する</Link>
+          </div>
+        ) : null}
+        {added ? <p className="checkout-notice" role="status">ギフトをカートに保存しました。</p> : null}
         {checkoutCancelled ? (
           <p className="checkout-notice" role="status">
             Stripe の決済は行われていません。カートの内容を保持しているため、もう一度お進みいただけます。
@@ -123,7 +131,7 @@ export function CartPage({
               入力内容の有効期限が切れています。ギフト設定を更新してください。
             </p>
           ) : null}
-          <button className="primary-button form-submit" type="submit" disabled={pending}>
+          <button className="primary-button form-submit" type="submit" disabled={pending || !deliveryDateAvailable}>
             {pending ? "安全に準備しています…" : "購入手続きへ"}
             <span aria-hidden="true">→</span>
           </button>

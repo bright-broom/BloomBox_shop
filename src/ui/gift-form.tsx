@@ -9,41 +9,52 @@ import {
   createPurchaseIntentSchema,
   type CreatePurchaseIntentFormState,
 } from "@/modules/checkout/presentation/create-purchase-intent-schema";
-import { storeCart } from "@/modules/checkout/presentation/browser-checkout-session";
+import { CartChangedError, readRecoverableCart, storeCart, type BrowserCartItem } from "@/modules/checkout/presentation/browser-checkout-session";
 import {
+  isAvailableDeliveryDate,
   DELIVERY_BOOKING_WINDOW_DAYS,
   DELIVERY_LEAD_TIME_DAYS,
 } from "@/modules/fulfillment/public";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
 import { formatMoney, multiplyMoney, type Money } from "@/shared/domain/money";
 
-export function GiftForm({
-  productId,
-  productName,
-  unitPrice,
-  minDeliveryDate,
-  maxDeliveryDate,
-  requestId,
-}: {
+type GiftFormProps = {
   productId: string;
   productName: string;
   unitPrice: Money;
   minDeliveryDate: string;
   maxDeliveryDate: string;
-  requestId: string;
-}) {
+};
+
+export function GiftForm(props: GiftFormProps) {
+  const revision = useCheckoutSessionRevision();
+  if (revision === null) return <p className="checkout-loading" role="status">ギフトの設定を確認しています…</p>;
+  return <GiftConfigurationForm key={props.productId} {...props} initialCart={readRecoverableCart(window.sessionStorage)} />;
+}
+
+function GiftConfigurationForm({
+  productId, productName, unitPrice, minDeliveryDate, maxDeliveryDate, initialCart,
+}: GiftFormProps & { initialCart: BrowserCartItem | null }) {
+  // Snapshot the cart once: a background revision must not overwrite in-progress typing.
+  const [cartAtOpen] = useState(initialCart);
+  const editingCart = cartAtOpen?.productId === productId ? cartAtOpen : null;
+  const replacingCart = Boolean(cartAtOpen && !editingCart);
+  const [replacementAccepted, setReplacementAccepted] = useState(false);
   const router = useRouter();
   const [state, setState] = useState<CreatePurchaseIntentFormState>({});
   const [pending, setPending] = useState(false);
-  const [quantity, setQuantity] = useState(GIFT_QUANTITY_MIN);
+  const [quantity, setQuantity] = useState(editingCart?.quantity ?? GIFT_QUANTITY_MIN);
 
   function addToCart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending || (replacingCart && !replacementAccepted)) return;
     setPending(true);
     const formData = new FormData(event.currentTarget);
     const parsed = createPurchaseIntentSchema.safeParse({
-      requestId: formData.get("requestId"),
+      requestId: crypto.randomUUID(),
       productId: formData.get("productId"),
       quantity: formData.get("quantity"),
       recipientName: formData.get("recipientName"),
@@ -65,18 +76,33 @@ export function GiftForm({
         ...parsed.data,
         productName,
         unitAmount: unitPrice.amount,
-      });
+      }, cartAtOpen?.requestId ?? null);
       router.push("/cart?added=1");
-    } catch {
-      setState({ error: "カートに追加できませんでした。ブラウザーの設定をご確認ください。" });
+    } catch (error) {
+      setState({ error: error instanceof CartChangedError ? error.message : "カートに保存できませんでした。ブラウザーの設定をご確認ください。" });
       setPending(false);
     }
   }
 
   return (
     <form className="gift-form" onSubmit={addToCart} noValidate>
-      <input type="hidden" name="requestId" value={requestId} />
       <input type="hidden" name="productId" value={productId} />
+      {editingCart ? (
+        <div className="checkout-notice" role="status">
+          カートの内容を復元しました。変更は保存するまで反映されません。
+          {!isAvailableDeliveryDate(editingCart.deliveryDate) ? <p>お届け希望日が期限外になっています。新しい日付を選択してください。</p> : null}
+        </div>
+      ) : null}
+      {replacingCart ? (
+        <div className="checkout-notice">
+          <p>カートには「{cartAtOpen?.productName}」が入っています。現在は1種類の花を贈れます。</p>
+          <label className="consent-field">
+            <input type="checkbox" checked={replacementAccepted} onChange={(event) => setReplacementAccepted(event.target.checked)} />
+            <span>今のギフトをこの花に入れ替える</span>
+          </label>
+          <Link className="text-link" href="/cart">今のカートに戻る</Link>
+        </div>
+      ) : null}
       <div className="form-intro">
         <div>
           <p className="eyebrow">GIFT DETAILS</p>
@@ -110,6 +136,7 @@ export function GiftForm({
         <input
           aria-invalid={Boolean(state.fieldErrors?.recipientName?.length)}
           id="recipientName"
+          defaultValue={editingCart?.recipientName ?? ""}
           name="recipientName"
           autoComplete="name"
           placeholder="例：山田 花子"
@@ -123,6 +150,7 @@ export function GiftForm({
         <input
           aria-invalid={Boolean(state.fieldErrors?.deliveryDate?.length)}
           id="deliveryDate"
+          defaultValue={editingCart?.deliveryDate ?? ""}
           name="deliveryDate"
           type="date"
           min={minDeliveryDate}
@@ -143,6 +171,7 @@ export function GiftForm({
         <textarea
           aria-invalid={Boolean(state.fieldErrors?.giftMessage?.length)}
           id="giftMessage"
+          defaultValue={editingCart?.giftMessage ?? ""}
           name="giftMessage"
           rows={5}
           maxLength={GIFT_MESSAGE_MAX_LENGTH}
@@ -153,10 +182,11 @@ export function GiftForm({
         <FieldError id="giftMessage-error" messages={state.fieldErrors?.giftMessage} />
       </div>
       {state.error ? <p className="form-error" role="alert">{state.error}</p> : null}
-      <button className="primary-button form-submit" type="submit" disabled={pending}>
-        {pending ? "カートに追加しています…" : "カートに入れる"}
+      <button className="primary-button form-submit" type="submit" disabled={pending || (replacingCart && !replacementAccepted)}>
+        {pending ? "保存しています…" : editingCart ? "変更を保存する" : "カートに入れる"}
         <span aria-hidden="true">→</span>
       </button>
+      {cartAtOpen ? <Link className="text-link" href="/cart">保存せずカートに戻る</Link> : null}
       <p className="secure-note">カートに入れた時点では、注文も決済も発生しません</p>
     </form>
   );
