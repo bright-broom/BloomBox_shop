@@ -17,6 +17,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_fulfillment_approver') THEN
     CREATE ROLE bloombox_fulfillment_approver NOLOGIN;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_permission_manager') THEN
+    CREATE ROLE bloombox_permission_manager NOLOGIN;
+  END IF;
 END
 $$;
 
@@ -108,6 +111,8 @@ GRANT SELECT, INSERT, UPDATE ON bloombox.shopify_fulfillment_intakes TO bloombox
 GRANT UPDATE (status, version, updated_at) ON bloombox.fulfillments TO bloombox_worker;
 
 GRANT USAGE ON SCHEMA bloombox TO bloombox_fulfillment_approver;
+GRANT SELECT, INSERT ON bloombox.fulfillment_approval_submission_limits TO bloombox_fulfillment_approver;
+GRANT UPDATE (attempts, updated_at) ON bloombox.fulfillment_approval_submission_limits TO bloombox_fulfillment_approver;
 GRANT SELECT ON bloombox.fulfillment_operator_permissions, bloombox.fulfillment_operator_approvals,
   bloombox.shopify_fulfillment_intakes, bloombox.fulfillments, bloombox.shopify_payment_evidence,
   bloombox.shopify_payment_projections, bloombox.payments, bloombox.orders, bloombox.order_items,
@@ -120,5 +125,15 @@ GRANT UPDATE (order_id) ON bloombox.order_gift_snapshots TO bloombox_fulfillment
 GRANT UPDATE (purchase_intent_id) ON bloombox.shopify_payment_evidence TO bloombox_fulfillment_approver;
 GRANT UPDATE (payment_id) ON bloombox.shopify_payment_projections TO bloombox_fulfillment_approver;
 GRANT UPDATE (fulfillment_id) ON bloombox.shopify_fulfillment_intakes TO bloombox_fulfillment_approver;
+
+GRANT USAGE ON SCHEMA bloombox TO bloombox_permission_manager;
+-- Approval and permission-revocation submissions share the same operator allowance.
+GRANT SELECT, INSERT ON bloombox.fulfillment_approval_submission_limits TO bloombox_permission_manager;
+GRANT UPDATE (attempts, updated_at) ON bloombox.fulfillment_approval_submission_limits TO bloombox_permission_manager;
+GRANT SELECT ON bloombox.fulfillment_permission_managers, bloombox.fulfillment_operator_permissions,
+  bloombox.fulfillment_permission_revocations TO bloombox_permission_manager;
+GRANT UPDATE (id) ON bloombox.fulfillment_permission_managers, bloombox.fulfillment_operator_permissions TO bloombox_permission_manager;
+GRANT INSERT ON bloombox.fulfillment_permission_revocations, bloombox.audit_logs TO bloombox_permission_manager;
+GRANT EXECUTE ON FUNCTION bloombox.disable_fulfillment_permission(uuid, bigint) TO bloombox_permission_manager;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA bloombox TO bloombox_readonly;

@@ -28,4 +28,10 @@ describe("approval form states", () => {
     html = renderToStaticMarkup(<FulfillmentApprovalForm action={action} reviewPath="/review" control={{ status: "READY", intent: "same-intent" }} />);
     expect(html).toContain(copy.messages.RECORDED); expect(html).not.toContain("<form");
   });
+  it("announces throttling while retaining the original context for a later retry", () => {
+    hook.state = { status: "RATE_LIMITED" };
+    const html = renderToStaticMarkup(<FulfillmentApprovalForm action={action} reviewPath="/review" control={{ status: "READY", intent: "same-intent" }} />);
+    expect(html).toContain(copy.messages.RATE_LIMITED); expect(html).toContain('role="alert"');
+    expect(html).toContain('value="same-intent"'); expect(html).not.toContain('disabled=""');
+  });
 });

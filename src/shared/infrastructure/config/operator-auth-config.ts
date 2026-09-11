@@ -13,13 +13,13 @@ const schema = z.object({
     .pipe(z.array(z.email()).min(1).max(20)),
   AUTH_OPERATOR_BINDINGS: z.string().default("[]").transform((value, context) => {
     try { return JSON.parse(value); } catch { context.addIssue({ code: "custom", message: "Invalid bindings" }); return z.NEVER; }
-  }).pipe(z.array(z.object({ subject, operatorId: z.uuid() }).strict()).max(20))
+  }).pipe(z.array(z.object({ subject, operatorId: z.uuid(), sessionVersion: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional() }).strict()).max(20))
     .refine((values) => new Set(values.map((v) => v.subject)).size === values.length && new Set(values.map((v) => v.operatorId)).size === values.length),
   OPERATOR_SHOPIFY_MODE: z.enum(["test", "live"]).default("test"),
 });
 export type OperatorAuthConfig = Readonly<{
   origin: string; secret: string; clientId: string; clientSecret: string; allowedEmails: readonly string[];
-  bindings: ReadonlyArray<Readonly<{ subject: string; operatorId: string }>>; testMode: boolean;
+  bindings: ReadonlyArray<Readonly<{ subject: string; operatorId: string; sessionVersion?: number }>>; testMode: boolean;
 }>;
 export class InvalidOperatorAuthConfigurationError extends Error {
   constructor() { super("Operator authentication configuration is invalid"); this.name = "InvalidOperatorAuthConfigurationError"; }

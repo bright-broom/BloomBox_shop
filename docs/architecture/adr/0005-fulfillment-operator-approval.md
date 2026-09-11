@@ -12,7 +12,7 @@ Fulfillment intake can verify paid, untouched orders and allocated stock, but ca
 
 Fulfillment owns a narrow, shop-scoped approval permission and immutable approval receipts in PostgreSQL. A request-bound, server-injected identity port must verify the operator's session and map it to an opaque UUID; caller-supplied operator IDs, role flags, customer sessions, and worker tokens are not identity adapters. Missing identity denies access. This port does not select a provider or implement login.
 
-A separate NOLOGIN database role can read prerequisites, lock their immutable identity columns, and append approval/audit/Outbox records. It cannot change money, fulfillment status, permission scope, validity, or approval history. Permission provisioning/revocation requires the database owner, records every revision in audit, and has no public route or seeded grants. Real identity-provider configuration, explicit operator bindings and an authenticated permission-administration flow remain activation prerequisites.
+A separate NOLOGIN database role can read prerequisites, lock their immutable identity columns, and append approval/audit/Outbox records. It cannot change money, fulfillment status, permission scope, validity, or approval history. Permission provisioning requires the database owner. ADR 0007 adds a separate scoped-manager internal revocation command with actor audit and disable-only database rights. Every revision remains audited, with no public management route or seeded grants. Real identity-provider configuration, explicit operator bindings and an authenticated permission-administration flow remain activation prerequisites.
 
 The internal review query uses the same request-bound identity and permission boundary. It returns a minimal read-only DTO, excluding buyer/recipient identity, protected fields and approval capabilities. Its storefront-accessible preview uses synthetic data only and is disabled in production runtime. ADR 0006 connects the verified Google identity adapter to the scoped inbox, review query and approval form. Real OAuth configuration remains pending.
 
@@ -26,6 +26,12 @@ The authenticated review page issues an encrypted, purpose-separated JWE only wh
 
 A retry retains the same encrypted context; a successful commit remains successful if subsequent view revalidation fails. Refreshing the page rereads stored evidence, not Shopify. This context is neither approval nor dispatch authority. See [operation and verification details](../../operations/OPERATOR_APPROVAL_FORM.md).
 
+## Shared submission allowance
+
+Migration 0015 adds a Fulfillment-owned, bounded row per server-mapped operator for a rolling limit of ten submissions in sixty seconds. The dedicated operator role can read/insert and update only timestamps, not reassign or delete the key. No customer data, IP address, token or new service is needed. Independent server connections serialize on the row and read database time after acquiring the lock. Lock/statement timeouts and storage errors fail closed.
+
+The authenticated form boundary consumes allowance before decrypting context and invoking approval. Consumption commits separately so rejected, failed or duplicate approval work cannot refund it; excessive attempts do not extend the window. The UI keeps the same intent for later retry, subject to unchanged evidence and session deadlines. This covers authenticated approval submissions, not all HTTP traffic or identity-provider requests. Rollout must apply the additive migration and dedicated grants before switching all approval traffic; rollback disables approval rather than removing the limiter alone. See [operations and verification](../../operations/OPERATOR_APPROVAL_RATE_LIMIT.md).
+
 ## Alternatives and consequences
 
 - A client `isAdmin` flag or a shared worker credential cannot establish a human principal.
@@ -35,7 +41,7 @@ A retry retains the same encrypted context; a successful commit remains successf
 
 ## Rollout and rollback
 
-Migration 0014 is additive. Keep the default policy pending. Production needs real Google configuration and explicit operator bindings, session-revocation assessment, audited permission administration, operation rate limiting, real-store/browser/warehouse tests and a separately designed dispatch command. The authenticated review form and CSRF boundary are implemented; rate limiting is not. Synthetic tests do not approve merchant terms or actual operators.
+Migration 0014 is additive. Keep the default policy pending. Production needs real Google configuration and explicit operator bindings, session-revocation assessment, audited permission administration, real-store/browser/warehouse tests and a separately designed dispatch command. The authenticated review form, CSRF boundary and shared submission rate limit are implemented; real-provider activation remains pending. Synthetic tests do not approve merchant terms or actual operators.
 
 Rollback disables composition of the approval capability. Retain the forward migration, receipts and audit; never delete approval history or downgrade migration checksums.
 

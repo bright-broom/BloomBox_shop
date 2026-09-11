@@ -9,6 +9,7 @@ export const OPERATOR_AUTH_PATH = "/api/operator-auth";
 const profileSchema = z.object({ sub: z.string().regex(/^[A-Za-z0-9_-]{1,255}$/), email: z.email(), email_verified: z.literal(true),
   iss: z.literal("https://accounts.google.com") });
 const tokenSchema = z.object({ googleSubject: z.string().regex(/^[A-Za-z0-9_-]{1,255}$/), operatorEmail: z.email(),
+  operatorId: z.uuid().nullable(), sessionVersion: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   loginExpiresAt: z.number().int().positive().max(Number.MAX_SAFE_INTEGER) });
 
 export function createOperatorAuthOptions(config: OperatorAuthConfig, now: () => number = Date.now): NextAuthConfig {
@@ -36,12 +37,19 @@ export function createOperatorAuthOptions(config: OperatorAuthConfig, now: () =>
         if (account) {
           const value = profileSchema.safeParse(profile);
           if (account.provider !== "google" || !value.success || account.providerAccountId !== value.data.sub || !allowed(value.data.email)) return null;
-          return { googleSubject: value.data.sub, operatorEmail: value.data.email.toLowerCase(), loginExpiresAt: now() + OPERATOR_SESSION_SECONDS * 1000 };
+          const binding = config.bindings.find((item) => item.subject === value.data.sub);
+          return { googleSubject: value.data.sub, operatorEmail: value.data.email.toLowerCase(),
+            operatorId: binding?.operatorId ?? null, sessionVersion: binding?.sessionVersion ?? 0,
+            loginExpiresAt: now() + OPERATOR_SESSION_SECONDS * 1000 };
         }
         // Session-update payloads are deliberately ignored. Identity comes only from the verified login.
         const value = tokenSchema.safeParse(token);
         if (!value.success || !allowed(value.data.operatorEmail) || value.data.loginExpiresAt <= now()
           || value.data.loginExpiresAt > now() + OPERATOR_SESSION_SECONDS * 1000) return null;
+        // Never transfer an existing login to a new binding or renew a revoked session from client updates.
+        const binding = config.bindings.find((item) => item.subject === value.data.googleSubject);
+        if (value.data.operatorId !== (binding?.operatorId ?? null)
+          || value.data.sessionVersion !== (binding?.sessionVersion ?? 0)) return null;
         return value.data;
       },
       async session({ token }) {
