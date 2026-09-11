@@ -119,3 +119,5 @@ Before a material change, answer:
 5. What is atomic, and what is eventually consistent?
 6. Does the change cross a privacy or authorization boundary?
 7. Is a smaller reversible design sufficient?
+
+- [ADR 0006: Google operator login](adr/0006-google-operator-login.md) — implementation selection; live OAuth setup and account binding required

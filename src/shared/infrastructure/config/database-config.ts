@@ -43,6 +43,10 @@ export function loadWorkerDatabaseConfig(
   });
 }
 
+export function loadOperatorDatabaseConfig(environment: Readonly<Record<string, string | undefined>> = process.env): DatabaseConfig {
+  return loadDatabaseConfig({ ...environment, DATABASE_URL: environment.DATABASE_OPERATOR_URL });
+}
+
 function isPostgresUrl(value: string): boolean {
   try {
     const protocol = new URL(value).protocol;

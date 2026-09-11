@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   InvalidDatabaseConfigurationError,
   loadDatabaseConfig,
+  loadOperatorDatabaseConfig,
 } from "./database-config";
 import {
   InvalidDataProtectionConfigurationError,
@@ -22,6 +23,11 @@ describe("runtime configuration", () => {
 });
 
 describe("database configuration", () => {
+  it("requires a dedicated operator connection without falling back to application credentials", () => {
+    expect(() => loadOperatorDatabaseConfig({ DATABASE_URL: "postgres://localhost/app" })).toThrow(InvalidDatabaseConfigurationError);
+    expect(loadOperatorDatabaseConfig({ DATABASE_URL: "postgres://localhost/app", DATABASE_OPERATOR_URL: "postgres://localhost/operator" }).url)
+      .toBe("postgres://localhost/operator");
+  });
   it("requires a PostgreSQL URL and bounded pool size", () => {
     expect(loadDatabaseConfig({
       DATABASE_URL: "postgres://localhost:5432/bloombox",

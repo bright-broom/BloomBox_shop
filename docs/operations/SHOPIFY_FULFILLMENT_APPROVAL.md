@@ -1,12 +1,12 @@
 # Shopify発送の担当者承認記録
 
-2026-09-12時点。`PostgresShopifyFulfillmentApprover`は、担当者の店舗別権限と確認した受付版を検証し、承認時点の判断を保存する内部処理です。担当者ログイン、承認画面、公開API、発送指示は未接続です。初期方針はPENDING、認証Adapter未指定は拒否です。[ADR 0005](../architecture/adr/0005-fulfillment-operator-approval.md)は本番導入前の提案として扱います。
+2026-09-12時点。`PostgresShopifyFulfillmentApprover`は、担当者の店舗別権限と確認した受付版を検証し、承認時点の判断を保存する内部処理です。Google ログインと権限付き参照ルートは実装済み・接続設定待ちです。承認操作の公開 API と発送指示は未接続です。初期方針はPENDING、認証Adapter未指定は拒否です。[ADR 0005](../architecture/adr/0005-fulfillment-operator-approval.md)は本番導入前の提案として扱います。
 
-[権限付き参照と確認画面](SHOPIFY_FULFILLMENT_REVIEW.md)を追加しました。画面は合成データのプレビューで、実担当者認証・実注文の表示/承認は未接続です。
+[権限付き参照と確認画面](SHOPIFY_FULFILLMENT_REVIEW.md)を追加しました。合成データのプレビューに加え、[Google ログイン](GOOGLE_OPERATOR_LOGIN.md) による実注文の参照ルートを追加しました。実接続と権限設定、承認操作は未完了です。
 
 ## 誰が承認できるか
 
-サーバーが注入する`FulfillmentOperatorIdentity.current()`から、検証済み担当者の内部UUIDとセッション期限を取得します。将来のAdapterは実セッションの検証・失効確認と内部IDへの対応付けを担います。リクエストは店舗、発送ID、確認済み受付版、冪等キーだけです。担当者IDやisAdminを追加した入力は拒否します。購入者ログイン、Webhook認証、共通workerトークンを担当者認証として転用しません。
+サーバーが注入する`FulfillmentOperatorIdentity.current()`から、検証済み担当者の内部UUIDとセッション期限を取得します。Google Adapter が実セッションの検証・失効確認と内部 ID への対応付けを担います。リクエストは店舗、発送ID、確認済み受付版、冪等キーだけです。担当者IDやisAdminを追加した入力は拒否します。購入者ログイン、Webhook認証、共通workerトークンを担当者認証として転用しません。
 
 `fulfillment_operator_permissions`で担当者と店舗の組を一意に管理します。enabled、期限、版を検証し、失効後の再送も拒否します。権限の作成・変更はDB所有者に限定し、全変更を監査します。担当者や店舗の付け替え、削除、版の巻戻しは拒否します。実担当者への権限付与は今回行っていません。実運用には認証済み管理操作と実施者の監査を追加する必要があります。現在の管理変更ログはDB管理操作をSYSTEMとして記録し、担当者個人の操作証跡とは扱いません。
 
