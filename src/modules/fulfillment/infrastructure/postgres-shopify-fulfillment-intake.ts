@@ -10,6 +10,10 @@ import { shopifyFulfillmentObservationSchema, shopifyFulfillmentSnapshotSchema }
 import { reconcileFulfillmentQuantities } from "../domain/shopify-fulfillment-quantities";
 import { acceptedFulfillmentItemsSchema, fulfillmentQuantityAssessmentSchema, shopifyFulfillmentQuantitiesSchema } from "./shopify-fulfillment-quantities-schema";
 
+import type { ShopifyFulfillmentStockReader } from "../application/read-shopify-fulfillment-stock";
+import { assessFulfillmentStock, type FulfillmentStockAssessment } from "../domain/shopify-fulfillment-stock";
+import { parseShopifyFulfillmentStockSnapshot, fulfillmentStockAssessmentSchema } from "./shopify-fulfillment-stock-schema";
+
 const minor = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const storedInteger = z.union([z.number(), z.string().regex(/^\d+$/), z.bigint()]).transform(Number).pipe(minor);
 function fail(): never { throw new ShopifyFulfillmentIntakeError(); }
@@ -18,7 +22,7 @@ function fail(): never { throw new ShopifyFulfillmentIntakeError(); }
 export class PostgresShopifyFulfillmentIntake implements ShopifyFulfillmentIntake {
   constructor(private readonly sql: DatabaseClient, private readonly expectedTestMode: boolean,
     private readonly policy: FulfillmentIntakePolicy = FULFILLMENT_INTAKE_POLICY,
-    private readonly now: () => Date = () => new Date(), private readonly reader?: ShopifyFulfillmentReader) {}
+    private readonly now: () => Date = () => new Date(), private readonly reader?: ShopifyFulfillmentReader, private readonly stockReader?: ShopifyFulfillmentStockReader) {}
   async reconcile(input: ShopifyFulfillmentReference): Promise<ShopifyFulfillmentIntakeResult> {
     try {
       const value = z.object({ shop: z.string().max(255).regex(/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/),
@@ -34,6 +38,10 @@ export class PostgresShopifyFulfillmentIntake implements ShopifyFulfillmentIntak
       if (quantities && (!snapshot || quantities.fulfillments.length !== snapshot.fulfillments.length
         || quantities.fulfillments.some((item) => !snapshot.fulfillments.some((fact) => fact.id === item.id && fact.status === item.status
           && fact.updatedAt === item.updatedAt && fact.inTransitAt === item.inTransitAt && fact.deliveredAt === item.deliveredAt)))) fail();
+      const stockSnapshot = this.stockReader ? parseShopifyFulfillmentStockSnapshot(await this.stockReader.readFulfillmentStock({
+        shop: value.shop, orderId: value.externalOrderId, test: this.expectedTestMode,
+      })) : null;
+      if (stockSnapshot && (stockSnapshot.shop !== value.shop || stockSnapshot.orderId !== value.externalOrderId || stockSnapshot.test !== this.expectedTestMode)) fail();
       return await this.sql.begin(async (tx) => {
         // Serialize intake and financial updates on the existing parent; no other module's data is changed.
         const [evidence] = await tx`SELECT * FROM bloombox.shopify_payment_evidence WHERE purchase_intent_id = ${value.purchaseIntentId} FOR UPDATE`;
@@ -81,8 +89,21 @@ export class PostgresShopifyFulfillmentIntake implements ShopifyFulfillmentIntak
         // A previous empty read cannot justify cancellation when the reader is no longer configured.
         const providerActivity = snapshot === null && observation.activity === "NONE" ? "UNVERIFIED" : observation.activity;
         const now = this.now();
+        const previousStock = previous?.provider_stock_source ? parseShopifyFulfillmentStockSnapshot(previous.provider_stock_source) : null;
+        if (previousStock && (previousStock.shop !== value.shop || previousStock.orderId !== value.externalOrderId || previousStock.test !== this.expectedTestMode)) fail();
+        let stockSource = stockSnapshot ?? previousStock;
+        let stockAssessment: FulfillmentStockAssessment = assessFulfillmentStock(acceptedFulfillmentItemsSchema.parse(items), stockSnapshot, now);
+        if (stockSnapshot && previousStock && (Date.parse(stockSnapshot.checkedAt) < Date.parse(previousStock.checkedAt)
+          || (Date.parse(stockSnapshot.checkedAt) === Date.parse(previousStock.checkedAt) && JSON.stringify(stockSnapshot) !== JSON.stringify(previousStock)))) {
+          stockSource = previousStock;
+          stockAssessment = { status: "UNVERIFIED", reason: "STALE_SNAPSHOT" };
+        }
+        if (stockSnapshot && quantities && Date.parse(stockSnapshot.orderUpdatedAt) !== Date.parse(quantities.updatedAt)) {
+          stockAssessment = { status: "UNVERIFIED", reason: "STALE_SNAPSHOT" };
+        }
+        const previousStockAssessment = previous?.provider_stock_assessment ? fulfillmentStockAssessmentSchema.parse(previous.provider_stock_assessment) : null;
         const retention = z.date().nullable().parse(row.retention_expires_at);
-        const decision = assessFulfillmentIntake({ status: currentStatus, providerActivity,
+        const decision = assessFulfillmentIntake({ status: currentStatus, providerActivity, stockAssessment, quantityAssessment,
           orderStatus: z.enum(["PENDING_CONFIRMATION", "CONFIRMED", "CANCELLED", "CLOSED"]).parse(row.order_status),
           orderCancelled: source.cancelledAt !== null, total, captured: source.received, refunded: source.refunded,
           pendingTransactions: source.transactions.some((item) => item.status === "PENDING"),
@@ -93,8 +114,9 @@ export class PostgresShopifyFulfillmentIntake implements ShopifyFulfillmentIntak
         if (previous && previous.payment_evidence_version === paymentVersion && previous.decision === decision.kind
           && previous.reason_code === decision.reason && previous.observed_status === status && previousObservation.activity === observation.activity
           && JSON.stringify(previousQuantityAssessment) === JSON.stringify(quantityAssessment)
-          && JSON.stringify(previousQuantitySource) === JSON.stringify(quantityRecord.source)) {
-          return { outcome: "DUPLICATE", fulfillmentId, status, decision, providerActivity, quantityAssessment };
+          && JSON.stringify(previousQuantitySource) === JSON.stringify(quantityRecord.source)
+          && JSON.stringify(previousStock) === JSON.stringify(stockSource) && JSON.stringify(previousStockAssessment) === JSON.stringify(stockAssessment)) {
+          return { outcome: "DUPLICATE", fulfillmentId, status, decision, providerActivity, quantityAssessment, stockAssessment };
         }
         const version = previous ? storedInteger.parse(previous.version) + 1 : 1;
         if (!Number.isSafeInteger(version)) fail();
@@ -113,21 +135,22 @@ export class PostgresShopifyFulfillmentIntake implements ShopifyFulfillmentIntak
         if (previous) {
           await tx`UPDATE bloombox.shopify_fulfillment_intakes SET payment_evidence_version = ${paymentVersion}, version = ${version},
             provider_observation = ${tx.json(observation)},
+            provider_stock_source = ${stockSource ? tx.json(stockSource) : null}, provider_stock_assessment = ${tx.json(stockAssessment)},
             provider_quantity_source = ${quantityRecord.source ? tx.json(quantityRecord.source) : null}, provider_quantity_assessment = ${tx.json(quantityAssessment)},
             decision = ${decision.kind}, observed_status = ${status}, reason_code = ${decision.reason}, updated_at = ${now} WHERE fulfillment_id = ${fulfillmentId}`;
         } else {
           await tx`INSERT INTO bloombox.shopify_fulfillment_intakes (fulfillment_id, order_id, purchase_intent_id, provider_scope, external_order_id,
-            payment_evidence_version, decision, observed_status, reason_code, updated_at, provider_observation, provider_quantity_source, provider_quantity_assessment)
+            payment_evidence_version, decision, observed_status, reason_code, updated_at, provider_observation, provider_quantity_source, provider_quantity_assessment, provider_stock_source, provider_stock_assessment)
             VALUES (${fulfillmentId}, ${value.orderId}, ${value.purchaseIntentId}, ${value.shop}, ${value.externalOrderId},
               ${paymentVersion}, ${decision.kind}, ${status}, ${decision.reason}, ${now}, ${tx.json(observation)},
-              ${quantityRecord.source ? tx.json(quantityRecord.source) : null}, ${tx.json(quantityAssessment)})`;
+              ${quantityRecord.source ? tx.json(quantityRecord.source) : null}, ${tx.json(quantityAssessment)}, ${stockSource ? tx.json(stockSource) : null}, ${tx.json(stockAssessment)})`;
         }
-        const payload = { fulfillmentId, orderId: value.orderId, status, decision: decision.kind, reason: decision.reason, paymentVersion, intakeVersion: version, providerActivity, quantityAssessment };
+        const payload = { fulfillmentId, orderId: value.orderId, status, decision: decision.kind, reason: decision.reason, paymentVersion, intakeVersion: version, providerActivity, quantityAssessment, stockAssessment };
         await tx`INSERT INTO bloombox.outbox_events (id, aggregate_type, aggregate_id, event_type, event_version, payload, occurred_at, available_at)
           VALUES (${randomUUID()}, 'Fulfillment', ${fulfillmentId}, 'fulfillment.shopify_intake.updated', 1, ${tx.json(payload)}, ${now}, ${now})`;
         await tx`INSERT INTO bloombox.audit_logs (id, actor_type, action, resource_type, resource_id, safe_metadata, occurred_at)
           VALUES (${randomUUID()}, 'SYSTEM', 'fulfillment.shopify_intake.updated', 'Fulfillment', ${fulfillmentId}, ${tx.json(payload)}, ${now})`;
-        return { outcome: "APPLIED", fulfillmentId, status, decision, providerActivity, quantityAssessment };
+        return { outcome: "APPLIED", fulfillmentId, status, decision, providerActivity, quantityAssessment, stockAssessment };
       });
     } catch { throw new ShopifyFulfillmentIntakeError(); }
   }

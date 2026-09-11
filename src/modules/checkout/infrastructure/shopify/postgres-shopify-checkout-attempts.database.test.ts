@@ -1,6 +1,8 @@
 import { PostgresShopifyOrderAcceptor } from "@/modules/order/infrastructure/postgres-shopify-order-acceptor";
 import { PostgresShopifyFulfillmentIntake } from "@/modules/fulfillment/infrastructure/postgres-shopify-fulfillment-intake";
 import { ShopifyFulfillmentIntakeError } from "@/modules/fulfillment/public";
+import { PostgresShopifyFulfillmentApprover } from "@/modules/fulfillment/infrastructure/postgres-shopify-fulfillment-approver";
+import { FulfillmentApprovalError } from "@/modules/fulfillment/public";
 import { PostgresShopifyAcceptedOrderQuery } from "@/modules/order/infrastructure/postgres-shopify-accepted-order-query";
 import { PostgresShopifyOrderPaymentProjector } from "@/modules/payment/infrastructure/shopify/postgres-shopify-order-payment-projector";
 import { ShopifyOrderPaymentProjectionError } from "@/modules/payment/application/project-shopify-order-payment";
@@ -51,6 +53,7 @@ const scope = "example-shop.myshopify.com";
 
 describeDatabase("durable Shopify checkout attempts", () => {
   const sql = postgres(safeUrl(), { max: 4, ssl: false });
+  const approvalSql = postgres(safeUrl(), { max: 4, ssl: false, connection: { role: "bloombox_fulfillment_approver" } });
   const protector = new AesGcmDataProtector({ activeKeyId: "test", keys: new Map([["test", Buffer.alloc(32, 21)]]) });
   const intents = new PostgresPurchaseIntentRepository(sql, protector);
   const attempts = new PostgresShopifyCheckoutAttempts(sql, protector);
@@ -61,7 +64,7 @@ describeDatabase("durable Shopify checkout attempts", () => {
     });
     await sql.unsafe((await readFile("database/roles.sql", "utf8")).replace(/^\\set ON_ERROR_STOP on$/m, ""));
   });
-  afterAll(async () => { await sql.end({ timeout: 5 }); });
+  afterAll(async () => { await approvalSql.end({ timeout: 5 }); await sql.end({ timeout: 5 }); });
   async function prepare() { const intent = makeIntent(); await intents.save(intent); return intent; }
   function flow(intent: PurchaseIntent, repo: ShopifyCheckoutAttempts = attempts, enabled = () => true) {
     const cart = cartFor(intent);
@@ -232,7 +235,7 @@ describeDatabase("durable Shopify checkout attempts", () => {
       address: { countryCode: "JP", prefecture: "東京都", postalCode: "100-0001", recipientName: "配送宛名", city: "千代田区",
         addressLine: "秘密の番地", addressLine2: "秘密の建物", phone: "000-0000-0000" } };
   }
-  async function acceptanceWorkflow(orderId: string, complete = false, withFulfillment = false) {
+  async function acceptanceWorkflow(orderId: string, complete = false, withFulfillment = false, withStock = false) {
     const intent = await prepare(); await flow(intent).useCase.execute(intent.id);
     const config = { storeDomain: scope, accessToken: "synthetic-admin-key", apiVersion: "2026-07" } as const;
     const bag = (amount: number) => ({ shopMoney: { amount: String(amount), currencyCode: "JPY" }, presentmentMoney: { amount: String(amount), currencyCode: "JPY" } });
@@ -253,7 +256,14 @@ describeDatabase("durable Shopify checkout attempts", () => {
     const finalDestination = vi.fn(async () => destination);
     const fulfillmentSource = { __typename: "Order", id: orderId, test: true,
       fulfillmentsCount: { count: 0, precision: "EXACT" }, fulfillments: [] };
-    const fulfillmentResponse = vi.fn(async (): Promise<unknown> => fulfillmentSource);
+    const fulfillmentResponse = vi.fn(async (): Promise<unknown> => withStock ? { ...fulfillmentSource, updatedAt: source.updatedAt, lineItems: source.lineItems } : fulfillmentSource);
+    const stockSource = { shop: scope, orderId, test: true, orderUpdatedAt: source.updatedAt, checkedAt: acceptanceTime.toISOString(),
+      allocations: [{ id: "gid://shopify/FulfillmentOrder/1", updatedAt: source.updatedAt, status: "OPEN", requestStatus: "UNSUBMITTED", canCreateFulfillment: true,
+        locationId: "gid://shopify/Location/1", locationActive: true, lines: [{ id: "gid://shopify/FulfillmentOrderLineItem/1", variantId: "gid://shopify/ProductVariant/101",
+          inventoryItemId: "gid://shopify/InventoryItem/1", quantity: 1, remainingQuantity: 1, requiresShipping: true }] }],
+      stocks: [{ inventoryItemId: "gid://shopify/InventoryItem/1", locationId: "gid://shopify/Location/1", tracked: true, active: true,
+        updatedAt: source.updatedAt, available: 0, committed: 1, onHand: 1 }] };
+    const stockResponse = vi.fn(async () => stockSource);
     const respond = (node: unknown) => Response.json({ data: { shop: { myshopifyDomain: scope }, node } }, { headers: { "x-shopify-api-version": config.apiVersion } });
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
       const query = JSON.parse(String(init?.body)).query;
@@ -264,7 +274,7 @@ describeDatabase("durable Shopify checkout attempts", () => {
     const reader = new ShopifyAdminOrderReader(config, fetcher, acceptancePolicy.coverage);
     const clock = vi.fn(() => acceptanceTime);
     const orders = new PostgresShopifyOrderAcceptor(sql, protector, acceptancePolicy, clock);
-    const intake = new PostgresShopifyFulfillmentIntake(sql, true, { approval: "PENDING" }, clock, reader);
+    const intake = new PostgresShopifyFulfillmentIntake(sql, true, { approval: withStock ? "APPROVED" : "PENDING" }, clock, reader, withStock ? { readFulfillmentStock: stockResponse } : undefined);
     const completion = { orders: new PostgresShopifyAcceptedOrderQuery(sql), payments: new PostgresShopifyOrderPaymentProjector(sql, true, clock),
       purchases: new PostgresShopifyPurchaseConverter(sql, clock), fulfillment: withFulfillment ? intake : undefined };
     const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), new PostgresShopifyOrderLinker(sql),
@@ -273,8 +283,237 @@ describeDatabase("durable Shopify checkout attempts", () => {
     const event = { provider: "SHOPIFY" as const, providerAccountId: scope, eventType: "shopify.order.changed",
       externalEventId: `synthetic-${orderId}`, externalObjectId: orderId, apiVersion: config.apiVersion, occurredAt: acceptanceTime,
       payload: { id: orderId, objectType: "shopify_order_reference", shippingAddress: { address2: "forged-address" } } };
-    return { intent, useCase, event, finalDestination, destination, clock, source, fetcher, respond, completion, intake, reader, fulfillmentSource, fulfillmentResponse };
+    return { intent, useCase, event, finalDestination, destination, clock, source, fetcher, respond, completion, intake, reader, fulfillmentSource, fulfillmentResponse, stockSource, stockResponse };
   }
+  async function approvalFixture(externalId: number) {
+    const fixture = await acceptanceWorkflow(`gid://shopify/Order/${externalId}`, true, true, true);
+    await fixture.useCase.execute(fixture.event);
+    const [intake] = await sql`SELECT * FROM bloombox.shopify_fulfillment_intakes WHERE purchase_intent_id = ${fixture.intent.id}`;
+    const operatorId = randomUUID(); const permissionId = randomUUID();
+    const expiresAt = new Date(acceptanceTime.getTime() + 60_000);
+    await sql`INSERT INTO bloombox.fulfillment_operator_permissions (id, operator_id, provider_scope, enabled, valid_until, created_at, updated_at)
+      VALUES (${permissionId}, ${operatorId}, ${scope}, true, ${expiresAt}, ${acceptanceTime}, ${acceptanceTime})`;
+    const identity = { current: vi.fn(async () => ({ operatorId, expiresAt })) };
+    const request = { shop: scope, fulfillmentId: String(intake.fulfillment_id), reviewedIntakeVersion: Number(intake.version), idempotencyKey: randomUUID() };
+    const approver = new PostgresShopifyFulfillmentApprover(approvalSql, true, identity, { approval: "APPROVED" }, fixture.clock);
+    return { ...fixture, intakeRow: intake, operatorId, permissionId, identity, request, approver };
+  }
+  it("records one concurrent operator decision and immutable audit/Outbox without dispatching", async () => {
+    const fixture = await approvalFixture(92001);
+    expect((await approvalSql`SELECT current_user`)[0].current_user).toBe("bloombox_fulfillment_approver");
+    const results = await Promise.all(Array.from({ length: 6 }, () => fixture.approver.approve(fixture.request)));
+    expect(results.filter((item) => item.outcome === "RECORDED")).toHaveLength(1);
+    expect(results.filter((item) => item.outcome === "DUPLICATE")).toHaveLength(5);
+    expect(new Set(results.map((item) => item.approvalId)).size).toBe(1);
+    expect(results[0].expiresAt).toEqual(new Date(acceptanceTime.getTime() + 30_000));
+    expect(await sql`SELECT id FROM bloombox.fulfillment_operator_approvals WHERE fulfillment_id = ${fixture.request.fulfillmentId}`).toHaveLength(1);
+    const audits = await sql`SELECT actor_type, actor_reference, safe_metadata FROM bloombox.audit_logs
+      WHERE resource_id = ${fixture.request.fulfillmentId} AND action = 'fulfillment.operator_approval.recorded'`;
+    expect(audits).toHaveLength(1); expect(audits[0]).toMatchObject({ actor_type: "OPERATOR", actor_reference: fixture.operatorId });
+    const events = await sql`SELECT payload FROM bloombox.outbox_events WHERE aggregate_id = ${fixture.request.fulfillmentId}
+      AND event_type = 'fulfillment.operator_approval.recorded'`;
+    expect(events).toHaveLength(1); expect(JSON.stringify([audits, events])).not.toMatch(/配送先|番地|建物|address|ciphertext|token|stocks/);
+    expect((await sql`SELECT status FROM bloombox.fulfillments WHERE id = ${fixture.request.fulfillmentId}`)[0].status).toBe("UNFULFILLED");
+    expect(await sql`SELECT id FROM bloombox.shipments WHERE fulfillment_id = ${fixture.request.fulfillmentId}`).toHaveLength(0);
+    await expect(sql`UPDATE bloombox.fulfillment_operator_approvals SET expires_at = expires_at + interval '1 hour'
+      WHERE id = ${results[0].approvalId}`).rejects.toMatchObject({ code: "23514" });
+    await expect(sql`DELETE FROM bloombox.fulfillment_operator_approvals WHERE id = ${results[0].approvalId}`).rejects.toMatchObject({ code: "23514" });
+    await expect(fixture.approver.approve({ ...fixture.request, idempotencyKey: randomUUID() })).rejects.toEqual(new FulfillmentApprovalError("CONFLICT"));
+    fixture.clock.mockReturnValue(new Date(acceptanceTime.getTime() + 30_001));
+    await expect(fixture.approver.approve(fixture.request)).rejects.toEqual(new FulfillmentApprovalError("REVIEW_REQUIRED"));
+  });
+  it("denies absent, forged, expired, wrong-shop and revoked operator authority", async () => {
+    const fixture = await approvalFixture(92002);
+    await expect(new PostgresShopifyFulfillmentApprover(approvalSql, true).approve(fixture.request))
+      .rejects.toEqual(new FulfillmentApprovalError("NOT_AUTHORIZED"));
+    const forged = { ...fixture.request, operatorId: fixture.operatorId, isAdmin: true };
+    await expect(fixture.approver.approve(forged)).rejects.toEqual(new FulfillmentApprovalError("INVALID_REQUEST"));
+    await expect(fixture.approver.approve({ ...fixture.request, shop: "other.myshopify.com" })).rejects.toEqual(new FulfillmentApprovalError("NOT_AUTHORIZED"));
+    fixture.identity.current.mockResolvedValueOnce({ operatorId: randomUUID(), expiresAt: new Date(acceptanceTime.getTime() + 60_000) });
+    await expect(fixture.approver.approve(fixture.request)).rejects.toEqual(new FulfillmentApprovalError("NOT_AUTHORIZED"));
+    fixture.identity.current.mockResolvedValueOnce({ operatorId: fixture.operatorId, expiresAt: acceptanceTime });
+    await expect(fixture.approver.approve(fixture.request)).rejects.toEqual(new FulfillmentApprovalError("NOT_AUTHORIZED"));
+    fixture.identity.current.mockRejectedValueOnce(new Error("secret-session-token"));
+    await expect(fixture.approver.approve(fixture.request)).rejects.toEqual(new FulfillmentApprovalError("UNAVAILABLE"));
+    await sql`UPDATE bloombox.fulfillment_operator_permissions SET enabled = false, version = version + 1 WHERE id = ${fixture.permissionId}`;
+    await expect(fixture.approver.approve(fixture.request)).rejects.toEqual(new FulfillmentApprovalError("NOT_AUTHORIZED"));
+    expect(await sql`SELECT id FROM bloombox.fulfillment_operator_approvals WHERE fulfillment_id = ${fixture.request.fulfillmentId}`).toHaveLength(0);
+    expect(await sql`SELECT id FROM bloombox.audit_logs WHERE resource_id = ${fixture.permissionId}`).toHaveLength(2);
+  });
+  it("keeps permission administration and commerce mutations outside approver/worker privileges", async () => {
+    const fixture = await approvalFixture(92003);
+    await expect(approvalSql`UPDATE bloombox.fulfillment_operator_permissions SET enabled = false WHERE id = ${fixture.permissionId}`)
+      .rejects.toMatchObject({ code: "42501" });
+    await expect(approvalSql`UPDATE bloombox.fulfillment_operator_permissions SET id = ${randomUUID()} WHERE id = ${fixture.permissionId}`)
+      .rejects.toMatchObject({ code: "23514" });
+    await expect(approvalSql`UPDATE bloombox.fulfillments SET status = 'SHIPPED' WHERE id = ${fixture.request.fulfillmentId}`)
+      .rejects.toMatchObject({ code: "42501" });
+    await expect(approvalSql`UPDATE bloombox.orders SET status = 'CANCELLED' WHERE id = ${fixture.intakeRow.order_id}`)
+      .rejects.toMatchObject({ code: "42501" });
+    await expect(approvalSql`UPDATE bloombox.order_gift_snapshots SET order_id = ${randomUUID()} WHERE order_id = ${fixture.intakeRow.order_id}`)
+      .rejects.toMatchObject({ code: "23514" });
+    const [permissions] = await sql`SELECT
+      has_table_privilege('bloombox_worker', 'bloombox.fulfillment_operator_approvals', 'INSERT') AS worker_approve,
+      has_table_privilege('bloombox_application', 'bloombox.fulfillment_operator_approvals', 'INSERT') AS app_approve,
+      has_table_privilege('bloombox_fulfillment_approver', 'bloombox.fulfillment_operator_permissions', 'INSERT') AS grant_permission,
+      has_column_privilege('bloombox_fulfillment_approver', 'bloombox.payments', 'amount_captured_minor', 'UPDATE') AS change_money`;
+    expect(permissions).toEqual({ worker_approve: false, app_approve: false, grant_permission: false, change_money: false });
+    await expect(sql`DELETE FROM bloombox.fulfillment_operator_permissions WHERE id = ${fixture.permissionId}`).rejects.toMatchObject({ code: "23514" });
+  });
+  it("requires review of the new intake after stock refresh and rejects a retained old approval", async () => {
+    const fixture = await approvalFixture(92004);
+    const first = await fixture.approver.approve(fixture.request);
+    const later = new Date(acceptanceTime.getTime() + 1_000); fixture.clock.mockReturnValue(later);
+    fixture.stockResponse.mockResolvedValue({ ...fixture.stockSource, checkedAt: later.toISOString() });
+    await fixture.useCase.execute(fixture.event);
+    await expect(fixture.approver.approve(fixture.request)).rejects.toEqual(new FulfillmentApprovalError("REVIEW_REQUIRED"));
+    const refreshed = { ...fixture.request, reviewedIntakeVersion: fixture.request.reviewedIntakeVersion + 1 };
+    await expect(fixture.approver.approve(refreshed)).rejects.toEqual(new FulfillmentApprovalError("CONFLICT"));
+    const second = await fixture.approver.approve({ ...refreshed, idempotencyKey: randomUUID() });
+    expect(second.outcome).toBe("RECORDED"); expect(second.approvalId).not.toBe(first.approvalId);
+    expect(await sql`SELECT id FROM bloombox.fulfillment_operator_approvals WHERE fulfillment_id = ${fixture.request.fulfillmentId}`).toHaveLength(2);
+  });
+  it("denies a refund observed after review even before its payment projection catches up", async () => {
+    const fixture = await approvalFixture(92005);
+    await fixture.approver.approve(fixture.request);
+    const accepted = await fixture.completion.orders.find(scope, fixture.event.externalObjectId);
+    if (!accepted) throw new Error("Expected accepted order");
+    const sale = { ...saleTransaction, id: fixture.source.transactions[0].id, amount: 5000 };
+    await new PostgresShopifyPaymentEvidence(sql).record({ ...accepted, orderId: fixture.event.externalObjectId }, scope,
+      { updatedAt: "2026-09-11T11:00:00Z", test: true, cancelledAt: null, requested: 5000, received: 5000, refunded: 500,
+        transactions: [sale, { id: "gid://shopify/OrderTransaction/9200502", kind: "REFUND", status: "SUCCEEDED", amount: 500, parentId: sale.id }] });
+    await expect(fixture.approver.approve(fixture.request)).rejects.toEqual(new FulfillmentApprovalError("REVIEW_REQUIRED"));
+    expect(await sql`SELECT id FROM bloombox.fulfillment_operator_approvals WHERE fulfillment_id = ${fixture.request.fulfillmentId}`).toHaveLength(1);
+  });
+  it("requires stock and quantity reads to match the latest financially observed order version", async () => {
+    const fixture = await approvalFixture(92013);
+    const accepted = await fixture.completion.orders.find(scope, fixture.event.externalObjectId);
+    if (!accepted) throw new Error("Expected accepted order");
+    await new PostgresShopifyPaymentEvidence(sql).record({ ...accepted, orderId: fixture.event.externalObjectId }, scope,
+      { updatedAt: "2026-09-11T11:00:00Z", test: true, cancelledAt: null, requested: 5000, received: 5000, refunded: 0,
+        transactions: [{ ...saleTransaction, id: fixture.source.transactions[0].id, amount: 5000 }] });
+    const reference = { ...accepted, shop: scope, externalOrderId: fixture.event.externalObjectId };
+    await fixture.completion.payments.project(reference);
+    await fixture.intake.reconcile(reference);
+    const [latest] = await sql`SELECT version FROM bloombox.shopify_fulfillment_intakes WHERE fulfillment_id = ${fixture.request.fulfillmentId}`;
+    await expect(fixture.approver.approve({ ...fixture.request, reviewedIntakeVersion: Number(latest.version) }))
+      .rejects.toEqual(new FulfillmentApprovalError("REVIEW_REQUIRED"));
+    expect(await sql`SELECT id FROM bloombox.fulfillment_operator_approvals WHERE fulfillment_id = ${fixture.request.fulfillmentId}`).toHaveLength(0);
+  });
+  it("revalidates merchant policy, test mode, canceled order and missing protected address", async () => {
+    const fixture = await approvalFixture(92006);
+    await expect(new PostgresShopifyFulfillmentApprover(approvalSql, true, fixture.identity, undefined, fixture.clock).approve(fixture.request))
+      .rejects.toEqual(new FulfillmentApprovalError("REVIEW_REQUIRED"));
+    await expect(new PostgresShopifyFulfillmentApprover(approvalSql, false, fixture.identity, { approval: "APPROVED" }, fixture.clock).approve(fixture.request))
+      .rejects.toEqual(new FulfillmentApprovalError("REVIEW_REQUIRED"));
+    await sql`UPDATE bloombox.orders SET status = 'CANCELLED' WHERE id = ${fixture.intakeRow.order_id}`;
+    await expect(fixture.approver.approve(fixture.request)).rejects.toEqual(new FulfillmentApprovalError("REVIEW_REQUIRED"));
+    await sql`UPDATE bloombox.orders SET status = 'CONFIRMED' WHERE id = ${fixture.intakeRow.order_id}`;
+    await sql`UPDATE bloombox.order_gift_snapshots SET address_ciphertext = NULL WHERE order_id = ${fixture.intakeRow.order_id}`;
+    await expect(fixture.approver.approve(fixture.request)).rejects.toEqual(new FulfillmentApprovalError("REVIEW_REQUIRED"));
+    expect(await sql`SELECT id FROM bloombox.fulfillment_operator_approvals WHERE fulfillment_id = ${fixture.request.fulfillmentId}`).toHaveLength(0);
+  });
+  it("bounds approval by permission/session expiry and rechecks revocation on duplicate requests", async () => {
+    const fixture = await approvalFixture(92007);
+    const expiry = new Date(acceptanceTime.getTime() + 5_000);
+    await sql`UPDATE bloombox.fulfillment_operator_permissions SET valid_until = ${expiry}, version = version + 1 WHERE id = ${fixture.permissionId}`;
+    expect((await fixture.approver.approve(fixture.request)).expiresAt).toEqual(expiry);
+    await sql`UPDATE bloombox.fulfillment_operator_permissions SET enabled = false, version = version + 1 WHERE id = ${fixture.permissionId}`;
+    await expect(fixture.approver.approve(fixture.request)).rejects.toEqual(new FulfillmentApprovalError("NOT_AUTHORIZED"));
+    await sql`UPDATE bloombox.fulfillment_operator_permissions SET enabled = true, version = version + 1 WHERE id = ${fixture.permissionId}`;
+    await expect(fixture.approver.approve(fixture.request)).rejects.toEqual(new FulfillmentApprovalError("CONFLICT"));
+    fixture.clock.mockReturnValue(expiry);
+    await expect(fixture.approver.approve(fixture.request)).rejects.toEqual(new FulfillmentApprovalError("NOT_AUTHORIZED"));
+    const sessionFixture = await approvalFixture(92008);
+    sessionFixture.identity.current.mockResolvedValue({ operatorId: sessionFixture.operatorId, expiresAt: expiry });
+    expect((await sessionFixture.approver.approve(sessionFixture.request)).expiresAt).toEqual(expiry);
+  });
+  it.each(["permission", "payment", "clock"] as const)("rechecks %s after an actual concurrent row-lock wait", async (changed) => {
+    const fixture = await approvalFixture({ permission: 92010, payment: 92011, clock: 92012 }[changed]);
+    const connection = postgres(safeUrl(), { max: 1, ssl: false, connection: { role: "bloombox_fulfillment_approver" } });
+    let pending: Promise<unknown> | undefined;
+    try {
+      const [{ pid }] = await connection`SELECT pg_backend_pid() AS pid`;
+      await sql.begin(async (tx) => {
+        if (changed === "permission") await tx`SELECT id FROM bloombox.fulfillment_operator_permissions WHERE id = ${fixture.permissionId} FOR UPDATE`;
+        else await tx`SELECT purchase_intent_id FROM bloombox.shopify_payment_evidence WHERE purchase_intent_id = ${fixture.intent.id} FOR UPDATE`;
+        pending = new PostgresShopifyFulfillmentApprover(connection, true, fixture.identity, { approval: "APPROVED" }, fixture.clock)
+          .approve(fixture.request).then(() => null, (error: unknown) => error);
+        await vi.waitFor(async () => {
+          expect((await sql`SELECT wait_event_type FROM pg_stat_activity WHERE pid = ${pid}`)[0].wait_event_type).toBe("Lock");
+        }, { timeout: 2000, interval: 10 });
+        if (changed === "permission") await tx`UPDATE bloombox.fulfillment_operator_permissions SET enabled = false, version = version + 1 WHERE id = ${fixture.permissionId}`;
+        else if (changed === "payment") await tx`UPDATE bloombox.shopify_payment_evidence SET version = version + 1 WHERE purchase_intent_id = ${fixture.intent.id}`;
+        else fixture.clock.mockReturnValue(new Date(acceptanceTime.getTime() + 30_001));
+      });
+      expect(await pending).toEqual(new FulfillmentApprovalError(changed === "permission" ? "NOT_AUTHORIZED" : "REVIEW_REQUIRED"));
+      expect(await sql`SELECT id FROM bloombox.fulfillment_operator_approvals WHERE fulfillment_id = ${fixture.request.fulfillmentId}`).toHaveLength(0);
+    } finally { await pending; await connection.end({ timeout: 5 }); }
+  });
+  it("atomically rolls back a failed approval outbox and safely retries", async () => {
+    const fixture = await approvalFixture(92009);
+    await sql`REVOKE INSERT ON bloombox.outbox_events FROM bloombox_fulfillment_approver`;
+    try {
+      await expect(fixture.approver.approve(fixture.request)).rejects.toEqual(new FulfillmentApprovalError("UNAVAILABLE"));
+      expect(await sql`SELECT id FROM bloombox.fulfillment_operator_approvals WHERE fulfillment_id = ${fixture.request.fulfillmentId}`).toHaveLength(0);
+      expect(await sql`SELECT id FROM bloombox.audit_logs WHERE resource_id = ${fixture.request.fulfillmentId}
+        AND action = 'fulfillment.operator_approval.recorded'`).toHaveLength(0);
+    } finally { await sql`GRANT INSERT ON bloombox.outbox_events TO bloombox_fulfillment_approver`; }
+    expect(await fixture.approver.approve(fixture.request)).toMatchObject({ outcome: "RECORDED" });
+    expect(await fixture.approver.approve(fixture.request)).toMatchObject({ outcome: "DUPLICATE" });
+  });
+  it("records covered committed stock once and requires dispatch approval without starting work", async () => {
+    const fixture = await acceptanceWorkflow("gid://shopify/Order/91001", true, true, true);
+    const results = await Promise.all(Array.from({ length: 6 }, () => fixture.useCase.execute(fixture.event)));
+    expect(results.filter((result) => result.completion.outcome === "COMPLETED" && result.completion.fulfillment.outcome === "APPLIED")).toHaveLength(1);
+    expect(results[0]).toMatchObject({ completion: { fulfillment: { status: "UNFULFILLED", stockAssessment: { status: "COVERED" },
+      decision: { kind: "HELD", reason: "DISPATCH_APPROVAL_REQUIRED" } } } });
+    const [intake] = await sql`SELECT * FROM bloombox.shopify_fulfillment_intakes WHERE purchase_intent_id = ${fixture.intent.id}`;
+    expect(intake.provider_stock_source.stocks).toMatchObject([{ available: 0, committed: 1, onHand: 1 }]);
+    expect(await sql`SELECT id FROM bloombox.outbox_events WHERE aggregate_id = ${intake.fulfillment_id}`).toHaveLength(1);
+    expect(await sql`SELECT id FROM bloombox.shipments WHERE fulfillment_id = ${intake.fulfillment_id}`).toHaveLength(0);
+    fixture.clock.mockReturnValue(new Date(acceptanceTime.getTime() + 31_000));
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: {
+      stockAssessment: { status: "UNVERIFIED", reason: "STALE_SNAPSHOT" }, decision: { kind: "HELD", reason: "INVENTORY_UNVERIFIED" } } } });
+    expect((await sql`SELECT provider_stock_source FROM bloombox.shopify_fulfillment_intakes WHERE fulfillment_id = ${intake.fulfillment_id}`)[0].provider_stock_source).toEqual(intake.provider_stock_source);
+  });
+  it("persists a newer stock shortage, rejects reordered evidence and cannot reuse covered stock without a reader", async () => {
+    const fixture = await acceptanceWorkflow("gid://shopify/Order/91002", true, true, true);
+    await fixture.useCase.execute(fixture.event);
+    const later = new Date(acceptanceTime.getTime() + 1_000); fixture.clock.mockReturnValue(later);
+    fixture.stockResponse.mockResolvedValue({ ...fixture.stockSource, checkedAt: later.toISOString(),
+      stocks: [{ ...fixture.stockSource.stocks[0], available: -1, committed: 2, onHand: 1 }] });
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: { stockAssessment: { status: "HELD", reason: "STOCK_SHORTAGE" },
+      decision: { kind: "HELD", reason: "INVENTORY_REVIEW_REQUIRED" } } } });
+    const [newer] = await sql`SELECT * FROM bloombox.shopify_fulfillment_intakes WHERE purchase_intent_id = ${fixture.intent.id}`;
+    fixture.stockResponse.mockResolvedValue(fixture.stockSource);
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: { stockAssessment: { status: "UNVERIFIED", reason: "STALE_SNAPSHOT" } } } });
+    expect((await sql`SELECT provider_stock_source FROM bloombox.shopify_fulfillment_intakes WHERE fulfillment_id = ${newer.fulfillment_id}`)[0].provider_stock_source).toEqual(newer.provider_stock_source);
+    await expect(sql`UPDATE bloombox.shopify_fulfillment_intakes SET version = version + 1, provider_stock_source = NULL WHERE fulfillment_id = ${newer.fulfillment_id}`).rejects.toMatchObject({ code: "23514" });
+    const accepted = await fixture.completion.orders.find(scope, fixture.event.externalObjectId);
+    if (!accepted) throw new Error("Expected accepted order");
+    const disconnected = new PostgresShopifyFulfillmentIntake(sql, true, { approval: "APPROVED" }, fixture.clock, fixture.reader);
+    expect(await disconnected.reconcile({ ...accepted, shop: scope, externalOrderId: fixture.event.externalObjectId }))
+      .toMatchObject({ stockAssessment: { status: "UNVERIFIED", reason: "NOT_CONFIGURED" }, decision: { kind: "HELD" } });
+  });
+  it("sanitizes unavailable or mismatched stock reads and rolls back failed stock persistence with its outbox", async () => {
+    const fixture = await acceptanceWorkflow("gid://shopify/Order/91003", true, true, true);
+    fixture.stockResponse.mockRejectedValueOnce(new Error("PRIVATE"));
+    await expect(fixture.useCase.execute(fixture.event)).rejects.toEqual(new ShopifyFulfillmentIntakeError());
+    expect((await sql`SELECT status FROM bloombox.purchase_intents WHERE id = ${fixture.intent.id}`)[0].status).toBe("CONVERTED");
+    expect(await sql`SELECT fulfillment_id FROM bloombox.shopify_fulfillment_intakes WHERE purchase_intent_id = ${fixture.intent.id}`).toHaveLength(0);
+    fixture.stockResponse.mockResolvedValueOnce({ ...fixture.stockSource, shop: "other.myshopify.com" });
+    await expect(fixture.useCase.execute(fixture.event)).rejects.toEqual(new ShopifyFulfillmentIntakeError());
+    await sql.unsafe(`CREATE FUNCTION bloombox.test_stock_failure() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN IF NEW.event_type = 'fulfillment.shopify_intake.updated' THEN RAISE EXCEPTION 'stock fault'; END IF; RETURN NEW; END; $$;
+      CREATE TRIGGER test_stock_failure BEFORE INSERT ON bloombox.outbox_events FOR EACH ROW EXECUTE FUNCTION bloombox.test_stock_failure();`);
+    try {
+      await expect(fixture.useCase.execute(fixture.event)).rejects.toEqual(new ShopifyFulfillmentIntakeError());
+      expect(await sql`SELECT fulfillment_id FROM bloombox.shopify_fulfillment_intakes WHERE purchase_intent_id = ${fixture.intent.id}`).toHaveLength(0);
+    } finally { await sql.unsafe("DROP TRIGGER test_stock_failure ON bloombox.outbox_events; DROP FUNCTION bloombox.test_stock_failure()"); }
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: { outcome: "APPLIED", stockAssessment: { status: "COVERED" } } } });
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: { outcome: "DUPLICATE" } } });
+  });
   function fulfillmentNode(fixture: Awaited<ReturnType<typeof acceptanceWorkflow>>, delivered = false) {
     return { ...fixture.fulfillmentSource, fulfillmentsCount: { count: 1, precision: "EXACT" },
       fulfillments: [{ id: "gid://shopify/Fulfillment/8801", order: { id: fixture.event.externalObjectId }, status: "SUCCESS",

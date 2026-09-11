@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ShopifyAllocatedStockReader } from "./shopify-allocated-stock-reader";
 import { ShopifyFulfillmentUnavailableError, type ShopifyFulfillmentReader, type ShopifyFulfillmentSnapshot, type ShopifyFulfillmentQuantities } from "@/modules/fulfillment/public";
 import { DELIVERY_ADDRESS_TEXT_MAX_LENGTH, DELIVERY_POSTAL_INPUT_MAX_LENGTH, JAPAN_PREFECTURES, assessDeliveryDestination, isApprovedDeliveryCoverage, DELIVERY_COVERAGE_POLICY, type DeliveryCoveragePolicy } from "@/modules/fulfillment/public";
 import { ShopifyDeliveryDestinationUnavailableError, type ShopifyDeliveryDestinationReader, type ShopifyDestinationReference, type ShopifyDestinationAssessment } from "../../application/shopify-delivery-destination-reader";
@@ -192,6 +193,10 @@ export class ShopifyAdminOrderReader implements ShopifyOrderReader, ShopifyDeliv
   constructor(private readonly config: ShopifyAdminConfig, private readonly fetchImplementation: typeof fetch = fetch,
     private readonly coverage: DeliveryCoveragePolicy = DELIVERY_COVERAGE_POLICY) {}
 
+  async readFulfillmentStock(reference: Readonly<{ shop: string; orderId: string; test: boolean }>) {
+    return new ShopifyAllocatedStockReader(this.config.storeDomain, (id, query, locationId) => this.request(id, query, locationId)).readFulfillmentStock(reference);
+  }
+
   /** No address, tracking number or tracking URL is requested. Any fulfillment is activity, even a cancelled one. */
   async readFulfillments(reference: Readonly<{ shop: string; orderId: string; test: boolean }>): Promise<ShopifyFulfillmentSnapshot> {
     try {
@@ -300,7 +305,7 @@ export class ShopifyAdminOrderReader implements ShopifyOrderReader, ShopifyDeliv
     }
   }
 
-  private async request(id: string, query = QUERY): Promise<unknown> {
+  private async request(id: string, query = QUERY, locationId?: string): Promise<unknown> {
     const controller = new AbortController();
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     let response: Response | undefined;
@@ -312,7 +317,7 @@ export class ShopifyAdminOrderReader implements ShopifyOrderReader, ShopifyDeliv
       response = await Promise.race([this.fetchImplementation(
         `https://${this.config.storeDomain}/admin/api/${this.config.apiVersion}/graphql.json`, {
           method: "POST", headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": this.config.accessToken },
-          body: JSON.stringify({ query, variables: { id } }),
+          body: JSON.stringify({ query, variables: { id, ...(locationId ? { locationId } : {}) } }),
           signal: controller.signal, redirect: "error", cache: "no-store",
         }).then((result) => {
           // Also close a late response from a transport that ignored cancellation.
