@@ -4,6 +4,13 @@ import { PROVIDER_INBOX_BATCH_SIZE, PROVIDER_INBOX_LOCK_TIMEOUT_MINUTES } from "
 export { PROVIDER_INBOX_BATCH_SIZE, PROVIDER_INBOX_LOCK_TIMEOUT_MINUTES } from "./provider-inbox-policy";
 
 export type FailedEventDisposition = "RETRY_SCHEDULED" | "FAILED";
+export type ProviderEventReference = Pick<VerifiedProviderEvent, "provider" | "providerAccountId" | "externalEventId">;
+export type ClaimedProviderEvent = Readonly<{ kind: "READABLE"; event: VerifiedProviderEvent }>
+  | Readonly<{ kind: "UNREADABLE"; reference: ProviderEventReference }>;
+
+export class ProviderEventUnreadableError extends Error {
+  constructor() { super("Stored provider event could not be restored"); this.name = "ProviderEventUnreadableError"; }
+}
 
 export interface ProviderEventQueue {
   claim(input: Readonly<{
@@ -11,10 +18,10 @@ export interface ProviderEventQueue {
     workerId: string;
     now: Date;
     lockTimeoutMinutes: number;
-  }>): Promise<readonly VerifiedProviderEvent[]>;
+  }>): Promise<readonly ClaimedProviderEvent[]>;
   markProcessed(event: VerifiedProviderEvent, processedAt: Date, workerId: string): Promise<void>;
   markFailed(
-    event: VerifiedProviderEvent,
+    event: ProviderEventReference,
     errorCode: string,
     failedAt: Date,
     workerId: string,
@@ -48,14 +55,17 @@ export class ProcessProviderInbox {
     let retryScheduled = 0;
     let failed = 0;
 
-    for (const event of events) {
+    for (const claim of events) {
+      const reference = claim.kind === "READABLE" ? claim.event : claim.reference;
       try {
-        await this.processor.process(event);
-        await this.queue.markProcessed(event, this.now(), workerId);
+        // An unreadable record is a failed attempt, never an empty or fabricated provider event.
+        if (claim.kind === "UNREADABLE") throw new ProviderEventUnreadableError();
+        await this.processor.process(claim.event);
+        await this.queue.markProcessed(claim.event, this.now(), workerId);
         processed += 1;
       } catch (error) {
         const disposition = await this.queue.markFailed(
-          event,
+          reference,
           failureCode(error),
           this.now(),
           workerId,

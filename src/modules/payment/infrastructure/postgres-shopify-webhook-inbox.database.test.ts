@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { createHmac } from "node:crypto";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { ProcessProviderInbox } from "../application/process-provider-inbox";
 import postgres from "postgres";
 import { AesGcmDataProtector } from "@/shared/infrastructure/security/aes-gcm-data-protector";
 import { ReceiveProviderWebhook, type VerifiedProviderEvent } from "../application/receive-provider-webhook";
-import { PostgresWebhookInbox, WebhookInboxPersistenceError } from "./postgres-webhook-inbox";
+import { PostgresWebhookInbox, WebhookInboxPersistenceError, WEBHOOK_MAX_PROCESSING_ATTEMPTS } from "./postgres-webhook-inbox";
 import { ShopifyWebhookVerifier } from "./shopify-webhook-verifier";
 import { StripeCommerceEventProcessor } from "./stripe-commerce-event-processor";
 
@@ -57,11 +58,11 @@ describeDatabase("Shopify durable webhook capture", () => {
     await otherShop.record({ ...event, providerAccountId: "other.myshopify.com" });
     await stripeA.record({ ...event, provider: "STRIPE", providerAccountId: "acct_a" });
     await stripeB.record({ ...event, provider: "STRIPE", providerAccountId: "acct_b" });
-    expect(await stripeA.claim(claim("stripe-a"))).toMatchObject([{ provider: "STRIPE", providerAccountId: "acct_a" }]);
+    expect(await stripeA.claim(claim("stripe-a"))).toMatchObject([{ kind: "READABLE", event: { provider: "STRIPE", providerAccountId: "acct_a" } }]);
     const legacy = new PostgresWebhookInbox(sql, protector);
-    expect(await legacy.claim(claim("legacy"))).toMatchObject([{ provider: "STRIPE", providerAccountId: "acct_b" }]);
-    expect(await shop.claim(claim("shop"))).toEqual([event]);
-    expect(await otherShop.claim(claim("other"))).toMatchObject([{ provider: "SHOPIFY", providerAccountId: "other.myshopify.com" }]);
+    expect(await legacy.claim(claim("legacy"))).toMatchObject([{ kind: "READABLE", event: { provider: "STRIPE", providerAccountId: "acct_b" } }]);
+    expect(await shop.claim(claim("shop"))).toEqual([{ kind: "READABLE", event }]);
+    expect(await otherShop.claim(claim("other"))).toMatchObject([{ kind: "READABLE", event: { provider: "SHOPIFY", providerAccountId: "other.myshopify.com" } }]);
   });
   it("rejects cross-scope writes and prevents the Stripe processor accepting Shopify facts", async () => {
     const other: VerifiedProviderEvent = { ...event, providerAccountId: "other.myshopify.com" };
@@ -74,16 +75,122 @@ describeDatabase("Shopify durable webhook capture", () => {
     expect((await sql`SELECT status FROM bloombox.webhook_inbox`)[0].status).toBe("PROCESSING");
   });
   it("recovers stale claims, rejects stale completion, and preserves references through retry", async () => {
-    await shop.record(event); expect(await shop.claim(claim("old"))).toEqual([event]);
+    await shop.record(event); expect(await shop.claim(claim("old"))).toEqual([{ kind: "READABLE", event }]);
     expect(await shop.claim(claim("busy"))).toEqual([]);
     const later = new Date(now.getTime() + 301_000);
-    expect(await shop.claim(claim("new", later))).toEqual([event]);
+    expect(await shop.claim(claim("new", later))).toEqual([{ kind: "READABLE", event }]);
     await expect(shop.markProcessed(event, later, "old")).rejects.toBeInstanceOf(WebhookInboxPersistenceError);
     expect(await shop.markFailed(event, "RetryableTestError", later, "new")).toBe("RETRY_SCHEDULED");
     expect(await shop.claim(claim("early", later))).toEqual([]);
     const retryAt = new Date(later.getTime() + 1_001);
-    expect(await shop.claim(claim("retry", retryAt))).toEqual([event]);
+    expect(await shop.claim(claim("retry", retryAt))).toEqual([{ kind: "READABLE", event }]);
     await shop.markProcessed(event, retryAt, "retry");
     expect(await shop.record(event)).toBe("DUPLICATE"); expect(await shop.claim(claim("done", retryAt))).toEqual([]);
+  });
+
+  it.each(["SHOPIFY", "STRIPE"] as const)("isolates an unreadable %s event while processing its healthy neighbor", async (provider) => {
+    const queue = inbox(provider, config.storeDomain);
+    const bad = { ...event, provider, externalEventId: "unreadable-event" };
+    const good = { ...event, provider, externalEventId: "healthy-event" };
+    await queue.record(bad); await queue.record(good);
+    await sql`UPDATE bloombox.webhook_inbox SET payload_ciphertext = ${Buffer.from("private-corrupted-payload")} WHERE external_event_id = ${bad.externalEventId}`;
+    const processor = { process: vi.fn().mockResolvedValue(undefined) };
+    const result = await new ProcessProviderInbox(queue, processor, () => now, () => "isolated-worker").execute();
+    expect(result).toEqual({ claimed: 2, processed: 1, retryScheduled: 1, failed: 0 });
+    expect(processor.process).toHaveBeenCalledExactlyOnceWith(good);
+    const rows = await sql`SELECT external_event_id, status, attempts, last_error_code FROM bloombox.webhook_inbox ORDER BY external_event_id`;
+    expect(rows).toEqual([
+      { external_event_id: "healthy-event", status: "PROCESSED", attempts: 0, last_error_code: null },
+      { external_event_id: "unreadable-event", status: "PENDING", attempts: 1, last_error_code: "ProviderEventUnreadableError" },
+    ]);
+  });
+
+  it.each(["MALFORMED_JSON", "NON_OBJECT", "PURGED", "MISSING_API_VERSION", "INVALID_TIME", "EMPTY_EVENT_ID"])(
+    "records a safe retry for %s instead of creating a partially verified event", async (kind) => {
+      await shop.record(event);
+      if (kind === "MALFORMED_JSON" || kind === "NON_OBJECT") {
+        const payload = protector.protect(kind === "MALFORMED_JSON" ? "private-not-json" : '["private-array"]',
+          `webhook:SHOPIFY:${config.storeDomain}:${event.externalEventId}:v1`);
+        await sql`UPDATE bloombox.webhook_inbox SET payload_ciphertext = ${payload.ciphertext}`;
+      } else if (kind === "PURGED") {
+        await sql`UPDATE bloombox.webhook_inbox SET payload_ciphertext = NULL, payload_key_id = NULL, payload_purged_at = ${now}`;
+      } else if (kind === "MISSING_API_VERSION") {
+        await sql`UPDATE bloombox.webhook_inbox SET api_version = NULL`;
+      } else if (kind === "INVALID_TIME") {
+        await sql`UPDATE bloombox.webhook_inbox SET provider_occurred_at = 'infinity'::timestamptz`;
+      } else {
+        await sql`UPDATE bloombox.webhook_inbox SET external_event_id = ''`;
+      }
+      const before = (await sql`SELECT payload_ciphertext, payload_key_id FROM bloombox.webhook_inbox`)[0];
+      const processor = { process: vi.fn() };
+      expect(await new ProcessProviderInbox(shop, processor, () => now).execute())
+        .toEqual({ claimed: 1, processed: 0, retryScheduled: 1, failed: 0 });
+      expect(processor.process).not.toHaveBeenCalled();
+      expect((await sql`SELECT status, attempts, last_error_code, payload_ciphertext, payload_key_id FROM bloombox.webhook_inbox`)[0])
+        .toEqual({ ...before, status: "PENDING", attempts: 1, last_error_code: "ProviderEventUnreadableError" });
+    },
+  );
+
+  it("resumes after the missing encryption key is restored without rewriting or duplicating the event", async () => {
+    const oldKey = Buffer.alloc(32, 19);
+    const oldProtector = new AesGcmDataProtector({ activeKeyId: "previous", keys: new Map([["previous", oldKey]]) });
+    const oldWriter = new PostgresWebhookInbox(sql, oldProtector, undefined, () => now, { provider: "SHOPIFY", accountId: config.storeDomain });
+    await oldWriter.record(event);
+    const processor = { process: vi.fn() };
+    expect(await new ProcessProviderInbox(shop, processor, () => now).execute()).toMatchObject({ retryScheduled: 1, processed: 0 });
+    const before = (await sql`SELECT payload_ciphertext FROM bloombox.webhook_inbox`)[0];
+    const restoredKeys = new AesGcmDataProtector({ activeKeyId: "test", keys: new Map([["test", Buffer.alloc(32, 11)], ["previous", oldKey]]) });
+    const restored = new PostgresWebhookInbox(sql, restoredKeys, undefined, () => now, { provider: "SHOPIFY", accountId: config.storeDomain });
+    const retryAt = new Date(now.getTime() + 1_000);
+    expect(await new ProcessProviderInbox(restored, processor, () => retryAt).execute())
+      .toEqual({ claimed: 1, processed: 1, retryScheduled: 0, failed: 0 });
+    expect(processor.process).toHaveBeenCalledExactlyOnceWith(event);
+    expect((await sql`SELECT status, attempts, last_error_code, payload_ciphertext FROM bloombox.webhook_inbox`)[0])
+      .toEqual({ ...before, status: "PROCESSED", attempts: 1, last_error_code: null });
+    expect(await new ProcessProviderInbox(restored, processor, () => retryAt).execute()).toMatchObject({ claimed: 0 });
+  });
+
+  it("bounds repeated restore failures and preserves ciphertext for investigation", async () => {
+    await shop.record(event);
+    const ciphertext = Buffer.from("private-damaged-payload");
+    await sql`UPDATE bloombox.webhook_inbox SET payload_ciphertext = ${ciphertext}`;
+    const processor = { process: vi.fn() };
+    let clock = now;
+    for (let attempt = 1; attempt <= WEBHOOK_MAX_PROCESSING_ATTEMPTS; attempt++) {
+      const result = await new ProcessProviderInbox(shop, processor, () => clock).execute();
+      expect(result).toEqual({ claimed: 1, processed: 0, retryScheduled: attempt < WEBHOOK_MAX_PROCESSING_ATTEMPTS ? 1 : 0,
+        failed: attempt === WEBHOOK_MAX_PROCESSING_ATTEMPTS ? 1 : 0 });
+      clock = new Date(clock.getTime() + 3_600_000);
+    }
+    expect(await new ProcessProviderInbox(shop, processor, () => clock).execute()).toMatchObject({ claimed: 0 });
+    expect(processor.process).not.toHaveBeenCalled();
+    expect((await sql`SELECT status, attempts, locked_at, locked_by, last_error_code, payload_ciphertext FROM bloombox.webhook_inbox`)[0])
+      .toEqual({ status: "FAILED", attempts: WEBHOOK_MAX_PROCESSING_ATTEMPTS, locked_at: null, locked_by: null,
+        last_error_code: "ProviderEventUnreadableError", payload_ciphertext: ciphertext });
+    expect(await sql`SELECT id FROM bloombox.orders`).toHaveLength(0);
+    expect(await sql`SELECT id FROM bloombox.outbox_events`).toHaveLength(0);
+  });
+
+  it("recovers an interrupted unreadable claim and refuses failure updates from the old worker", async () => {
+    await shop.record(event);
+    await sql`UPDATE bloombox.webhook_inbox SET payload_key_id = 'unavailable'`;
+    const reference = { provider: event.provider, providerAccountId: event.providerAccountId, externalEventId: event.externalEventId };
+    expect(await shop.claim(claim("old"))).toEqual([{ kind: "UNREADABLE", reference }]);
+    const later = new Date(now.getTime() + 300_000);
+    expect(await shop.claim(claim("replacement", later))).toEqual([{ kind: "UNREADABLE", reference }]);
+    await expect(shop.markFailed(reference, "ProviderEventUnreadableError", later, "old")).rejects.toBeInstanceOf(WebhookInboxPersistenceError);
+    expect(await shop.markFailed(reference, "ProviderEventUnreadableError", later, "replacement")).toBe("RETRY_SCHEDULED");
+    expect((await sql`SELECT attempts FROM bloombox.webhook_inbox`)[0].attempts).toBe(1);
+  });
+
+  it("concurrent workers do not double-process healthy events or double-count unreadable failures", async () => {
+    await shop.record(event);
+    await shop.record({ ...event, externalEventId: "unreadable" });
+    await sql`UPDATE bloombox.webhook_inbox SET payload_key_id = 'missing' WHERE external_event_id = 'unreadable'`;
+    const processor = { process: vi.fn() };
+    const results = await Promise.all(Array.from({ length: 4 }, () => new ProcessProviderInbox(shop, processor, () => now).execute()));
+    expect(results.reduce((sum, result) => sum + result.claimed, 0)).toBe(2);
+    expect(results.reduce((sum, result) => sum + result.retryScheduled, 0)).toBe(1);
+    expect(processor.process).toHaveBeenCalledExactlyOnceWith(event);
   });
 });
