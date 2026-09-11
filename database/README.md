@@ -46,3 +46,5 @@ It expires unstarted non-Shopify PurchaseIntents after 24 hours and removes encr
 Run a local PostgreSQL database named with `test`, set `TEST_DATABASE_URL`, then run `pnpm test:database`. The test drops only the guarded `bloombox` schema in that local test database, applies migrations twice, verifies encrypted persistence and atomic outbox creation, and checks the balanced-ledger constraint.
 
 Migration 0006 adds Checkout-owned immutable Shopify order links and a scoped cart-token digest index. Apply `database/roles.sql` afterward. Legacy READY attempts remain unindexed until verified resume; do not backfill by guessing tokens or by plaintext export. See [association and rollback](../docs/operations/SHOPIFY_ORDER_LINKS.md).
+
+Migration 0007 stores Payment-owned Shopify settlement evidence with an exact foreign key to the immutable checkout association. Reapply `database/roles.sql` for worker access. It does not create accepted orders or trigger fulfillment. See [settlement evidence and recovery](../docs/operations/SHOPIFY_PAYMENT_EVIDENCE.md).

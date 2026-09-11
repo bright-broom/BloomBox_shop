@@ -1,3 +1,5 @@
+import { ReconcileShopifyPayment } from "../../application/reconcile-shopify-payment";
+import { SettlementEvidenceConflictError } from "../../domain/settlement-evidence";
 import { AssociateShopifyOrder } from "../../application/associate-shopify-order";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -16,14 +18,14 @@ const bag = (amount: string) => ({ shopMoney: { amount, currencyCode: "JPY" }, p
 function order() {
   return {
     __typename: "Order", id: orderId, cartToken: "opaque-cart-token", updatedAt: "2026-09-11T10:00:00Z", test: true, cancelledAt: null,
-    displayFinancialStatus: "PAID", originalTotalPriceSet: bag("8000.00"), currentTotalPriceSet: bag("7500"),
+    transactions: [], displayFinancialStatus: "PAID", originalTotalPriceSet: bag("8000.00"), currentTotalPriceSet: bag("7500"),
     totalReceivedSet: bag("8000"), totalRefundedSet: bag("500"),
     lineItems: { nodes: [{ id: "gid://shopify/LineItem/31", variant: { id: "gid://shopify/ProductVariant/41" }, quantity: 1, currentQuantity: 1, originalUnitPriceSet: bag("8000") }], pageInfo: { hasNextPage: false } },
   };
 }
 function refund(status = "PENDING") {
   return { __typename: "Refund", id: refundId, updatedAt: "2026-09-11T10:01:00Z", order: order(), transactions: {
-    nodes: [{ id: "gid://shopify/OrderTransaction/51", kind: "REFUND", status, test: true, amountSet: bag("500") }],
+    nodes: [{ id: "gid://shopify/OrderTransaction/51", kind: "REFUND", status, parentTransaction: null, test: true, amountSet: bag("500") }],
     pageInfo: { hasNextPage: false },
   } };
 }
@@ -57,7 +59,7 @@ describe("Shopify authenticated order lookup", () => {
   it.each(["PENDING", "SUCCESS", "FAILURE", "ERROR", "UNKNOWN", "AWAITING_RESPONSE"])("preserves refund transaction %s without claiming refund completion", async (status) => {
     const { reader } = client(response(refund(status)));
     const result = await reader.read({ ...reference, kind: "REFUND", id: refundId });
-    expect(result.refund?.transactions).toEqual([{ id: "gid://shopify/OrderTransaction/51", kind: "REFUND", status, test: true, amount: { amount: 500, currency: "JPY" } }]);
+    expect(result.refund?.transactions).toEqual([{ id: "gid://shopify/OrderTransaction/51", kind: "REFUND", status, parentId: null, test: true, amount: { amount: 500, currency: "JPY" } }]);
     expect(result.order.id).toBe(orderId);
   });
   it.each([
@@ -152,6 +154,33 @@ describe("Shopify authenticated order lookup", () => {
   it.each([Buffer.from("{"), Buffer.from([0xff])])("rejects malformed JSON/UTF-8 without leaking provider details", async (bytes) => {
     const { reader } = client(new Response(bytes, { headers: { "x-shopify-api-version": config.apiVersion } }));
     await expect(reader.read(reference)).rejects.toThrow("Shopify order data is unavailable");
+  });
+  it("reconciles complete authenticated transactions, rejecting mode and monetary mismatches before writes", async () => {
+    const paidOrder = { ...order(), transactions: [
+      { id: "gid://shopify/OrderTransaction/61", kind: "SALE", status: "SUCCESS", test: true, parentTransaction: null, amountSet: bag("8000") },
+      { id: "gid://shopify/OrderTransaction/62", kind: "REFUND", status: "SUCCESS", test: true, parentTransaction: { id: "gid://shopify/OrderTransaction/61" }, amountSet: bag("500") },
+    ] };
+    const { reader, fetcher } = client(); fetcher.mockImplementation(async () => response(paidOrder));
+    const event = { provider: "SHOPIFY" as const, providerAccountId: config.storeDomain, eventType: "shopify.order.changed", externalEventId: "verified-body-digest", externalObjectId: orderId,
+      apiVersion: config.apiVersion, occurredAt: new Date(), payload: { id: orderId, objectType: "shopify_order_reference" } };
+    const link = vi.fn().mockResolvedValue({ purchaseIntentId: "intent", attemptId: "attempt", orderId });
+    const record = vi.fn().mockResolvedValue({ outcome: "APPLIED", status: "PARTIALLY_REFUNDED", version: 1 });
+    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, true);
+    expect(await useCase.execute(event)).toMatchObject({ status: "PARTIALLY_REFUNDED" });
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ orderId }), config.storeDomain, expect.objectContaining({ received: 8000, refunded: 500, transactions: expect.arrayContaining([expect.objectContaining({ kind: "REFUND", status: "SUCCEEDED", amount: 500 })]) }));
+    expect(JSON.stringify(record.mock.calls)).not.toContain("opaque-cart-token");
+    await expect(new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, false).execute(event)).rejects.toBeInstanceOf(SettlementEvidenceConflictError);
+    fetcher.mockResolvedValueOnce(response({ ...paidOrder, totalReceivedSet: bag("7999") }));
+    await expect(useCase.execute(event)).rejects.toBeInstanceOf(SettlementEvidenceConflictError);
+    fetcher.mockResolvedValueOnce(response({ ...paidOrder, transactions: paidOrder.transactions.map((transaction) => ({ ...transaction, test: false })) }));
+    await expect(useCase.execute(event)).rejects.toBeInstanceOf(SettlementEvidenceConflictError);
+    expect(link).toHaveBeenCalledTimes(1); expect(record).toHaveBeenCalledTimes(1);
+  });
+  it("rejects a truncated or duplicate order transaction list", async () => {
+    const transaction = { id: "gid://shopify/OrderTransaction/71", kind: "SALE", status: "SUCCESS", test: true, parentTransaction: null, amountSet: bag("8000") };
+    for (const transactions of [[transaction, transaction], Array.from({ length: 101 }, (_, index) => ({ ...transaction, id: `gid://shopify/OrderTransaction/${index + 1}` }))]) {
+      await expect(client(response({ ...order(), transactions })).reader.read(reference)).rejects.toBeInstanceOf(ShopifyOrderUnavailableError);
+    }
   });
   it("reads the current order for a delayed signed notification and rejects a different provider", async () => {
     const secret = "isolated-webhook-secret";

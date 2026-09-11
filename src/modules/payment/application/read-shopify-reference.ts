@@ -7,6 +7,7 @@ export type ShopifyTransaction = Readonly<{
   kind: "AUTHORIZATION" | "CAPTURE" | "CHANGE" | "EMV_AUTHORIZATION" | "REFUND" | "SALE" | "SUGGESTED_REFUND" | "VOID";
   status: "AWAITING_RESPONSE" | "ERROR" | "FAILURE" | "PENDING" | "SUCCESS" | "UNKNOWN";
   test: boolean;
+  parentId: string | null;
   amount: Money;
 }>;
 export type ShopifyOrderSnapshot = Readonly<{
@@ -17,6 +18,7 @@ export type ShopifyOrderSnapshot = Readonly<{
   test: boolean;
   cancelledAt: string | null;
   financialStatus: "AUTHORIZED" | "EXPIRED" | "PAID" | "PARTIALLY_PAID" | "PARTIALLY_REFUNDED" | "PENDING" | "REFUNDED" | "VOIDED" | null;
+  transactions: readonly ShopifyTransaction[];
   originalTotal: Money;
   currentTotal: Money;
   received: Money;
