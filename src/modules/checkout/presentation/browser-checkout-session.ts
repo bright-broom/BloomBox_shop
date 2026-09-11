@@ -5,6 +5,7 @@ import {
   JAPAN_PREFECTURES,
 } from "@/modules/fulfillment/public";
 import { createPurchaseIntentSchema } from "./create-purchase-intent-schema";
+import type { PreviewReferralQuote } from "./preview-referral-actions";
 
 const CART_STORAGE_KEY = "bloombox.checkout.cart.v1";
 const BUYER_STORAGE_KEY = "bloombox.checkout.buyer.v1";
@@ -65,6 +66,9 @@ const previewReceiptSchema = z.object({
   subtotalAmount: z.number().int().nonnegative(),
   shippingAmount: z.number().int().nonnegative(),
   totalAmount: z.number().int().nonnegative(),
+  discountAmount: z.number().int().nonnegative().default(0),
+  requestId: z.uuid().optional(),
+  referralTracked: z.boolean().default(false),
 });
 
 export type BrowserCartItem = z.infer<typeof cartItemSchema>;
@@ -176,12 +180,20 @@ export function readPreviewReceipt(storage: CheckoutStorage): PreviewReceipt | n
 export function completePreviewCheckout(
   storage: CheckoutStorage,
   completedAt = new Date(),
+  settlement?: PreviewReferralQuote,
 ): PreviewReceipt | null {
   const cart = readCart(storage);
   const buyer = readPreviewBuyer(storage);
   const draft = readPreviewDraft(storage);
   const review = readPreviewReview(storage);
   if (!cart || !buyer || !draft || !review) return null;
+  if (settlement && (
+    settlement.requestId !== cart.requestId || settlement.productId !== cart.productId
+    || settlement.quantity !== cart.quantity || settlement.quantity !== draft.quantity
+    || settlement.subtotalAmount !== draft.subtotalAmount
+    || !Number.isSafeInteger(settlement.discountAmount) || settlement.discountAmount < 0
+    || settlement.discountAmount > settlement.subtotalAmount
+  )) return null;
 
   const receipt = previewReceiptSchema.parse({
     version: 1,
@@ -192,7 +204,10 @@ export function completePreviewCheckout(
     deliveryDate: draft.deliveryDate,
     subtotalAmount: draft.subtotalAmount,
     shippingAmount: PREVIEW_SHIPPING_AMOUNT,
-    totalAmount: draft.subtotalAmount + PREVIEW_SHIPPING_AMOUNT,
+    discountAmount: settlement?.discountAmount ?? 0,
+    requestId: cart.requestId,
+    referralTracked: settlement?.tracked ?? false,
+    totalAmount: draft.subtotalAmount + PREVIEW_SHIPPING_AMOUNT - (settlement?.discountAmount ?? 0),
   });
 
   writeStored(storage, RECEIPT_STORAGE_KEY, receipt);

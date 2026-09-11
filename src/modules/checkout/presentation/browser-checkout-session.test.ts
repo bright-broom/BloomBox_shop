@@ -62,6 +62,35 @@ describe("browser checkout session", () => {
   });
   afterEach(() => vi.useRealTimers());
 
+  it("keeps the server-confirmed referral discount and request reference in the test receipt", () => {
+    storeCart(storage, cart); storePreviewBuyer(storage, buyer);
+    storePreviewDraft(storage, previewDraft("BB-REFERRAL")); acceptPreviewReview(storage);
+    const receipt = completePreviewCheckout(storage, new Date(), {
+      requestId: cart.requestId, productId: cart.productId, quantity: cart.quantity,
+      subtotalAmount: cart.unitAmount * cart.quantity, discountAmount: 500, couponId: "test-coupon", tracked: true,
+    });
+    expect(receipt).toMatchObject({ requestId: cart.requestId, referralTracked: true, discountAmount: 500,
+      totalAmount: cart.unitAmount * cart.quantity + PREVIEW_SHIPPING_AMOUNT - 500 });
+    expect(readPreviewReceipt(storage)).toEqual(receipt);
+    expect(readPreviewBuyer(storage)).toBeNull();
+    expect(readCart(storage)).toBeNull();
+  });
+
+  it.each([
+    { requestId: "22345678-abcd-4000-8000-123456789012" }, { productId: "other-product" },
+    { quantity: 1 }, { subtotalAmount: 1 }, { discountAmount: -1 }, { discountAmount: 99_999 },
+  ])("rejects stale or inconsistent discount confirmation without clearing the buyer's draft: %j", (change) => {
+    storeCart(storage, cart); storePreviewBuyer(storage, buyer);
+    storePreviewDraft(storage, previewDraft("BB-REFERRAL")); acceptPreviewReview(storage);
+    expect(completePreviewCheckout(storage, new Date(), {
+      requestId: cart.requestId, productId: cart.productId, quantity: cart.quantity,
+      subtotalAmount: cart.unitAmount * cart.quantity, discountAmount: 500, couponId: "test-coupon", tracked: true,
+      ...change,
+    })).toBeNull();
+    expect(readCart(storage)).toEqual(cart); expect(readPreviewBuyer(storage)).toEqual(buyer);
+    expect(readPreviewReceipt(storage)).toBeNull();
+  });
+
   it("keeps expired delivery drafts recoverable but never checkout-ready", () => {
     storeCart(storage, cart);
     storePreviewBuyer(storage, buyer);

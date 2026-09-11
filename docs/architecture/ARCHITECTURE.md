@@ -24,6 +24,8 @@ Dependencies point inward. Domain imports no Next.js, React, filesystem, HTTP cl
 
 Expected business modules include catalog, gift, flower, customer, recipient, order, payment, inventory, fulfillment, story, notification, and AI. Create a module only when behavior and ownership justify it; the list is not a scaffolding requirement.
 
+Referral owns attribution, benefit eligibility, coupon consumption, and reversal in the production-disabled preview described by ADR 0004. It does not own authoritative payment or fulfillment facts.
+
 A module owns its state and invariants. Cross-module behavior goes through an application service, an exposed interface, or a domain event. One module must not update another module's tables directly.
 
 Never collapse these models:
@@ -98,11 +100,12 @@ Create or update an ADR before materially changing architecture style, module ow
 
 An ADR states context, decision, alternatives, consequences, rollout, and rollback. Routine implementation within existing boundaries does not need an ADR.
 
-Accepted decisions:
+Decision records:
 
 - [ADR 0001: Shopify-first commerce boundary](adr/0001-shopify-first-commerce-boundary.md)
 - [ADR 0002: Commerce persistence and payment-ready boundaries](adr/0002-commerce-persistence-and-payment-boundaries.md)
 - [ADR 0003: Shopify Checkout with Shopify Payments and KOMOJU](adr/0003-shopify-payments-and-komoju.md) (implementation selection; live activation remains blocked)
+- [ADR 0004: Referral rewards preview](adr/0004-referral-rewards-preview.md) — proposed; production activation excluded
 
 ## Architecture decision test
 

@@ -3,9 +3,11 @@ import { Noto_Sans_JP, League_Gothic } from "next/font/google";
 import Link from "next/link";
 import { siteContent } from "@/shared/infrastructure/content/site-content";
 import { loadRuntimeMode } from "@/shared/infrastructure/config/runtime-config";
+import { loadCheckoutProviderMode } from "@/shared/infrastructure/config/checkout-provider-config";
 import { loadSiteUrlConfig } from "@/shared/infrastructure/config/site-url-config";
 import { MobileNavigation } from "@/ui/mobile-navigation";
 import { HeaderCartLink } from "@/ui/header-cart-link";
+import { referralContent } from "@/shared/infrastructure/content/referral-content";
 import "./globals.css";
 
 const sans = Noto_Sans_JP({
@@ -93,6 +95,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                 <Link href="/guide">ご利用ガイド</Link>
                 <Link href="/shipping-returns">配送・返品</Link>
                 <Link href="/faq">よくあるご質問</Link>
+                {loadRuntimeMode() === "preview" && loadCheckoutProviderMode() === "preview" ? <Link href="/referrals">{referralContent.navLabel}</Link> : null}
               </nav>
               <nav className="footer-nav" aria-label="BloomBoxについて">
                 <Link href="/about">私たちについて</Link>
