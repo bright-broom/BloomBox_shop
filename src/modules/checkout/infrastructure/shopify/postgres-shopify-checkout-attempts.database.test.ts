@@ -1,3 +1,5 @@
+import { PostgresShopifyDeliveryPlanQuery } from "./postgres-shopify-delivery-plan-query";
+import { ShopifyDeliveryPlanUnavailableError } from "../../application/shopify-delivery-plan-query";
 import { PostgresShopifyPaymentEvidence } from "@/modules/payment/infrastructure/shopify/postgres-shopify-payment-evidence";
 import { SettlementEvidenceConflictError, type SettlementSnapshot } from "@/modules/payment/domain/settlement-evidence";
 import { ShopifyPaymentEvidencePersistenceError } from "@/modules/payment/application/reconcile-shopify-payment";
@@ -160,6 +162,43 @@ describeDatabase("durable Shopify checkout attempts", () => {
     const link = await new PostgresShopifyOrderLinker(sql).link(linkInput(intent, orderId));
     return { intent, link };
   }
+  it("reads only the delivery plan of the exact linked shop, order, intent and attempt with worker privileges", async () => {
+    const { intent, link } = await linkedForPayment("gid://shopify/Order/7101");
+    const worker = postgres(safeUrl(), { max: 1, ssl: false });
+    try {
+      await worker`SET ROLE bloombox_worker`;
+      await worker`SET default_transaction_read_only = on`;
+      const query = new PostgresShopifyDeliveryPlanQuery(worker);
+      const result = await query.find(link, scope);
+      expect(result).toEqual({ deliveryDate: "2026-09-14", status: "CHECKOUT_CREATED", detailsAvailable: true,
+        retentionExpiresAt: intent.piiRetentionExpiresAt });
+      expect(JSON.stringify(result)).not.toMatch(/テスト宛名|贈る言葉|ciphertext|secret|opaque/);
+      for (const candidate of [{ ...link, purchaseIntentId: randomUUID() }, { ...link, attemptId: randomUUID() },
+        { ...link, orderId: "gid://shopify/Order/7102" }, { ...link, purchaseIntentId: "not-an-id" }]) {
+        expect(await query.find(candidate, scope)).toBeNull();
+      }
+      expect(await query.find(link, "other.myshopify.com")).toBeNull();
+      expect(await query.find(link, "invalid-shop")).toBeNull();
+      // Purchase intent TTL is not a payment-provider expiration; preserve the real plan after that TTL.
+      await sql`UPDATE bloombox.purchase_intents SET expires_at = created_at + interval '1 hour' WHERE id = ${intent.id}`;
+      expect(await query.find(link, scope)).toMatchObject({ status: "CHECKOUT_CREATED", deliveryDate: "2026-09-14" });
+      await sql`UPDATE bloombox.purchase_intents SET status = 'EXPIRED', pii_key_id = NULL, recipient_ciphertext = NULL,
+        gift_message_ciphertext = NULL, pii_purged_at = clock_timestamp() WHERE id = ${intent.id}`;
+      expect(await query.find(link, scope)).toMatchObject({ status: "EXPIRED", detailsAvailable: false });
+    } finally { await worker.end({ timeout: 5 }); }
+  });
+  it("reports a delivery-plan database failure safely without turning it into a missing plan", async () => {
+    const { link } = await linkedForPayment("gid://shopify/Order/7201");
+    const worker = postgres(safeUrl(), { max: 1, ssl: false });
+    try {
+      await worker`SET ROLE bloombox_worker`;
+      await sql`REVOKE SELECT ON bloombox.shopify_order_links FROM bloombox_worker`;
+      try {
+        await expect(new PostgresShopifyDeliveryPlanQuery(worker).find(link, scope)).rejects.toEqual(new ShopifyDeliveryPlanUnavailableError());
+      } finally { await sql`GRANT SELECT ON bloombox.shopify_order_links TO bloombox_worker`; }
+      expect(await new PostgresShopifyDeliveryPlanQuery(worker).find(link, scope)).toMatchObject({ detailsAvailable: true });
+    } finally { await worker.end({ timeout: 5 }); }
+  });
   it("persists financial evidence once across concurrent retries and ignores older paid snapshots", async () => {
     const { intent, link } = await linkedForPayment("gid://shopify/Order/7001");
     const store = new PostgresShopifyPaymentEvidence(sql);

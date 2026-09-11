@@ -1,9 +1,13 @@
 import { assessOrderPricing, type OrderPricingAssessment } from "@/modules/order/public";
-import type { ShopifyOrderLink, ShopifyOrderLinker } from "@/modules/checkout/public";
+import { assessDeliveryDate, type DeliveryDateAssessment } from "@/modules/fulfillment/public";
+import type { ShopifyOrderLink, ShopifyOrderLinker, ShopifyDeliveryPlanQuery } from "@/modules/checkout/public";
 import { evaluateSettlement, SettlementEvidenceConflictError, type SettlementSnapshot, type SettlementStatus } from "../domain/settlement-evidence";
 import type { ReadShopifyReference } from "./read-shopify-reference";
 import type { VerifiedProviderEvent } from "./receive-provider-webhook";
 export type ShopifyPaymentEvidenceResult = Readonly<{ outcome: "APPLIED" | "DUPLICATE" | "STALE"; status: SettlementStatus; version: number }>;
+export type ShopifyDeliveryTimingAssessment = DeliveryDateAssessment | Readonly<{ status: "HELD"; reason:
+  "STALE_OBSERVATION" | "ORDER_CANCELLED" | "PAYMENT_NOT_SETTLED" | "PAYMENT_PENDING" | "PRICING_UNRESOLVED"
+  | "DELIVERY_PLAN_MISSING" | "PURCHASE_ALREADY_CONVERTED" | "PURCHASE_INACTIVE" | "PURCHASE_DETAILS_UNAVAILABLE" }>;
 export interface ShopifyPaymentEvidenceStore {
   record(link: ShopifyOrderLink, shop: string, snapshot: SettlementSnapshot): Promise<ShopifyPaymentEvidenceResult>;
 }
@@ -18,8 +22,10 @@ export class ReconcileShopifyPayment {
     private readonly linker: ShopifyOrderLinker,
     private readonly store: ShopifyPaymentEvidenceStore,
     private readonly expectedTestMode: boolean,
+    private readonly deliveryPlans: ShopifyDeliveryPlanQuery,
+    private readonly now: () => Date = () => new Date(),
   ) {}
-  async execute(event: VerifiedProviderEvent): Promise<ShopifyPaymentEvidenceResult & { pricing: OrderPricingAssessment }> {
+  async execute(event: VerifiedProviderEvent): Promise<ShopifyPaymentEvidenceResult & { pricing: OrderPricingAssessment; deliveryTiming: ShopifyDeliveryTimingAssessment }> {
     const source = await this.reader.execute(event);
     const order = source.order;
     if (order.test !== this.expectedTestMode || order.transactions.some((transaction) => transaction.test !== order.test)) {
@@ -41,6 +47,26 @@ export class ReconcileShopifyPayment {
     // A stale source must never authorize fresh commercial acceptance alongside newer stored payment facts.
     const pricing: OrderPricingAssessment = payment.outcome === "STALE"
       ? { status: "HELD", reason: "STALE_OBSERVATION" } : assessOrderPricing(order.pricing);
-    return { ...payment, pricing };
+    const deliveryTiming = await this.assessDeliveryTiming(link, source.shop, snapshot, payment, pricing);
+    return { ...payment, pricing, deliveryTiming };
   }
+
+  private async assessDeliveryTiming(link: ShopifyOrderLink, shop: string, source: SettlementSnapshot,
+    payment: ShopifyPaymentEvidenceResult, pricing: OrderPricingAssessment): Promise<ShopifyDeliveryTimingAssessment> {
+    if (payment.outcome === "STALE") return { status: "HELD", reason: "STALE_OBSERVATION" };
+    if (source.cancelledAt !== null) return { status: "HELD", reason: "ORDER_CANCELLED" };
+    if (payment.status !== "CAPTURED") return { status: "HELD", reason: "PAYMENT_NOT_SETTLED" };
+    if (source.transactions.some((transaction) => transaction.status === "PENDING")) return { status: "HELD", reason: "PAYMENT_PENDING" };
+    if (pricing.status !== "MATCHED") return { status: "HELD", reason: "PRICING_UNRESOLVED" };
+    const plan = await this.deliveryPlans.find(link, shop);
+    if (!plan) return { status: "HELD", reason: "DELIVERY_PLAN_MISSING" };
+    if (plan.status === "CONVERTED") return { status: "HELD", reason: "PURCHASE_ALREADY_CONVERTED" };
+    if (plan.status !== "CHECKOUT_CREATED") return { status: "HELD", reason: "PURCHASE_INACTIVE" };
+    // Capture the clock after I/O, so a slow query cannot cross the cutoff unnoticed.
+    const now = this.now();
+    if (!Number.isFinite(plan.retentionExpiresAt.getTime())) throw new SettlementEvidenceConflictError();
+    if (!plan.detailsAvailable || plan.retentionExpiresAt <= now) return { status: "HELD", reason: "PURCHASE_DETAILS_UNAVAILABLE" };
+    return assessDeliveryDate(plan.deliveryDate, now);
+  }
+
 }

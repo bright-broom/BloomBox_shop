@@ -177,11 +177,11 @@ describe("Shopify authenticated order lookup", () => {
       apiVersion: config.apiVersion, occurredAt: new Date(), payload: { id: orderId, objectType: "shopify_order_reference" } };
     const link = vi.fn().mockResolvedValue({ purchaseIntentId: "intent", attemptId: "attempt", orderId });
     const record = vi.fn().mockResolvedValue({ outcome: "APPLIED", status: "PARTIALLY_REFUNDED", version: 1 });
-    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, true);
+    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, true, { find: async () => null });
     expect(await useCase.execute(event)).toMatchObject({ status: "PARTIALLY_REFUNDED" });
     expect(record).toHaveBeenCalledWith(expect.objectContaining({ orderId }), config.storeDomain, expect.objectContaining({ received: 8000, refunded: 500, transactions: expect.arrayContaining([expect.objectContaining({ kind: "REFUND", status: "SUCCEEDED", amount: 500 })]) }));
     expect(JSON.stringify(record.mock.calls)).not.toContain("opaque-cart-token");
-    await expect(new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, false).execute(event)).rejects.toBeInstanceOf(SettlementEvidenceConflictError);
+    await expect(new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, false, { find: async () => null }).execute(event)).rejects.toBeInstanceOf(SettlementEvidenceConflictError);
     fetcher.mockResolvedValueOnce(response({ ...paidOrder, totalReceivedSet: bag("7999") }));
     await expect(useCase.execute(event)).rejects.toBeInstanceOf(SettlementEvidenceConflictError);
     fetcher.mockResolvedValueOnce(response({ ...paidOrder, transactions: paidOrder.transactions.map((transaction) => ({ ...transaction, test: false })) }));
@@ -194,7 +194,7 @@ describe("Shopify authenticated order lookup", () => {
       apiVersion: config.apiVersion, occurredAt: new Date(), payload: { id: orderId, objectType: "shopify_order_reference", total: 1 } };
     const link = vi.fn().mockResolvedValue({ purchaseIntentId: "intent", attemptId: "attempt", orderId });
     const record = vi.fn().mockResolvedValue({ outcome: "APPLIED", status: "CAPTURED", version: 1 });
-    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, true);
+    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, true, { find: async () => null });
     expect(await useCase.execute(event)).toMatchObject({ status: "CAPTURED", pricing: { status: "MATCHED", totals: { total: 8000, tax: 727, taxesIncluded: true } } });
     record.mockResolvedValueOnce({ outcome: "DUPLICATE", status: "CAPTURED", version: 1 });
     expect(await useCase.execute(event)).toMatchObject({ outcome: "DUPLICATE", pricing: { status: "MATCHED" } });
@@ -230,6 +230,67 @@ describe("Shopify authenticated order lookup", () => {
     }
     const result = await client(response({ ...refund(), order: complete })).reader.read({ ...reference, kind: "REFUND", id: refundId });
     expect(result.order.pricing).toMatchObject({ tax: 727, total: 8000, duties: 0, additionalFees: 0 });
+  });
+  it("rechecks persisted delivery timing on retries and never trusts the notification's date", async () => {
+    const { reader, fetcher } = client(); fetcher.mockImplementation(async () => response(pricedOrder()));
+    const event = { provider: "SHOPIFY" as const, providerAccountId: config.storeDomain, eventType: "shopify.order.changed", externalEventId: "verified-digest", externalObjectId: orderId,
+      apiVersion: config.apiVersion, occurredAt: new Date("2026-09-10T00:00:00Z"), payload: { id: orderId, objectType: "shopify_order_reference", deliveryDate: "2026-12-01" } };
+    const linked = { purchaseIntentId: "intent", attemptId: "attempt", orderId };
+    const plan = { deliveryDate: "2026-09-14", status: "CHECKOUT_CREATED", detailsAvailable: true, retentionExpiresAt: new Date("2026-10-11T00:00:00Z") };
+    const find = vi.fn().mockResolvedValue(plan);
+    const link = vi.fn().mockResolvedValue(linked);
+    const record = vi.fn().mockResolvedValue({ outcome: "APPLIED", status: "CAPTURED", version: 1 });
+    const now = vi.fn(() => new Date("2026-09-11T14:59:59.999Z"));
+    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link }, { record }, true, { find }, now);
+    expect(await useCase.execute(event)).toMatchObject({ deliveryTiming: { status: "WITHIN_WINDOW", deliveryDate: "2026-09-14" } });
+    expect(find).toHaveBeenCalledWith(linked, config.storeDomain);
+    record.mockResolvedValue({ outcome: "DUPLICATE", status: "CAPTURED", version: 1 });
+    // Cross midnight during the database lookup; the workflow must use the clock after the read.
+    find.mockImplementationOnce(async () => { now.mockReturnValue(new Date("2026-09-11T15:00:00Z")); return plan; });
+    expect(await useCase.execute(event)).toMatchObject({ outcome: "DUPLICATE", deliveryTiming: { status: "HELD", reason: "INSUFFICIENT_LEAD_TIME" } });
+    expect(record).toHaveBeenCalledTimes(2);
+    now.mockReturnValue(new Date("2026-09-11T00:00:00Z"));
+    for (const [override, reason] of [
+      [{ deliveryDate: "2026-02-30" }, "INVALID_DELIVERY_DATE"],
+      [{ retentionExpiresAt: new Date("2026-09-11T00:00:00Z") }, "PURCHASE_DETAILS_UNAVAILABLE"],
+      [{ detailsAvailable: false }, "PURCHASE_DETAILS_UNAVAILABLE"],
+      [{ status: "CONVERTED" }, "PURCHASE_ALREADY_CONVERTED"],
+      [{ status: "EXPIRED" }, "PURCHASE_INACTIVE"],
+      [{ status: "ABANDONED" }, "PURCHASE_INACTIVE"],
+    ] as const) {
+      find.mockResolvedValueOnce({ ...plan, ...override });
+      expect(await useCase.execute(event)).toMatchObject({ deliveryTiming: { status: "HELD", reason } });
+    }
+    find.mockResolvedValueOnce(null);
+    expect(await useCase.execute(event)).toMatchObject({ deliveryTiming: { status: "HELD", reason: "DELIVERY_PLAN_MISSING" } });
+    find.mockRejectedValueOnce(new Error("plan read unavailable"));
+    await expect(useCase.execute(event)).rejects.toThrow("plan read unavailable");
+    expect(await useCase.execute(event)).toMatchObject({ outcome: "DUPLICATE", deliveryTiming: { status: "WITHIN_WINDOW" } });
+    find.mockClear(); record.mockRejectedValueOnce(new Error("payment save unavailable"));
+    await expect(useCase.execute(event)).rejects.toThrow("payment save unavailable");
+    expect(find).not.toHaveBeenCalled();
+  });
+  it("holds cancelled, unsettled, pending-refund, stale and unpriced payments before reading a delivery plan", async () => {
+    const complete = pricedOrder();
+    const { reader, fetcher } = client();
+    const event = { provider: "SHOPIFY" as const, providerAccountId: config.storeDomain, eventType: "shopify.order.changed", externalEventId: "verified-digest", externalObjectId: orderId,
+      apiVersion: config.apiVersion, occurredAt: new Date(), payload: { id: orderId, objectType: "shopify_order_reference" } };
+    const record = vi.fn(); const find = vi.fn();
+    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), { link: async () => ({ purchaseIntentId: "intent", attemptId: "attempt", orderId }) }, { record }, true, { find });
+    const pendingRefund = { id: "gid://shopify/OrderTransaction/62", kind: "REFUND", status: "PENDING", test: true, parentTransaction: { id: complete.transactions[0].id }, amountSet: bag("500") };
+    for (const scenario of [
+      { source: { ...complete, cancelledAt: "2026-09-11T10:01:00Z" }, status: "CAPTURED", outcome: "APPLIED", reason: "ORDER_CANCELLED" },
+      { source: { ...complete, transactions: [], totalReceivedSet: bag("0") }, status: "PROCESSING", outcome: "APPLIED", reason: "PAYMENT_NOT_SETTLED" },
+      { source: { ...complete, transactions: [...complete.transactions, { ...pendingRefund, status: "SUCCESS" }], totalRefundedSet: bag("500") }, status: "PARTIALLY_REFUNDED", outcome: "APPLIED", reason: "PAYMENT_NOT_SETTLED" },
+      { source: { ...complete, transactions: [...complete.transactions, pendingRefund] }, status: "CAPTURED", outcome: "APPLIED", reason: "PAYMENT_PENDING" },
+      { source: complete, status: "REFUNDED", outcome: "STALE", reason: "STALE_OBSERVATION" },
+      { source: { ...complete, totalTaxSet: null }, status: "CAPTURED", outcome: "APPLIED", reason: "PRICING_UNRESOLVED" },
+    ]) {
+      fetcher.mockResolvedValueOnce(response(scenario.source));
+      record.mockResolvedValueOnce({ outcome: scenario.outcome, status: scenario.status, version: 1 });
+      expect(await useCase.execute(event)).toMatchObject({ deliveryTiming: { status: "HELD", reason: scenario.reason } });
+    }
+    expect(record).toHaveBeenCalledTimes(6); expect(find).not.toHaveBeenCalled();
   });
   it("rejects a truncated or duplicate order transaction list", async () => {
     const transaction = { id: "gid://shopify/OrderTransaction/71", kind: "SALE", status: "SUCCESS", test: true, parentTransaction: null, amountSet: bag("8000") };

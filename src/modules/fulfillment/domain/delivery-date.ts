@@ -51,3 +51,19 @@ function isIsoCalendarDate(value: string): boolean {
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
+
+export type DeliveryDateAssessment = Readonly<{ status: "WITHIN_WINDOW"; deliveryDate: string }> | Readonly<{
+  status: "HELD"; reason: "INVALID_DELIVERY_DATE" | "INSUFFICIENT_LEAD_TIME" | "OUTSIDE_BOOKING_WINDOW";
+}>;
+
+/** Re-evaluate at processing time. A valid selection before checkout may be too late after payment. */
+export function assessDeliveryDate(value: string, now: Date): DeliveryDateAssessment {
+  if (!Number.isFinite(now.getTime())) throw new InvalidDeliveryAssessmentTimeError();
+  if (!isIsoCalendarDate(value)) return { status: "HELD", reason: "INVALID_DELIVERY_DATE" };
+  if (value < getEarliestDeliveryDate(now)) return { status: "HELD", reason: "INSUFFICIENT_LEAD_TIME" };
+  if (value > getLatestDeliveryDate(now)) return { status: "HELD", reason: "OUTSIDE_BOOKING_WINDOW" };
+  return { status: "WITHIN_WINDOW", deliveryDate: value };
+}
+export class InvalidDeliveryAssessmentTimeError extends Error {
+  constructor() { super("Delivery assessment time is invalid"); this.name = "InvalidDeliveryAssessmentTimeError"; }
+}

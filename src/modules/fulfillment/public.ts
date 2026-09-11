@@ -1,4 +1,7 @@
 export {
+  assessDeliveryDate,
+  type DeliveryDateAssessment,
+  InvalidDeliveryAssessmentTimeError,
   assertAvailableDeliveryDate,
   DeliveryDateUnavailableError,
   DELIVERY_BOOKING_WINDOW_DAYS,

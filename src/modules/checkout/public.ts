@@ -10,3 +10,5 @@ export {
   type ShopifyOrderLinker, type ShopifyOrderLinkInput, type ShopifyOrderLink,
   ShopifyOrderLinkUnresolvedError, ShopifyOrderLinkPersistenceError,
 } from "./application/link-shopify-order";
+
+export { type ShopifyDeliveryPlan, type ShopifyDeliveryPlanQuery, ShopifyDeliveryPlanUnavailableError } from "./application/shopify-delivery-plan-query";
