@@ -20,13 +20,13 @@
 | P0-01 | main保護とレビュー必須化 | 設定不足。GitHub API、Issue #6、GOVERNANCE.md | PR経由、必須CI、CODEOWNER承認、会話解決、最新mainへの追従、管理者迂回制限を設定しAPIで確認。承認者の実際の運営体制も決める |
 | P0-02 | 本番Environmentの必須承認 | 設定不足。Productionにreviewerなし | 適切な承認者・main制限・迂回ルールを設定し、未承認のデプロイが進まないことを確認 |
 | P0-03 | 公開リポジトリ向け運用確認 | 確認待ち。公開へ変更された | Actions権限、外部PRでのSecret非公開、ログ・Artifact・自動Incidentに公開不可データを出さない運用、公開を前提とした履歴・成果物の確認を完了 |
-| P0-04 | 決済方針をADRと一致させる | 判断待ち。ADR 0001はShopifyを正本、実装はpreview/stripe。ADR 0002はStripe有効化に別ADRを要求 | Shopify Checkoutを採用するかStripe有効化ADRを承認し、決済・税・在庫・返品・障害時の責任を確定。両方の実装を同時に要求しない |
-| P0-05 | 選択した本番購入経路を完成 | 一部実装。Checkout providerはStripeのみ | Shopifyを選ぶならCheckout/Webhook/注文投影のAdapterを追加。Stripeを選ぶなら既存Adapterを契約試験で検証。選択した経路で注文確定まで一貫 |
+| P0-04 | 決済方針をADRと一致させる | ADR 0003でShopify Checkout + Shopify Payments + KOMOJUを選定。本番利用の承認ではない | 選定済み。加盟店審査・方法別の接続条件と導入証跡はPAYMENTS.mdで追跡 |
+| P0-05 | 選択した本番購入経路を完成 | Shopifyカート作成/再取得の接続境界と契約fixtureテストを追加。購入処理への組込みは未完了 | 暗号化cart ID保存、永続的な作成試行/排他/結果不明状態、Shopify通知/注文投影/再照合、購入画面への組込みを完成。PAYMENTS.md参照 |
 | P0-06 | 在庫予約・解放・確定・再照合 | 未実装。予約Strategy証跡未完了、在庫書込方針はSTRIPE.mdで明示的に未決定 | 同時購入、決済失敗・期限切れ・キャンセル・通信断で売り越し、二重減算、永久予約を防止。Shopifyとの整合を検証 |
 | P0-07 | 配送日・締切・休業日・地域制約 | 一部実装。delivery-date.tsは3〜60日の範囲のみ | 商用の配送約束を定義し、必要な休業日、締切、対象外地域、配送日別上限をAsia/Tokyoで検証。不要な制約は業務判断で明記 |
 | P0-08 | 税・送料・最終総額・返品条件 | 設定/判断/証跡待ち。Hosted Checkout設定は存在 | 実事業者の料金と表示を確定し、商品・数量・税・送料・総額・条件が最終確認画面と注文スナップショットで整合 |
 | P0-09 | Shopify実店舗接続契約 | 証跡待ち。Adapterと単体テストは実装済み | 商品公開、1商品1variant、JPY、metafield、売切れ、価格変更、認証拒否、制限・障害を隔離店舗で検証。SHOPIFY.mdの証跡を保存 |
-| P0-10 | 決済事業者のテスト環境設定 | 設定/証跡待ち。stripe-test Environmentなし | Stripe採用時は分離キー、送料、税、規約URL、署名Secret、Webhookイベント/API版を設定しReadiness workflow成功。Shopify採用時は対応する証跡に置換 |
+| P0-10 | 決済事業者のテスト環境設定 | Shopify Payments + KOMOJUを選定。加盟店アカウント・審査・接続は未確認 | Shopify隔離店舗でKOMOJUの方法別アプリとテストモードを設定。送料/税/規約/通知/API版、正常/失敗/遅延入金/返金を検証。PAYMENTS.mdの証跡を保存 |
 | P0-11 | 本番DB・権限・鍵の運用 | 外部環境未確認。Migration/Role/暗号化は実装済み | Application/Worker/Migration資格情報の分離、TLS、接続数、鍵保管・ローテーション、失効手順を本番相当環境で確認 |
 | P0-12 | デプロイとWorkerの設定 | 一部設定不足。確認したGitHub Secret一覧は空 | Deploy Hook、Migration URL、Worker Secret等を適切なスコープに設定。対象SHAの配備・health一致・Worker実行を確認。Previewへ本番資格情報を渡さない |
 | P0-13 | 新規決済停止と既存取引処理の分離 | 受付専用フラグ、Applicationの拒否、顧客向けエラー、停止/再開/実行中Sessionの回帰テストを実装。Provider設定を維持する手順へ更新 | 残作業は本番相当環境での設定反映・遅延イベントの決済確定・再開演習。分散環境へ瞬時に反映する制御ではなく、発行済みSessionを取り消すものでもない |
@@ -68,7 +68,7 @@
 ## 次に進める順序
 
 1. P0-01/02：公開化で取り除けるガバナンス課題を閉じる。承認者の決定は人が行う。
-2. P0-04：決済方針を確定。これが購入経路・在庫・通知・Gateの前提。
+2. P0-04の方針はADR 0003で確定。P0-05：Shopify + KOMOJU経路の残る購入処理・在庫・通知・Gateを完成。
 3. P0-05/06/13：購入・在庫・緊急停止を一つの取引経路として検証。
 4. P0-07/14/15：届けられる日付、実出荷、通知を完成。
 5. 並行して設定・規約・PII方針をそろえ、P0-18〜21で販売開始条件を確認。

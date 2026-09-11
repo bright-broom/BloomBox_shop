@@ -100,10 +100,11 @@ Create or update an ADR before materially changing architecture style, module ow
 
 An ADR states context, decision, alternatives, consequences, rollout, and rollback. Routine implementation within existing boundaries does not need an ADR.
 
-Accepted decisions:
+Decision records:
 
 - [ADR 0001: Shopify-first commerce boundary](adr/0001-shopify-first-commerce-boundary.md)
 - [ADR 0002: Commerce persistence and payment-ready boundaries](adr/0002-commerce-persistence-and-payment-boundaries.md)
+- [ADR 0003: Shopify Checkout with Shopify Payments and KOMOJU](adr/0003-shopify-payments-and-komoju.md) (implementation selection; live activation remains blocked)
 - [ADR 0004: Referral rewards preview](adr/0004-referral-rewards-preview.md) — proposed; production activation excluded
 
 ## Architecture decision test
