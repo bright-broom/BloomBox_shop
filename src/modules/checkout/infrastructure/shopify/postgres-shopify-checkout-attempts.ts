@@ -1,3 +1,4 @@
+import { shopifyCartIdentityFromId } from "./shopify-cart-identity";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { DatabaseClient, DatabaseTransaction } from "@/shared/infrastructure/database/postgres-client";
@@ -91,13 +92,15 @@ export class PostgresShopifyCheckoutAttempts implements ShopifyCheckoutAttempts 
           if (existing.status !== "READY" || existing.cartId !== cart.cartId || existing.apiVersion !== cart.apiVersion) {
             throw new ShopifyCheckoutConflictError();
           }
+          await tx`UPDATE bloombox.shopify_checkout_attempts SET cart_token_digest = ${shopifyCartIdentityFromId(existing.cartId)}
+            WHERE purchase_intent_id = ${intentId} AND cart_token_digest IS NULL`;
           return;
         }
         if (intents[0].status !== "READY_FOR_CHECKOUT") throw new ShopifyCheckoutConflictError();
         const protectedCart = this.protector.protect(cart.cartId, credentialContext(intentId, row));
         await tx`UPDATE bloombox.shopify_checkout_attempts
           SET status = 'READY', credential_key_id = ${protectedCart.keyId}, credential_ciphertext = ${protectedCart.ciphertext},
-            api_version = ${cart.apiVersion}, updated_at = ${now}
+            api_version = ${cart.apiVersion}, cart_token_digest = ${shopifyCartIdentityFromId(cart.cartId)}, updated_at = ${now}
           WHERE purchase_intent_id = ${intentId} AND attempt_id = ${attemptId}`;
         await tx`UPDATE bloombox.purchase_intents SET status = 'CHECKOUT_CREATED', provider_api_version = ${cart.apiVersion},
           checkout_created_at = ${now}, version = version + 1, updated_at = ${now} WHERE id = ${intentId}`;

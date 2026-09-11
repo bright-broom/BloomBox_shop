@@ -17,7 +17,7 @@ const moneyBag = z.object({ shopMoney: jpy, presentmentMoney: jpy })
   .refine((value) => value.shopMoney.amount === value.presentmentMoney.amount)
   .transform((value) => money(value.shopMoney.amount));
 const orderSchema = z.object({
-  id: gid("Order"), updatedAt: date, test: z.boolean(), cancelledAt: date.nullable(),
+  id: gid("Order"), cartToken: z.string().min(1).max(128_000).nullable(), updatedAt: date, test: z.boolean(), cancelledAt: date.nullable(),
   displayFinancialStatus: z.enum(["AUTHORIZED", "EXPIRED", "PAID", "PARTIALLY_PAID", "PARTIALLY_REFUNDED", "PENDING", "REFUNDED", "VOIDED"]).nullable(),
   originalTotalPriceSet: moneyBag, currentTotalPriceSet: moneyBag,
   totalReceivedSet: moneyBag, totalRefundedSet: moneyBag,
@@ -49,7 +49,7 @@ const envelopeSchema = z.object({
   data: z.object({ shop: z.object({ myshopifyDomain: z.string() }), node: z.unknown() }),
 });
 const MONEY_FIELDS = "shopMoney { amount currencyCode } presentmentMoney { amount currencyCode }";
-const ORDER_FIELDS = `id updatedAt test cancelledAt displayFinancialStatus
+const ORDER_FIELDS = `id cartToken updatedAt test cancelledAt displayFinancialStatus
   originalTotalPriceSet { ${MONEY_FIELDS} } currentTotalPriceSet { ${MONEY_FIELDS} }
   totalReceivedSet { ${MONEY_FIELDS} } totalRefundedSet { ${MONEY_FIELDS} }
   lineItems(first: ${MAX_ITEMS}) {
@@ -92,7 +92,7 @@ export class ShopifyAdminOrderReader implements ShopifyOrderReader {
       return {
         shop: this.config.storeDomain, apiVersion: this.config.apiVersion,
         order: {
-          id: order.id, updatedAt: order.updatedAt, test: order.test, cancelledAt: order.cancelledAt,
+          id: order.id, cartToken: order.cartToken, updatedAt: order.updatedAt, test: order.test, cancelledAt: order.cancelledAt,
           financialStatus: order.displayFinancialStatus, originalTotal: order.originalTotalPriceSet,
           currentTotal: order.currentTotalPriceSet, received: order.totalReceivedSet, refunded: order.totalRefundedSet,
           lines: order.lineItems.nodes.map((line) => ({

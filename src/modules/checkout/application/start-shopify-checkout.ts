@@ -41,6 +41,7 @@ export class StartShopifyCheckout {
       const cart = await this.carts.retrieve(claim.attempt.cartId, intent);
       if (cart.cartId !== claim.attempt.cartId || cart.purchaseIntentId !== id
         || cart.apiVersion !== claim.attempt.apiVersion) throw new ShopifyCheckoutConflictError();
+      await this.attempts.complete(id, claim.attempt.id, cart, this.now());
       return { url: cart.checkoutUrl, purchaseIntentId: id };
     }
     try {

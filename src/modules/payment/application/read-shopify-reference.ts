@@ -11,6 +11,8 @@ export type ShopifyTransaction = Readonly<{
 }>;
 export type ShopifyOrderSnapshot = Readonly<{
   id: string;
+  /** Sensitive correlation data, for internal checkout matching only. */
+  cartToken: string | null;
   updatedAt: string;
   test: boolean;
   cancelledAt: string | null;
