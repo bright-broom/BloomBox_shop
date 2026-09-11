@@ -1,3 +1,6 @@
+import { ReadShopifyReference } from "@/modules/payment/application/read-shopify-reference";
+import { ShopifyAdminOrderReader } from "@/modules/payment/infrastructure/shopify/shopify-admin-order-reader";
+import { loadShopifyAdminConfig } from "./config/shopify-admin-config";
 import { isIP } from "node:net";
 import { loadShopifyWebhookConfig } from "./config/shopify-webhook-config";
 import {
@@ -201,4 +204,10 @@ export function getShopifyWebhookReceiver(): ReceiveProviderWebhook<Uint8Array, 
       provider: "SHOPIFY", accountId: config.storeDomain,
     }),
   );
+}
+
+/** Read-only integration boundary; no Inbox worker or commerce writes are activated. */
+export function getShopifyReferenceReader(): ReadShopifyReference | null {
+  const config = loadShopifyAdminConfig();
+  return config ? new ReadShopifyReference(new ShopifyAdminOrderReader(config)) : null;
 }
