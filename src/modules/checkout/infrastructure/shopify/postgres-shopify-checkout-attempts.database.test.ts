@@ -1,3 +1,4 @@
+import { OperatorApprovalIntent } from "@/shared/infrastructure/security/operator-auth/approval-intent";
 import { PostgresFulfillmentInboxQuery } from "@/modules/fulfillment/infrastructure/postgres-fulfillment-inbox-query";
 import { PostgresShopifyOrderAcceptor } from "@/modules/order/infrastructure/postgres-shopify-order-acceptor";
 import { PostgresShopifyFulfillmentIntake } from "@/modules/fulfillment/infrastructure/postgres-shopify-fulfillment-intake";
@@ -445,6 +446,23 @@ describeDatabase("durable Shopify checkout attempts", () => {
       });
       expect(await pending).toEqual(new FulfillmentReviewError("NOT_AUTHORIZED"));
     } finally { await pending; await connection.end({ timeout: 5 }); }
+  });
+  it("records encrypted review submissions once through the real approval transaction", async () => {
+    const fixture = await approvalFixture(95001);
+    const actor = await fixture.identity.current();
+    const intents = new OperatorApprovalIntent("synthetic-database-review-intent-secret", "https://operators.example", fixture.clock);
+    const token = await intents.issue({ shop: scope, fulfillmentId: fixture.request.fulfillmentId,
+      reviewedIntakeVersion: fixture.request.reviewedIntakeVersion }, actor, true);
+    const results = await Promise.all(Array.from({ length: 6 }, async () => fixture.approver.approve(await intents.read(token, actor, true))));
+    expect(results.filter((result) => result.outcome === "RECORDED")).toHaveLength(1);
+    expect(results.filter((result) => result.outcome === "DUPLICATE")).toHaveLength(5);
+    expect(new Set(results.map((result) => result.approvalId)).size).toBe(1);
+    expect(await sql`SELECT id FROM bloombox.fulfillment_operator_approvals WHERE fulfillment_id = ${fixture.request.fulfillmentId}`).toHaveLength(1);
+    expect(await sql`SELECT id FROM bloombox.outbox_events WHERE aggregate_id = ${fixture.request.fulfillmentId}
+      AND event_type = 'fulfillment.operator_approval.recorded'`).toHaveLength(1);
+    expect((await sql`SELECT status FROM bloombox.fulfillments WHERE id = ${fixture.request.fulfillmentId}`)[0].status).toBe("UNFULFILLED");
+    await sql`UPDATE bloombox.fulfillment_operator_permissions SET enabled = false, version = version + 1 WHERE id = ${fixture.permissionId}`;
+    await expect(fixture.approver.approve(await intents.read(token, actor, true))).rejects.toEqual(new FulfillmentApprovalError("NOT_AUTHORIZED"));
   });
   it("records one concurrent operator decision and immutable audit/Outbox without dispatching", async () => {
     const fixture = await approvalFixture(92001);

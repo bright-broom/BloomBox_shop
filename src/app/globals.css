@@ -492,3 +492,8 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
 .fulfillment-inbox-page { padding-top: var(--space-6); }
 .fulfillment-inbox-page .content-header { margin-block: var(--space-5) var(--space-6); }
 .fulfillment-inbox-search .form-hint { margin: 0; }
+
+.fulfillment-approval-form { margin-top: var(--space-7); padding-top: var(--space-6); border-top: 1px solid var(--line); max-width: var(--reading-max); }
+.fulfillment-approval-form > p, .fulfillment-approval-form form { margin-top: var(--space-4); }
+.fulfillment-approval-acknowledgement { display: flex; gap: var(--space-3); align-items: start; margin-bottom: var(--space-5); cursor: pointer; }
+.fulfillment-approval-acknowledgement input { flex-shrink: 0; margin-top: var(--space-2); accent-color: var(--accent); }
