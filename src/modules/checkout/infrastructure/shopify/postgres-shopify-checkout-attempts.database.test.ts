@@ -3,6 +3,8 @@ import { PostgresShopifyFulfillmentIntake } from "@/modules/fulfillment/infrastr
 import { ShopifyFulfillmentIntakeError } from "@/modules/fulfillment/public";
 import { PostgresShopifyFulfillmentApprover } from "@/modules/fulfillment/infrastructure/postgres-shopify-fulfillment-approver";
 import { FulfillmentApprovalError } from "@/modules/fulfillment/public";
+import { FulfillmentReviewError } from "@/modules/fulfillment/public";
+import { PostgresFulfillmentReviewQuery } from "@/modules/fulfillment/infrastructure/postgres-fulfillment-review-query";
 import { PostgresShopifyAcceptedOrderQuery } from "@/modules/order/infrastructure/postgres-shopify-accepted-order-query";
 import { PostgresShopifyOrderPaymentProjector } from "@/modules/payment/infrastructure/shopify/postgres-shopify-order-payment-projector";
 import { ShopifyOrderPaymentProjectionError } from "@/modules/payment/application/project-shopify-order-payment";
@@ -298,6 +300,80 @@ describeDatabase("durable Shopify checkout attempts", () => {
     const approver = new PostgresShopifyFulfillmentApprover(approvalSql, true, identity, { approval: "APPROVED" }, fixture.clock);
     return { ...fixture, intakeRow: intake, operatorId, permissionId, identity, request, approver };
   }
+  it("reads a minimal scoped review with current evidence and immutable approval history", async () => {
+    const fixture = await approvalFixture(93001);
+    await fixture.approver.approve(fixture.request);
+    const query = new PostgresFulfillmentReviewQuery(approvalSql, true, fixture.identity, fixture.clock);
+    const input = { shop: scope, fulfillmentId: fixture.request.fulfillmentId };
+    const before = await sql`SELECT count(*)::int AS count FROM bloombox.outbox_events`;
+    const review = await query.find(input);
+    expect(review).toMatchObject({ fulfillmentId: input.fulfillmentId, intakeVersion: 1, totalMinor: 5000, capturedMinor: 5000,
+      refundedMinor: 0, paymentEvidenceCurrent: true, stock: { status: "COVERED" }, quantities: { ordered: 1 }, latestApproval: { intakeVersion: 1 } });
+    expect(JSON.stringify(review)).not.toMatch(/配送先|番地|建物|address|recipient|ciphertext|operatorId|permissionId|idempotency|opaque-|token|gmail/);
+    expect(await sql`SELECT count(*)::int AS count FROM bloombox.outbox_events`).toEqual(before);
+    fixture.clock.mockReturnValue(new Date(acceptanceTime.getTime() + 30_000));
+    expect(await query.find(input)).toMatchObject({ stock: { status: "UNVERIFIED", reason: "STALE_SNAPSHOT" }, latestApproval: { intakeVersion: 1 } });
+    expect((await sql`SELECT provider_stock_assessment FROM bloombox.shopify_fulfillment_intakes WHERE fulfillment_id = ${input.fulfillmentId}`)[0]
+      .provider_stock_assessment.status).toBe("COVERED");
+  });
+  it("denies unverified, missing, wrong-shop, revoked and expired review identity without leaking order existence", async () => {
+    const fixture = await approvalFixture(93002);
+    const input = { shop: scope, fulfillmentId: fixture.request.fulfillmentId };
+    await expect(new PostgresFulfillmentReviewQuery(approvalSql, true).find(input)).rejects.toEqual(new FulfillmentReviewError("NOT_AUTHORIZED"));
+    const query = new PostgresFulfillmentReviewQuery(approvalSql, true, fixture.identity, fixture.clock);
+    const forged = { ...input, operatorId: fixture.operatorId };
+    await expect(query.find(forged)).rejects.toEqual(new FulfillmentReviewError("INVALID_REQUEST"));
+    await expect(query.find({ ...input, shop: "other.myshopify.com" })).rejects.toEqual(new FulfillmentReviewError("NOT_AUTHORIZED"));
+    await sql`INSERT INTO bloombox.fulfillment_operator_permissions (id, operator_id, provider_scope, enabled, valid_until, created_at, updated_at)
+      VALUES (${randomUUID()}, ${fixture.operatorId}, 'other.myshopify.com', true, ${new Date(acceptanceTime.getTime() + 60_000)}, ${acceptanceTime}, ${acceptanceTime})`;
+    expect(await query.find({ ...input, shop: "other.myshopify.com" })).toBeNull();
+    expect(await query.find({ ...input, fulfillmentId: randomUUID() })).toBeNull();
+    expect(await new PostgresFulfillmentReviewQuery(approvalSql, false, fixture.identity, fixture.clock).find(input)).toBeNull();
+    fixture.identity.current.mockRejectedValueOnce(new Error("private Google credential"));
+    await expect(query.find(input)).rejects.toEqual(new FulfillmentReviewError("UNAVAILABLE"));
+    fixture.identity.current.mockResolvedValueOnce({ operatorId: fixture.operatorId, expiresAt: acceptanceTime });
+    await expect(query.find(input)).rejects.toEqual(new FulfillmentReviewError("NOT_AUTHORIZED"));
+    await sql`UPDATE bloombox.fulfillment_operator_permissions SET enabled = false, version = version + 1 WHERE id = ${fixture.permissionId}`;
+    await expect(query.find(input)).rejects.toEqual(new FulfillmentReviewError("NOT_AUTHORIZED"));
+    await expect(query.find({ ...input, fulfillmentId: randomUUID() })).rejects.toEqual(new FulfillmentReviewError("NOT_AUTHORIZED"));
+  });
+  it("rejects review when authority expires while the read is completing", async () => {
+    const fixture = await approvalFixture(93005);
+    fixture.clock.mockReturnValueOnce(acceptanceTime).mockReturnValue(new Date(acceptanceTime.getTime() + 60_000));
+    const query = new PostgresFulfillmentReviewQuery(approvalSql, true, fixture.identity, fixture.clock);
+    await expect(query.find({ shop: scope, fulfillmentId: fixture.request.fulfillmentId })).rejects.toEqual(new FulfillmentReviewError("NOT_AUTHORIZED"));
+  });
+  it("shows changed payment evidence instead of treating an earlier approved intake as current", async () => {
+    const fixture = await approvalFixture(93003);
+    await fixture.approver.approve(fixture.request);
+    const accepted = await fixture.completion.orders.find(scope, fixture.event.externalObjectId);
+    if (!accepted) throw new Error("Expected accepted order");
+    const sale = { ...saleTransaction, id: fixture.source.transactions[0].id, amount: 5000 };
+    await new PostgresShopifyPaymentEvidence(sql).record({ ...accepted, orderId: fixture.event.externalObjectId }, scope,
+      { updatedAt: "2026-09-11T11:00:00Z", test: true, cancelledAt: null, requested: 5000, received: 5000, refunded: 500,
+        transactions: [sale, { id: "gid://shopify/OrderTransaction/9300302", kind: "REFUND", status: "SUCCEEDED", amount: 500, parentId: sale.id }] });
+    const query = new PostgresFulfillmentReviewQuery(approvalSql, true, fixture.identity, fixture.clock);
+    expect(await query.find({ shop: scope, fulfillmentId: fixture.request.fulfillmentId }))
+      .toMatchObject({ paymentEvidenceCurrent: false, refundedMinor: 500, latestApproval: { intakeVersion: 1 } });
+  });
+  it("rechecks review authorization after waiting for a concurrent permission revocation", async () => {
+    const fixture = await approvalFixture(93004);
+    const connection = postgres(safeUrl(), { max: 1, ssl: false, connection: { role: "bloombox_fulfillment_approver" } });
+    let pending: Promise<unknown> | undefined;
+    try {
+      const [{ pid }] = await connection`SELECT pg_backend_pid() AS pid`;
+      await sql.begin(async (tx) => {
+        await tx`SELECT id FROM bloombox.fulfillment_operator_permissions WHERE id = ${fixture.permissionId} FOR UPDATE`;
+        pending = new PostgresFulfillmentReviewQuery(connection, true, fixture.identity, fixture.clock)
+          .find({ shop: scope, fulfillmentId: fixture.request.fulfillmentId }).then(() => null, (error: unknown) => error);
+        await vi.waitFor(async () => {
+          expect((await sql`SELECT wait_event_type FROM pg_stat_activity WHERE pid = ${pid}`)[0].wait_event_type).toBe("Lock");
+        }, { timeout: 2000, interval: 10 });
+        await tx`UPDATE bloombox.fulfillment_operator_permissions SET enabled = false, version = version + 1 WHERE id = ${fixture.permissionId}`;
+      });
+      expect(await pending).toEqual(new FulfillmentReviewError("NOT_AUTHORIZED"));
+    } finally { await pending; await connection.end({ timeout: 5 }); }
+  });
   it("records one concurrent operator decision and immutable audit/Outbox without dispatching", async () => {
     const fixture = await approvalFixture(92001);
     expect((await approvalSql`SELECT current_user`)[0].current_user).toBe("bloombox_fulfillment_approver");

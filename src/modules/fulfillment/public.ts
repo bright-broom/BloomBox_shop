@@ -51,3 +51,5 @@ export { type ShopifyFulfillmentStockReader, ShopifyFulfillmentStockUnavailableE
 export { parseShopifyFulfillmentStockSnapshot } from "./infrastructure/shopify-fulfillment-stock-schema";
 export { FulfillmentApprovalError, type FulfillmentOperatorIdentity, type FulfillmentApprovalRequest,
   type FulfillmentApprovalReceipt, type ShopifyFulfillmentApprover } from "./application/approve-shopify-fulfillment";
+export { FulfillmentReviewError, type FulfillmentReview, type FulfillmentReviewQuery } from "./application/read-fulfillment-review";
+export { fulfillmentReviewSummary } from "./presentation/fulfillment-review-summary";
