@@ -20,6 +20,7 @@ export class PostgresDataRetentionJob {
         SET status = 'EXPIRED', version = version + 1, updated_at = ${now}
         WHERE status IN ('DRAFT', 'READY_FOR_CHECKOUT')
           AND expires_at <= ${now}
+          AND commerce_provider IS DISTINCT FROM 'SHOPIFY'
         RETURNING id
       `;
       for (const intent of expiredPurchaseIntents) {

@@ -9,6 +9,7 @@ import {
   PurchaseIntent,
   purchaseIntentId,
   type PurchaseIntentId,
+  type CommerceProvider,
 } from "../domain/purchase-intent";
 import { giftMessage, recipientName } from "../domain/purchase-intent-policy";
 import type { PurchaseIntentRepository } from "../domain/purchase-intent-repository";
@@ -197,10 +198,25 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
     });
   }
 
+  async claimCommerceProvider(id: PurchaseIntentId, provider: CommerceProvider): Promise<void> {
+    await this.sql.begin(async (tx) => {
+      const rows = await tx`SELECT status, commerce_provider FROM bloombox.purchase_intents WHERE id = ${id} FOR UPDATE`;
+      if (!rows.length || rows[0].status !== 'READY_FOR_CHECKOUT'
+        || (rows[0].commerce_provider && rows[0].commerce_provider !== provider)) throw new PurchaseIntentConcurrencyError();
+      if (rows[0].commerce_provider === provider) return;
+      await tx`UPDATE bloombox.purchase_intents
+        SET commerce_provider = ${provider}, version = version + 1, updated_at = clock_timestamp() WHERE id = ${id}`;
+      await tx`INSERT INTO bloombox.audit_logs
+        (id, actor_type, action, resource_type, resource_id, safe_metadata, occurred_at)
+        VALUES (${this.createId()}, 'SYSTEM', 'checkout.purchase_intent.provider_selected', 'PurchaseIntent', ${id},
+          ${tx.json({ provider })}, clock_timestamp())`;
+    });
+  }
+
   async saveCheckoutCreated(intent: PurchaseIntent): Promise<void> {
     if (
       intent.status !== "CHECKOUT_CREATED"
-      || !intent.commerceProvider
+      || intent.commerceProvider !== "STRIPE"
       || !intent.externalCheckoutId
       || !intent.providerApiVersion
       || !intent.checkoutCreatedAt
@@ -226,6 +242,7 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
         WHERE id = ${intent.id}
           AND status = 'READY_FOR_CHECKOUT'
           AND external_checkout_id IS NULL
+          AND (commerce_provider IS NULL OR commerce_provider = ${commerceProvider})
         RETURNING id
       `;
 

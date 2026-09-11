@@ -13,7 +13,7 @@ export const WEBHOOK_MAX_PROCESSING_ATTEMPTS = 12;
 export const WEBHOOK_MAX_RETRY_DELAY_SECONDS = 3_600;
 
 const claimedEventSchema = z.object({
-  commerce_provider: z.literal("STRIPE"),
+  commerce_provider: z.enum(["STRIPE", "SHOPIFY"]),
   provider_account_id: z.string().min(1),
   external_event_id: z.string().min(1),
   event_type: z.string().min(1),
@@ -39,9 +39,13 @@ export class PostgresWebhookInbox implements WebhookInbox, ProviderEventQueue {
     private readonly protector: AesGcmDataProtector,
     private readonly createId: () => string = randomUUID,
     private readonly now: () => Date = () => new Date(),
+    private readonly scope:
+      | { provider: "SHOPIFY"; accountId: string }
+      | { provider: "STRIPE"; accountId?: string } = { provider: "STRIPE" },
   ) {}
 
   async record(event: VerifiedProviderEvent): Promise<"INSERTED" | "DUPLICATE"> {
+    this.assertScope(event);
     const payload = this.protector.protect(
       JSON.stringify(event.payload),
       webhookContext(event),
@@ -97,7 +101,8 @@ export class PostgresWebhookInbox implements WebhookInbox, ProviderEventQueue {
           WITH candidates AS (
             SELECT id
             FROM bloombox.webhook_inbox
-            WHERE commerce_provider = 'STRIPE'
+            WHERE commerce_provider = ${this.scope.provider}
+              AND (${this.scope.accountId ?? null}::text IS NULL OR provider_account_id = ${this.scope.accountId ?? null})
               AND (
                 (status = 'PENDING' AND available_at <= ${input.now})
                 OR (status = 'PROCESSING' AND locked_at <= ${staleBefore})
@@ -134,6 +139,7 @@ export class PostgresWebhookInbox implements WebhookInbox, ProviderEventQueue {
     processedAt: Date,
     workerId: string,
   ): Promise<void> {
+    this.assertScope(event);
     const updated = await this.sql`
       UPDATE bloombox.webhook_inbox
       SET
@@ -157,6 +163,7 @@ export class PostgresWebhookInbox implements WebhookInbox, ProviderEventQueue {
     failedAt: Date,
     workerId: string,
   ): Promise<FailedEventDisposition> {
+    this.assertScope(event);
     const updated = await this.sql`
       UPDATE bloombox.webhook_inbox
       SET
@@ -180,6 +187,13 @@ export class PostgresWebhookInbox implements WebhookInbox, ProviderEventQueue {
     `;
     if (updated.length !== 1) throw new WebhookInboxPersistenceError();
     return updated[0].status === "FAILED" ? "FAILED" : "RETRY_SCHEDULED";
+  }
+
+  private assertScope(event: Pick<VerifiedProviderEvent, "provider" | "providerAccountId">): void {
+    if (event.provider !== this.scope.provider
+      || (this.scope.accountId !== undefined && event.providerAccountId !== this.scope.accountId)) {
+      throw new WebhookInboxPersistenceError();
+    }
   }
 
   private restoreEvent(untrustedRow: unknown): VerifiedProviderEvent {
