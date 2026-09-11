@@ -10,6 +10,8 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       default-days: 7
+      # pnpm-workspace.yaml exempts only the reviewed PR #18 baseline versions
+      # from pnpm's resolver gate; future releases still wait seven days.
     ignore:
       # The architecture checker uses the TypeScript 5 JavaScript compiler API.
       # Upgrade the compiler in a dedicated tooling migration.
