@@ -69,6 +69,8 @@ Order now has a disconnected atomic acceptance adapter (migration 0008): a confi
 
 ## Verification
 
+Offline Inbox diagnostics now inspect bounded queue metadata through a dedicated column-restricted operations role. They do not decrypt payloads, call Shopify, claim/requeue/complete events, or write commerce state. The role can inspect metadata across stores and must not be used as a tenant-scoped staff credential. Store selection is an operational query filter. Capture-only/public activation remains unchanged; worker wiring, missing-event reconciliation and notification delivery remain separate work. See [diagnostics and rollout](../../operations/SHOPIFY_INBOX_DIAGNOSTICS.md).
+
 Implementation references: [Cart creation](https://shopify.dev/docs/api/storefront/2026-07/mutations/cartCreate), [cart token handling](https://shopify.dev/docs/storefronts/headless/building-with-the-storefront-api/cart/manage), and [API version response headers](https://shopify.dev/docs/api/usage/versioning).
 
 Local adapter tests cover reference/variant/quantity/JPY-price mismatch, unexpected lines, provider errors and warnings, unsafe redirects, oversized responses, network failures, timeout, non-retried writes, repeated read-only retrieval, and PII minimization. These are synthetic contract fixtures, not merchant-backed end-to-end evidence. The adapter deliberately does not implement the existing expiring CheckoutSession interface or enter the composition root yet.

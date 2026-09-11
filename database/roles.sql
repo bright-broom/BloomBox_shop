@@ -14,6 +14,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_readonly') THEN
     CREATE ROLE bloombox_readonly NOLOGIN;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_inbox_monitor') THEN
+    CREATE ROLE bloombox_inbox_monitor NOLOGIN;
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_fulfillment_approver') THEN
     CREATE ROLE bloombox_fulfillment_approver NOLOGIN;
   END IF;
@@ -137,3 +140,9 @@ GRANT INSERT ON bloombox.fulfillment_permission_revocations, bloombox.audit_logs
 GRANT EXECUTE ON FUNCTION bloombox.disable_fulfillment_permission(uuid, bigint) TO bloombox_permission_manager;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA bloombox TO bloombox_readonly;
+
+-- A separate offline monitoring login needs metadata only; never grant a runtime/readonly role with it.
+GRANT USAGE ON SCHEMA bloombox TO bloombox_inbox_monitor;
+GRANT SELECT (id, commerce_provider, provider_account_id, status, received_at, available_at,
+  locked_at, attempts, payload_expires_at, payload_purged_at)
+  ON bloombox.webhook_inbox TO bloombox_inbox_monitor;

@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ProviderEventProcessor, VerifiedProviderEvent } from "./receive-provider-webhook";
-
-export const PROVIDER_INBOX_BATCH_SIZE = 100;
-export const PROVIDER_INBOX_LOCK_TIMEOUT_MINUTES = 5;
+import { PROVIDER_INBOX_BATCH_SIZE, PROVIDER_INBOX_LOCK_TIMEOUT_MINUTES } from "./provider-inbox-policy";
+export { PROVIDER_INBOX_BATCH_SIZE, PROVIDER_INBOX_LOCK_TIMEOUT_MINUTES } from "./provider-inbox-policy";
 
 export type FailedEventDisposition = "RETRY_SCHEDULED" | "FAILED";
 
