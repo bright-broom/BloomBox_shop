@@ -13,3 +13,5 @@ export {
   type OrderStatusQuery,
   type PublicOrderStatus,
 } from "./application/order-status-query";
+
+export { assessOrderPricing, type OrderPricingFacts, type OrderPricingAssessment } from "./domain/order-pricing";
