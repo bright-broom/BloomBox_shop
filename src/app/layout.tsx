@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { Noto_Sans_JP, Shippori_Mincho } from "next/font/google";
+import { Noto_Sans_JP, League_Gothic } from "next/font/google";
 import Link from "next/link";
 import { siteContent } from "@/shared/infrastructure/content/site-content";
 import { loadRuntimeMode } from "@/shared/infrastructure/config/runtime-config";
 import { loadSiteUrlConfig } from "@/shared/infrastructure/config/site-url-config";
+import { MobileNavigation } from "@/ui/mobile-navigation";
 import { HeaderCartLink } from "@/ui/header-cart-link";
 import "./globals.css";
 
@@ -13,9 +14,8 @@ const sans = Noto_Sans_JP({
   display: "swap",
 });
 
-const serif = Shippori_Mincho({
-  variable: "--font-serif",
-  weight: ["400", "500", "600"],
+const display = League_Gothic({
+  variable: "--font-display",
   subsets: ["latin"],
   display: "swap",
 });
@@ -46,7 +46,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ja">
-      <body className={`${sans.variable} ${serif.variable}`}>
+      <body className={`${sans.variable} ${display.variable}`}>
         <a className="skip-link" href="#main-content">本文へ移動</a>
         <div className="service-bar" aria-label="BloomBox のサービス情報">
           {(loadRuntimeMode() === "preview"
@@ -56,9 +56,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         </div>
         <header className="site-header">
           <Link className="brand" href="/" aria-label="BloomBox ホーム">
-            <span className="brand-mark" aria-hidden="true">
-              B
-            </span>
             <span>{siteContent.brandName}</span>
           </Link>
           <nav className="main-nav" aria-label="メインナビゲーション">
@@ -66,16 +63,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <Link href="/about">私たちについて</Link>
             <Link href="/guide">ご利用ガイド</Link>
           </nav>
-          <details className="mobile-menu">
-            <summary>メニュー</summary>
-            <nav aria-label="モバイルナビゲーション">
-              <Link href="/flowers">季節の花</Link>
-              <Link href="/about">私たちについて</Link>
-              <Link href="/guide">ご利用ガイド</Link>
-              <Link href="/faq">よくあるご質問</Link>
-              <Link href="/cart">カート</Link>
-            </nav>
-          </details>
+          <MobileNavigation>
+            <Link href="/flowers">季節の花</Link>
+            <Link href="/about">私たちについて</Link>
+            <Link href="/guide">ご利用ガイド</Link>
+            <Link href="/faq">よくあるご質問</Link>
+            <Link href="/cart">カート</Link>
+          </MobileNavigation>
           <div className="header-actions">
             <HeaderCartLink />
             <Link className="header-cta" href="/flowers">
@@ -88,9 +82,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <footer className="site-footer">
           <div>
             <Link className="brand brand-light" href="/">
-              <span className="brand-mark" aria-hidden="true">
-                B
-              </span>
               <span>{siteContent.brandName}</span>
             </Link>
             <p>{siteContent.footer.tagline}</p>

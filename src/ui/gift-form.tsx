@@ -54,6 +54,8 @@ export function GiftForm({
     if (!parsed.success) {
       setState({ fieldErrors: parsed.error.flatten().fieldErrors });
       setPending(false);
+      const firstField = event.currentTarget.elements.namedItem(String(parsed.error.issues[0]?.path[0] ?? ""));
+      if (firstField instanceof HTMLElement) firstField.focus();
       return;
     }
 
@@ -85,6 +87,7 @@ export function GiftForm({
       <div className="form-field">
         <label htmlFor="quantity"><span>01</span> 数量 <i aria-hidden="true">*</i></label>
         <select
+          aria-invalid={Boolean(state.fieldErrors?.quantity?.length)}
           id="quantity"
           name="quantity"
           value={quantity}
@@ -105,6 +108,7 @@ export function GiftForm({
       <div className="form-field">
         <label htmlFor="recipientName"><span>02</span> お届けする方のお名前 <i aria-hidden="true">*</i></label>
         <input
+          aria-invalid={Boolean(state.fieldErrors?.recipientName?.length)}
           id="recipientName"
           name="recipientName"
           autoComplete="name"
@@ -117,6 +121,7 @@ export function GiftForm({
       <div className="form-field">
         <label htmlFor="deliveryDate"><span>03</span> お届け希望日 <i aria-hidden="true">*</i></label>
         <input
+          aria-invalid={Boolean(state.fieldErrors?.deliveryDate?.length)}
           id="deliveryDate"
           name="deliveryDate"
           type="date"
@@ -136,6 +141,7 @@ export function GiftForm({
           <span>{GIFT_MESSAGE_MAX_LENGTH} 文字まで</span>
         </div>
         <textarea
+          aria-invalid={Boolean(state.fieldErrors?.giftMessage?.length)}
           id="giftMessage"
           name="giftMessage"
           rows={5}
