@@ -15,6 +15,7 @@ export {
 } from "./application/order-status-query";
 
 export { assessOrderPricing, type OrderPricingFacts, type OrderPricingAssessment, type OrderPriceSnapshot, type OrderPriceComponent } from "./domain/order-pricing";
+export { type AcceptedShopifyOrder, type ShopifyAcceptedOrderQuery, ShopifyAcceptedOrderUnavailableError } from "./application/shopify-accepted-order-query";
 export {
   SHOPIFY_ORDER_ACCEPTANCE_POLICY, type ShopifyOrderAcceptance, type ShopifyOrderAcceptancePolicy,
   type ShopifyOrderAcceptanceResult, type ShopifyOrderAcceptor,

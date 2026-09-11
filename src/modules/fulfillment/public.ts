@@ -30,6 +30,8 @@ export {
   type PostalCode,
 } from "./domain/postal-address";
 export { LookupPostalCode, type PostalCodeLookupResult } from "./application/lookup-postal-code";
+export { type ShopifyFulfillmentIntake, type ShopifyFulfillmentReference, type ShopifyFulfillmentIntakeResult, ShopifyFulfillmentIntakeError } from "./application/reconcile-shopify-fulfillment";
+export { FULFILLMENT_INTAKE_POLICY, type FulfillmentIntakePolicy, type FulfillmentIntakeDecision } from "./domain/shopify-fulfillment-intake";
 export {
   postalCodeLookupRequestSchema,
   postalCodeLookupResponseSchema,

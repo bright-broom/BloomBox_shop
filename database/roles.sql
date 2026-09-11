@@ -100,5 +100,8 @@ GRANT SELECT, INSERT ON bloombox.shopify_order_links TO bloombox_worker;
 GRANT SELECT, INSERT, UPDATE ON bloombox.shopify_payment_evidence TO bloombox_worker;
 
 GRANT SELECT, INSERT ON bloombox.shopify_order_acceptances TO bloombox_worker;
+GRANT SELECT, INSERT, UPDATE ON bloombox.shopify_payment_projections TO bloombox_worker;
+GRANT SELECT, INSERT, UPDATE ON bloombox.shopify_fulfillment_intakes TO bloombox_worker;
+GRANT UPDATE (status, version, updated_at) ON bloombox.fulfillments TO bloombox_worker;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA bloombox TO bloombox_readonly;

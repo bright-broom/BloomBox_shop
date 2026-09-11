@@ -1,15 +1,23 @@
-import { assessOrderPricing, type OrderPricingAssessment } from "@/modules/order/public";
-import { assessDeliveryDate, type DeliveryDateAssessment } from "@/modules/fulfillment/public";
-import type { ShopifyOrderLink, ShopifyOrderLinker, ShopifyDeliveryPlanQuery } from "@/modules/checkout/public";
+import { assessOrderPricing, type OrderPricingAssessment, type ShopifyAcceptedOrderQuery } from "@/modules/order/public";
+import { assessDeliveryDate, type DeliveryDateAssessment, type ShopifyFulfillmentIntake, type ShopifyFulfillmentIntakeResult } from "@/modules/fulfillment/public";
+import type { ShopifyOrderLink, ShopifyOrderLinker, ShopifyDeliveryPlanQuery, ShopifyPurchaseConverter, ShopifyPurchaseConversion } from "@/modules/checkout/public";
 import { evaluateSettlement, SettlementEvidenceConflictError, type SettlementSnapshot, type SettlementStatus } from "../domain/settlement-evidence";
 import type { ShopifyDeliveryDestinationReader, ShopifyDestinationAssessment } from "./shopify-delivery-destination-reader";
 import type { ReadShopifyReference } from "./read-shopify-reference";
 import type { VerifiedProviderEvent } from "./receive-provider-webhook";
 import type { ShopifyOrderAcceptanceGateway, ShopifyOrderAcceptanceOutcome } from "./shopify-order-acceptance-gateway";
+import type { ShopifyOrderPaymentProjector, ShopifyOrderPaymentResult } from "./project-shopify-order-payment";
+export type ShopifyOrderCompletionDependencies = Readonly<{
+  orders: ShopifyAcceptedOrderQuery; payments: ShopifyOrderPaymentProjector; purchases: ShopifyPurchaseConverter;
+  fulfillment?: ShopifyFulfillmentIntake;
+}>;
+export type ShopifyOrderCompletionResult = Readonly<{ outcome: "HELD"; reason: "NOT_CONFIGURED" | "ORDER_NOT_ACCEPTED" }>
+  | Readonly<{ outcome: "COMPLETED"; payment: ShopifyOrderPaymentResult; purchase: { outcome: "CONVERTED" | "DUPLICATE" };
+    fulfillment: ShopifyFulfillmentIntakeResult | Readonly<{ outcome: "HELD"; reason: "NOT_CONFIGURED" }> }>;
 export type ShopifyPaymentEvidenceResult = Readonly<{ outcome: "APPLIED" | "DUPLICATE" | "STALE"; status: SettlementStatus; version: number }>;
 export type ShopifyDeliveryTimingAssessment = DeliveryDateAssessment | Readonly<{ status: "HELD"; reason:
   "STALE_OBSERVATION" | "ORDER_CANCELLED" | "PAYMENT_NOT_SETTLED" | "PAYMENT_PENDING" | "PRICING_UNRESOLVED"
-  | "DELIVERY_PLAN_MISSING" | "PURCHASE_ALREADY_CONVERTED" | "PURCHASE_INACTIVE" | "PURCHASE_DETAILS_UNAVAILABLE" }>;
+  | "DELIVERY_PLAN_MISSING" | "PURCHASE_ALREADY_CONVERTED" | "PURCHASE_INACTIVE" | "PURCHASE_DETAILS_UNAVAILABLE" | "ORDER_ALREADY_ACCEPTED" }>;
 export interface ShopifyPaymentEvidenceStore {
   record(link: ShopifyOrderLink, shop: string, snapshot: SettlementSnapshot): Promise<ShopifyPaymentEvidenceResult>;
 }
@@ -28,8 +36,9 @@ export class ReconcileShopifyPayment {
     private readonly destinations: ShopifyDeliveryDestinationReader,
     private readonly now: () => Date = () => new Date(),
     private readonly acceptance?: ShopifyOrderAcceptanceGateway,
+    private readonly completion?: ShopifyOrderCompletionDependencies,
   ) {}
-  async execute(event: VerifiedProviderEvent): Promise<ShopifyPaymentEvidenceResult & { pricing: OrderPricingAssessment; deliveryTiming: ShopifyDeliveryTimingAssessment; destination: ShopifyDestinationAssessment; acceptance: ShopifyOrderAcceptanceOutcome }> {
+  async execute(event: VerifiedProviderEvent): Promise<ShopifyPaymentEvidenceResult & { pricing: OrderPricingAssessment; deliveryTiming: ShopifyDeliveryTimingAssessment; destination: ShopifyDestinationAssessment; acceptance: ShopifyOrderAcceptanceOutcome; completion: ShopifyOrderCompletionResult }> {
     const source = await this.reader.execute(event);
     const order = source.order;
     if (order.test !== this.expectedTestMode || order.transactions.some((transaction) => transaction.test !== order.test)) {
@@ -45,12 +54,20 @@ export class ReconcileShopifyPayment {
       })),
     };
     evaluateSettlement(snapshot);
-    const link = await this.linker.link({ shop: source.shop, orderId: order.id, apiVersion: source.apiVersion,
-      cartToken: order.cartToken, lines: order.lines });
+    // Once accepted, the scoped immutable receipt is the association authority. Current cart contents/PII are no longer prerequisites.
+    const accepted = this.completion ? await this.completion.orders.find(source.shop, order.id) : null;
+    const link = accepted ? { purchaseIntentId: accepted.purchaseIntentId, attemptId: accepted.attemptId, orderId: order.id }
+      : await this.linker.link({ shop: source.shop, orderId: order.id, apiVersion: source.apiVersion, cartToken: order.cartToken, lines: order.lines });
     const payment = await this.store.record(link, source.shop, snapshot);
     // A stale source must never authorize fresh commercial acceptance alongside newer stored payment facts.
     const pricing: OrderPricingAssessment = payment.outcome === "STALE"
       ? { status: "HELD", reason: "STALE_OBSERVATION" } : assessOrderPricing(order.pricing);
+    if (accepted) {
+      const completion = await this.completeOrder({ ...accepted, shop: source.shop, externalOrderId: order.id });
+      return { ...payment, pricing, deliveryTiming: { status: "HELD", reason: "ORDER_ALREADY_ACCEPTED" },
+        destination: { status: "HELD", reason: "PREREQUISITES_UNRESOLVED" },
+        acceptance: { outcome: "DUPLICATE", orderId: accepted.orderId, displayId: accepted.displayId }, completion };
+    }
     let deliveryTiming = await this.assessDeliveryTiming(link, source.shop, snapshot, payment, pricing);
     let destination: ShopifyDestinationAssessment = deliveryTiming.status === "WITHIN_WINDOW"
       ? await this.destinations.assessDestination({ shop: source.shop, orderId: order.id, updatedAt: order.updatedAt, test: order.test })
@@ -66,7 +83,20 @@ export class ReconcileShopifyPayment {
       acceptance = await this.acceptance.acceptOrder({ ...link, shop: source.shop, paymentVersion: payment.version,
         updatedAt: order.updatedAt, test: order.test, variantId: order.lines[0].variantId, pricing: order.pricing });
     }
-    return { ...payment, pricing, deliveryTiming, destination, acceptance };
+    const completion = acceptance.outcome !== "HELD"
+      ? await this.completeOrder({ ...link, orderId: acceptance.orderId, externalOrderId: order.id, shop: source.shop })
+      : { outcome: "HELD" as const, reason: "ORDER_NOT_ACCEPTED" as const };
+    return { ...payment, pricing, deliveryTiming, destination, acceptance, completion };
+  }
+
+  private async completeOrder(input: ShopifyPurchaseConversion): Promise<ShopifyOrderCompletionResult> {
+    if (!this.completion) return { outcome: "HELD", reason: "NOT_CONFIGURED" };
+    // Each owner commits independently. A failure is resumable from the immutable accepted-order lookup.
+    const payment = await this.completion.payments.project(input);
+    const purchase = await this.completion.purchases.convert(input);
+    const fulfillment = this.completion.fulfillment ? await this.completion.fulfillment.reconcile(input)
+      : { outcome: "HELD" as const, reason: "NOT_CONFIGURED" as const };
+    return { outcome: "COMPLETED", payment, purchase, fulfillment };
   }
 
   private async assessDeliveryTiming(link: ShopifyOrderLink, shop: string, source: SettlementSnapshot,
