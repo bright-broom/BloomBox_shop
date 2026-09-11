@@ -9,5 +9,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Auth.js uses Next's bundler-resolved extensionless imports; exercise it through Vite as Next does.
+    server: { deps: { inline: ["next-auth"] } },
   },
 });

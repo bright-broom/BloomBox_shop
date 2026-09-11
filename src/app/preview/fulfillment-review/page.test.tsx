@@ -15,7 +15,8 @@ describe("fulfillment review preview", () => {
   ])("renders %s honestly without an active approval form", async (state, expected) => {
     vi.stubEnv("BLOOMBOX_RUNTIME_MODE", "preview");
     const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ state }) }));
-    expect(html).toContain(expected); expect(html).toContain("架空の注文");
+    expect(html).toContain(expected); expect(html).toContain("確認内容を記録する");
+    if (state === "pending") expect(html).toContain("事業条件の承認設定が完了するまで"); expect(html).toContain("架空の注文");
     expect(html).toContain("aria-current=\"page\"");
     expect(html).not.toMatch(/<form|<button|@gmail|recipient|ciphertext|idempotency/);
     if (state === "refund") expect(html).toContain("￥500");
