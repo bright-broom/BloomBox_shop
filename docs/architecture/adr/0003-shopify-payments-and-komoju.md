@@ -55,6 +55,10 @@ Sources checked on 2026-09-11: [Shopify payment methods in Japan](https://help.s
 
 Before activation, revert the new disconnected adapter without changing checkout behavior. After activation, stop new checkout intake while keeping Shopify notifications and reconciliation running for existing purchases. Keep each in-flight purchase with Shopify, preserve accepted orders and payment facts, and use a verified Shopify-hosted fallback if required. Do not switch existing purchases to direct Stripe or KOMOJU. Retain migration history and use forward fixes for persisted data.
 
+## Implementation progress — 2026-09-11
+
+Rollout step 2 now has a disconnected application workflow and a PostgreSQL attempt repository: durable provider/attempt claim, encrypted cart credentials, transactional intent transition/audit/Outbox, safe retrieval, and conservative UNKNOWN handling. The expiring CheckoutSession workflow is Stripe-only and also pins its provider before I/O. Result-unknown reconciliation, ownership authorization, retention completion, verified order processing and live wiring remain pending. See [implementation and migration evidence](../../operations/SHOPIFY_CHECKOUT_ATTEMPTS.md).
+
 ## Verification
 
 Implementation references: [Cart creation](https://shopify.dev/docs/api/storefront/2026-07/mutations/cartCreate), [cart token handling](https://shopify.dev/docs/storefronts/headless/building-with-the-storefront-api/cart/manage), and [API version response headers](https://shopify.dev/docs/api/usage/versioning).

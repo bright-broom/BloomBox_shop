@@ -21,6 +21,7 @@ GRANT USAGE ON SCHEMA bloombox TO bloombox_application, bloombox_worker, bloombo
 
 GRANT SELECT, INSERT, UPDATE ON
   bloombox.purchase_intents,
+  bloombox.shopify_checkout_attempts,
   bloombox.orders,
   bloombox.payments,
   bloombox.refunds,
@@ -93,5 +94,7 @@ GRANT SELECT, INSERT ON
   bloombox.ledger_entries,
   bloombox.audit_logs
 TO bloombox_worker;
+
+GRANT SELECT ON bloombox.shopify_checkout_attempts TO bloombox_worker;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA bloombox TO bloombox_readonly;

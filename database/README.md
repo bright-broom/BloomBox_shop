@@ -37,7 +37,9 @@ Never use a production URL in automated tests. The integration suite refuses non
 
 Migration files are immutable after application. The runner records a SHA-256 checksum and refuses a changed historical migration. Schema corrections use a new forward migration; production rollback never edits or deletes accepted commerce facts.
 
-The protected commerce worker claims encrypted Inbox rows with row-level locking and bounded exponential retry, then runs transient-data retention. It expires unstarted PurchaseIntents after 24 hours and removes encrypted Webhook payloads and personal data from terminal PurchaseIntents after 30 days while retaining provider identifiers, processing status, audits, and confirmed Order snapshots needed for reconciliation and support. Changes to confirmed-order retention require a separate privacy and legal review.
+The protected commerce worker claims encrypted Inbox rows with row-level locking and bounded exponential retry, then runs transient-data retention. Shopify checkout credentials are encrypted in the Checkout-owned `shopify_checkout_attempts` table (migration 0005); the legacy plaintext external ID stays NULL for Shopify. Provider selection is permanent, and unresolved Shopify attempts are held for reconciliation. See [durable Shopify handoff](../docs/operations/SHOPIFY_CHECKOUT_ATTEMPTS.md) before migration, retention changes, or rollback.
+
+It expires unstarted non-Shopify PurchaseIntents after 24 hours and removes encrypted Webhook payloads and personal data from terminal PurchaseIntents after 30 days while retaining provider identifiers, processing status, audits, and confirmed Order snapshots needed for reconciliation and support. Changes to confirmed-order retention require a separate privacy and legal review.
 
 ## Local verification
 
