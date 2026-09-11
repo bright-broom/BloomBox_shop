@@ -16,7 +16,9 @@ const metafieldSchema = z.object({ value: z.string(), type: z.string() }).nullab
 const variantSchema = z.object({
   id: z.string().regex(gidPattern),
   availableForSale: z.boolean(),
-  price: z.object({ amount: z.string(), currencyCode: z.literal("JPY") }),
+  price: z.object({
+    amount: z.string().regex(/^\d+(?:\.0+)?$/), currencyCode: z.literal("JPY"),
+  }),
 });
 const productNodeSchema = z.object({
   title: z.string().trim().min(1).max(80),
@@ -46,7 +48,7 @@ const productResponseSchema = graphqlResponseSchema(z.object({
   product: productNodeSchema.nullable(),
 }));
 const variantResponseSchema = graphqlResponseSchema(z.object({
-  node: variantSchema.extend({ product: productNodeSchema.omit({ variants: true }) }).nullable(),
+  node: z.object({ id: z.string().regex(gidPattern), product: productNodeSchema }).nullable(),
 }));
 
 const PRODUCT_FIELDS_FRAGMENT = `
@@ -88,8 +90,6 @@ const VARIANT_BY_ID_QUERY = `#graphql
     node(id: $id) {
       ... on ProductVariant {
         id
-        availableForSale
-        price { amount currencyCode }
         product { ...BloomBoxProduct }
       }
     }
@@ -131,6 +131,7 @@ export class ShopifyProductRepository implements ProductRepository {
       { handle: slug },
     ));
     if (!response.product || !response.product.tags.includes(this.catalogTag)) return null;
+    if (response.product.handle !== slug) throw new ShopifyCatalogResponseError();
     return this.mapProduct(response.product);
   }
 
@@ -142,7 +143,10 @@ export class ShopifyProductRepository implements ProductRepository {
       { id: externalId },
     ));
     if (!response.node || !response.node.product.tags.includes(this.catalogTag)) return null;
-    return mapProductNode(response.node.product, response.node);
+    if (response.node.id !== externalId) throw new ShopifyCatalogResponseError();
+    const product = this.mapProduct(response.node.product);
+    if (product.externalReference !== externalId) throw new ShopifyCatalogResponseError();
+    return product;
   }
 
   private mapProduct(node: z.infer<typeof productNodeSchema>): Product {
@@ -154,9 +158,7 @@ export class ShopifyProductRepository implements ProductRepository {
 }
 
 function mapProductNode(
-  node: z.infer<typeof productNodeSchema> | NonNullable<
-    z.infer<typeof variantResponseSchema>["data"]["node"]
-  >["product"],
+  node: z.infer<typeof productNodeSchema>,
   variant: z.infer<typeof variantSchema>,
 ): Product {
   if (!node.featuredImage) throw new ShopifyCatalogResponseError();
@@ -210,7 +212,7 @@ function decodeProductId(id: ProductId): string | null {
   if (!id.startsWith("shopify_")) return null;
   try {
     const decoded = Buffer.from(id.slice("shopify_".length), "base64url").toString("utf8");
-    return gidPattern.test(decoded) ? decoded : null;
+    return gidPattern.test(decoded) && encodeProductId(decoded) === id ? decoded : null;
   } catch {
     return null;
   }
