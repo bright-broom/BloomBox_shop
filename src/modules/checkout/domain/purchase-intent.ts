@@ -160,13 +160,21 @@ export class PurchaseIntent {
     this.currentStatus = nextStatus;
   }
 
+  selectCommerceProvider(provider: CommerceProvider): void {
+    if (this.status !== "READY_FOR_CHECKOUT" || (this.currentCommerceProvider && this.currentCommerceProvider !== provider)) {
+      throw new InvalidCheckoutReferenceError();
+    }
+    this.currentCommerceProvider = provider;
+  }
+
   recordCheckoutCreated(input: {
     provider: CommerceProvider;
     externalCheckoutId: string;
     providerApiVersion: string;
     occurredAt: Date;
   }): void {
-    if (!input.externalCheckoutId.trim() || !input.providerApiVersion.trim()) {
+    if (!input.externalCheckoutId.trim() || !input.providerApiVersion.trim()
+      || (this.currentCommerceProvider && this.currentCommerceProvider !== input.provider)) {
       throw new InvalidCheckoutReferenceError();
     }
     this.transitionTo("CHECKOUT_CREATED");

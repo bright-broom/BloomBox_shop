@@ -1,4 +1,4 @@
-import type { PurchaseIntent, PurchaseIntentId } from "../domain/purchase-intent";
+import type { PurchaseIntent, PurchaseIntentId, CommerceProvider } from "../domain/purchase-intent";
 import type { PurchaseIntentRepository } from "../domain/purchase-intent-repository";
 import {
   PurchaseIntentAlreadyExistsError,
@@ -15,6 +15,13 @@ export class InMemoryPurchaseIntentRepository implements PurchaseIntentRepositor
 
   async findById(id: PurchaseIntentId): Promise<PurchaseIntent | null> {
     return this.intents.get(id) ?? null;
+  }
+
+  async claimCommerceProvider(id: PurchaseIntentId, provider: CommerceProvider): Promise<void> {
+    const intent = this.intents.get(id);
+    if (!intent || intent.status !== "READY_FOR_CHECKOUT"
+      || (intent.commerceProvider && intent.commerceProvider !== provider)) throw new PurchaseIntentConcurrencyError();
+    intent.selectCommerceProvider(provider);
   }
 
   async saveCheckoutCreated(intent: PurchaseIntent): Promise<void> {
