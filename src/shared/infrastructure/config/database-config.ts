@@ -47,6 +47,10 @@ export function loadOperatorDatabaseConfig(environment: Readonly<Record<string, 
   return loadDatabaseConfig({ ...environment, DATABASE_URL: environment.DATABASE_OPERATOR_URL });
 }
 
+export function loadPermissionManagerDatabaseConfig(environment: Readonly<Record<string, string | undefined>> = process.env): DatabaseConfig {
+  return loadDatabaseConfig({ ...environment, DATABASE_URL: environment.DATABASE_PERMISSION_MANAGER_URL });
+}
+
 function isPostgresUrl(value: string): boolean {
   try {
     const protocol = new URL(value).protocol;

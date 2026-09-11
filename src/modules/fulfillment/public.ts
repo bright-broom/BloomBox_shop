@@ -54,3 +54,10 @@ export { FulfillmentApprovalError, type FulfillmentOperatorIdentity, type Fulfil
 export { FulfillmentReviewError, type FulfillmentReview, type FulfillmentReviewQuery } from "./application/read-fulfillment-review";
 export { fulfillmentReviewSummary } from "./presentation/fulfillment-review-summary";
 export { FULFILLMENT_INBOX_PAGE_SIZE, type FulfillmentInbox, type FulfillmentInboxRequest, type FulfillmentInboxQuery } from "./application/read-fulfillment-inbox";
+export { type ApprovalFormState, type ApprovalFormControl } from "./presentation/approval-form-state";
+export { PermissionRevocationError, type PermissionRevocationRequest, type PermissionRevocationReceipt,
+  type OperatorPermissionRevoker } from "./application/revoke-operator-permission";
+export { PERMISSION_REVOCATION_REASONS, type PermissionRevocationReason } from "./domain/permission-revocation";
+export { OPERATOR_PERMISSION_PAGE_SIZE, type OperatorPermissionListRequest, type OperatorPermissionList,
+  type OperatorPermissionQuery } from "./application/read-operator-permissions";
+export { type PermissionManagementPage, type PermissionManagementState } from "./presentation/permission-management-state";

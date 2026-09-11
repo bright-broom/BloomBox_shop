@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import type { FulfillmentReview } from "@/modules/fulfillment/public";
 import { loadRuntimeMode } from "@/shared/infrastructure/config/runtime-config";
 import { fulfillmentReviewContent as copy } from "@/shared/infrastructure/content/fulfillment-review-content";
+import { fulfillmentApprovalContent as approvalCopy } from "@/shared/infrastructure/content/fulfillment-approval-content";
+import { operatorLoginContent } from "@/shared/infrastructure/content/operator-login-content";
 import { FulfillmentReviewPanel } from "@/ui/fulfillment-review";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +35,11 @@ export default async function FulfillmentReviewPreview({ searchParams }: { searc
     <nav className="fulfillment-scenarios" aria-label={copy.scenariosLabel}>{scenarios.map((item) =>
       <Link key={item} className="secondary-button" href={`/preview/fulfillment-review?state=${item}`} aria-current={scenario === item ? "page" : undefined}>{copy.scenarios[item]}</Link>)}</nav>
     <FulfillmentReviewPanel review={review} />
+    <section className="fulfillment-approval-form"><h2>{approvalCopy.title}</h2><p>{approvalCopy.note}</p>
+      <p>{scenario === "recorded" ? approvalCopy.RECORDED : scenario === "pending" ? approvalCopy.POLICY_PENDING : approvalCopy.REVIEW_REQUIRED}</p>
+    </section>
     <section className="fulfillment-connection"><h2>{copy.connectionTitle}</h2><p>{copy.connectionNote}</p>
+      <Link className="text-link" href="/operations">{operatorLoginContent.title}</Link>
       <Link className="text-link" href="/preview/gift-experience">{copy.back}</Link></section>
   </section>;
 }
