@@ -5,7 +5,7 @@ import type { DatabaseClient } from "@/shared/infrastructure/database/postgres-c
 import { evaluateSettlement, reconcileSettlement, SettlementEvidenceConflictError, type SettlementSnapshot } from "../../domain/settlement-evidence";
 import { ShopifyPaymentEvidencePersistenceError, type ShopifyPaymentEvidenceResult, type ShopifyPaymentEvidenceStore } from "../../application/reconcile-shopify-payment";
 const minor = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-const snapshotSchema = z.object({
+export const shopifySettlementSnapshotSchema = z.object({
   updatedAt: z.iso.datetime({ offset: true }), cancelledAt: z.iso.datetime({ offset: true }).nullable(), test: z.boolean(),
   requested: minor, received: minor, refunded: minor,
   transactions: z.array(z.object({
@@ -17,7 +17,7 @@ const snapshotSchema = z.object({
 export class PostgresShopifyPaymentEvidence implements ShopifyPaymentEvidenceStore {
   constructor(private readonly sql: DatabaseClient, private readonly now: () => Date = () => new Date()) {}
   async record(link: ShopifyOrderLink, shop: string, snapshot: SettlementSnapshot): Promise<ShopifyPaymentEvidenceResult> {
-    const input = snapshotSchema.safeParse(snapshot);
+    const input = shopifySettlementSnapshotSchema.safeParse(snapshot);
     if (!input.success || !z.uuid().safeParse(link.purchaseIntentId).success
       || !z.string().max(255).regex(/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/).safeParse(shop).success
       || !z.string().max(100).regex(/^gid:\/\/shopify\/Order\/[1-9]\d*$/).safeParse(link.orderId).success) throw new SettlementEvidenceConflictError();
@@ -35,7 +35,7 @@ export class PostgresShopifyPaymentEvidence implements ShopifyPaymentEvidenceSto
             WHERE purchase_intent_id = ${link.purchaseIntentId} FOR UPDATE`;
           if (rows[0]?.provider_scope !== shop || rows[0]?.external_order_id !== link.orderId) throw new SettlementEvidenceConflictError();
           version = z.number().int().positive().parse(rows[0].version);
-          const previous = evaluateSettlement(snapshotSchema.parse(rows[0].snapshot));
+          const previous = evaluateSettlement(shopifySettlementSnapshotSchema.parse(rows[0].snapshot));
           const result = reconcileSettlement(previous, input.data);
           if (result.outcome !== "APPLIED") return { outcome: result.outcome, status: previous.status, version };
           evidence = result.evidence; version += 1;

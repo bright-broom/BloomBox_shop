@@ -30,6 +30,10 @@ export {
   type PostalCode,
 } from "./domain/postal-address";
 export { LookupPostalCode, type PostalCodeLookupResult } from "./application/lookup-postal-code";
+export { type ShopifyFulfillmentIntake, type ShopifyFulfillmentReference, type ShopifyFulfillmentIntakeResult, ShopifyFulfillmentIntakeError } from "./application/reconcile-shopify-fulfillment";
+export { FULFILLMENT_INTAKE_POLICY, type FulfillmentIntakePolicy, type FulfillmentIntakeDecision } from "./domain/shopify-fulfillment-intake";
+export { type ShopifyFulfillmentReader, type ShopifyFulfillmentSnapshot, ShopifyFulfillmentUnavailableError } from "./application/read-shopify-fulfillments";
+export { type ShopifyFulfillmentFact, type ShopifyFulfillmentActivity } from "./domain/shopify-fulfillment-observation";
 export {
   postalCodeLookupRequestSchema,
   postalCodeLookupResponseSchema,
@@ -40,3 +44,5 @@ export {
   DELIVERY_ADDRESS_TEXT_MAX_LENGTH, DELIVERY_POSTAL_INPUT_MAX_LENGTH,
   type DeliveryCoveragePolicy, type DeliveryAddress, type DeliveryDestinationAssessment,
 } from "./domain/delivery-destination";
+
+export { type ShopifyFulfillmentQuantities, type FulfillmentQuantityAssessment } from "./domain/shopify-fulfillment-quantities";
