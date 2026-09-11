@@ -61,9 +61,9 @@ Repository files cannot enforce account-level rulesets. The repository owner mus
 
 An exception states the exact control, reason, owner, expiry date, compensating control, and removal issue. Permanent verbal exceptions are invalid. Urgent production recovery may use the narrowest available bypass, followed by a PR and incident record.
 
-### Current GitHub plan exception
+### Pending controls after public visibility change
 
-The current private-repository plan does not support branch rulesets, required environment reviewers, wait timers, or administrator-bypass restrictions. GitHub rejected those settings through its API on 2026-08-20. Until [issue #6](https://github.com/bright-broom/BloomBox_shop/issues/6) is completed:
+GitHub rejected protection settings under the former private-repository plan on 2026-08-20. The repository is now public. A read-only API check on 2026-09-11 found no main branch protection or rulesets and no required Production Environment reviewer. Public visibility has not applied these controls automatically. Configure and verify the controls above to complete [issue #6](https://github.com/bright-broom/BloomBox_shop/issues/6). Until then:
 
 - the Production Environment accepts deployments only from `main`;
 - the release operator must enter the full verified commit SHA and explicitly confirm deployment;
