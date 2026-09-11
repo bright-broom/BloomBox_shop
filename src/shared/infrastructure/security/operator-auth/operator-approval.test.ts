@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FulfillmentApprovalError, type FulfillmentReview } from "@/modules/fulfillment/public";
 import { prepareOperatorApproval, recordOperatorApproval } from "./operator-approval";
 const mocks = vi.hoisted(() => ({ service: vi.fn(), database: vi.fn(), find: vi.fn(), approve: vi.fn(),
@@ -26,6 +26,7 @@ const review: FulfillmentReview = { ...target, orderId: "00000000-0000-4000-8000
   quantities: { status: "NONE", reason: "MATCHED", ordered: 1, shipped: 0, delivered: 0 }, latestApproval: null };
 function form(token: string) { const value = new FormData(); value.set("intent", token); value.set("acknowledged", "yes"); return value; }
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(review.viewedAt));
   vi.resetAllMocks(); mocks.policy.approval = "APPROVED";
   const expires = new Date(Date.now() + 600000).toISOString();
   mocks.service.mockReturnValue({ config: { origin, secret: "synthetic-review-intent-secret-only", bindings: [{ subject: "12345", operatorId }], testMode: true },
@@ -33,7 +34,21 @@ beforeEach(() => {
   mocks.find.mockResolvedValue(review);
   mocks.approve.mockResolvedValue({ outcome: "RECORDED" }); mocks.consume.mockResolvedValue(undefined);
 });
+afterEach(() => { vi.useRealTimers(); });
 describe("operator approval composition", () => {
+  it("uses the earliest stock, session or encrypted intent deadline without accepting it from the browser", async () => {
+    expect(await prepareOperatorApproval(target)).toMatchObject({ control: { status: "READY",
+      preparedAt: new Date(review.viewedAt).toISOString(), expiresAt: new Date(review.stock.expiresAt!).toISOString() } });
+    mocks.service().auth.auth = async () => ({ user: { id: "12345" }, expires: "2026-09-12T00:00:10.999Z" });
+    expect(await prepareOperatorApproval(target)).toMatchObject({ control: { status: "READY", expiresAt: "2026-09-12T00:00:10.000Z" } });
+    mocks.service().auth.auth = async () => ({ user: { id: "12345" }, expires: "2026-09-12T00:15:00.000Z" });
+    mocks.find.mockResolvedValue({ ...review, stock: { ...review.stock, expiresAt: "2026-09-12T00:10:00.000Z" } });
+    expect(await prepareOperatorApproval(target)).toMatchObject({ control: { status: "READY", expiresAt: "2026-09-12T00:05:00.000Z" } });
+  });
+  it.each([null, "invalid", "2026-09-12T00:00:00.000Z"])("does not issue a form when the display deadline is already unavailable: %s", async (expiresAt) => {
+    mocks.find.mockResolvedValue({ ...review, stock: { ...review.stock, expiresAt } });
+    expect(await prepareOperatorApproval(target)).toMatchObject({ control: { status: "REVIEW_REQUIRED", intent: null } });
+  });
   it("uses only the encrypted server-reviewed target and idempotency key on repeated submissions", async () => {
     const page = await prepareOperatorApproval(target);
     if (!page?.control.intent) throw new Error("Expected prepared form");
@@ -75,7 +90,8 @@ describe("operator approval composition", () => {
     const page = await prepareOperatorApproval(target);
     if (!page?.control.intent) throw new Error("Expected prepared form");
     for (const mutate of [(value: FormData) => value.delete("acknowledged"), (value: FormData) => value.append("intent", "forged"),
-      (value: FormData) => value.set("operatorId", operatorId), (value: FormData) => value.set("reviewedIntakeVersion", "999")]) {
+      (value: FormData) => value.set("operatorId", operatorId), (value: FormData) => value.set("reviewedIntakeVersion", "999"),
+      (value: FormData) => value.set("expiresAt", "2099-01-01T00:00:00.000Z")]) {
       const value = form(page.control.intent); mutate(value);
       await expect(recordOperatorApproval(value, origin)).rejects.toEqual(new FulfillmentApprovalError("INVALID_REQUEST"));
     }

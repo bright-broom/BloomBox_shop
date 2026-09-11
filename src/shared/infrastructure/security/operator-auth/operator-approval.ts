@@ -6,7 +6,7 @@ import { PostgresApprovalSubmissionLimiter } from "@/modules/fulfillment/infrast
 import { getOperatorDatabaseClient } from "../../database/database-connections";
 import { getOperatorAuth } from "./operator-auth";
 import { GoogleFulfillmentOperatorIdentity } from "./google-operator-identity";
-import { OperatorApprovalIntent } from "./approval-intent";
+import { OperatorApprovalIntent, OPERATOR_APPROVAL_INTENT_SECONDS } from "./approval-intent";
 
 export async function prepareOperatorApproval(input: Readonly<{ shop: string; fulfillmentId: string }>) {
   const service = getOperatorAuth();
@@ -22,9 +22,16 @@ export async function prepareOperatorApproval(input: Readonly<{ shop: string; fu
   if (FULFILLMENT_INTAKE_POLICY.approval !== "APPROVED") control = { status: "POLICY_PENDING", intent: null };
   else if (summary !== "PENDING") control = { status: summary, intent: null };
   else {
-    const intent = await new OperatorApprovalIntent(service.config.secret, service.config.origin).issue({ shop: input.shop,
-      fulfillmentId: review.fulfillmentId, reviewedIntakeVersion: review.intakeVersion }, actor, service.config.testMode);
-    control = { status: "READY", intent };
+    const preparedAt = new Date();
+    // Display deadline only. The encrypted intent and database checks remain authoritative at submission.
+    const deadline = Math.min(Date.parse(review.stock.expiresAt ?? ""), Math.floor(actor.expiresAt.getTime() / 1000) * 1000,
+      (Math.floor(preparedAt.getTime() / 1000) + OPERATOR_APPROVAL_INTENT_SECONDS) * 1000);
+    if (!Number.isFinite(deadline) || deadline <= preparedAt.getTime()) control = { status: "REVIEW_REQUIRED", intent: null };
+    else {
+      const intent = await new OperatorApprovalIntent(service.config.secret, service.config.origin, () => preparedAt).issue({ shop: input.shop,
+        fulfillmentId: review.fulfillmentId, reviewedIntakeVersion: review.intakeVersion }, actor, service.config.testMode);
+      control = { status: "READY", intent, preparedAt: preparedAt.toISOString(), expiresAt: new Date(deadline).toISOString() };
+    }
   }
   return { review, control };
 }
