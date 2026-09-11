@@ -1,3 +1,4 @@
+import { assessOrderPricing, type OrderPricingAssessment } from "@/modules/order/public";
 import type { ShopifyOrderLink, ShopifyOrderLinker } from "@/modules/checkout/public";
 import { evaluateSettlement, SettlementEvidenceConflictError, type SettlementSnapshot, type SettlementStatus } from "../domain/settlement-evidence";
 import type { ReadShopifyReference } from "./read-shopify-reference";
@@ -18,7 +19,7 @@ export class ReconcileShopifyPayment {
     private readonly store: ShopifyPaymentEvidenceStore,
     private readonly expectedTestMode: boolean,
   ) {}
-  async execute(event: VerifiedProviderEvent): Promise<ShopifyPaymentEvidenceResult> {
+  async execute(event: VerifiedProviderEvent): Promise<ShopifyPaymentEvidenceResult & { pricing: OrderPricingAssessment }> {
     const source = await this.reader.execute(event);
     const order = source.order;
     if (order.test !== this.expectedTestMode || order.transactions.some((transaction) => transaction.test !== order.test)) {
@@ -36,6 +37,10 @@ export class ReconcileShopifyPayment {
     evaluateSettlement(snapshot);
     const link = await this.linker.link({ shop: source.shop, orderId: order.id, apiVersion: source.apiVersion,
       cartToken: order.cartToken, lines: order.lines });
-    return this.store.record(link, source.shop, snapshot);
+    const payment = await this.store.record(link, source.shop, snapshot);
+    // A stale source must never authorize fresh commercial acceptance alongside newer stored payment facts.
+    const pricing: OrderPricingAssessment = payment.outcome === "STALE"
+      ? { status: "HELD", reason: "STALE_OBSERVATION" } : assessOrderPricing(order.pricing);
+    return { ...payment, pricing };
   }
 }

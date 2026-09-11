@@ -1,3 +1,4 @@
+import type { OrderPricingFacts } from "@/modules/order/public";
 import type { Money } from "@/shared/domain/money";
 import type { VerifiedProviderEvent } from "./receive-provider-webhook";
 
@@ -19,6 +20,8 @@ export type ShopifyOrderSnapshot = Readonly<{
   cancelledAt: string | null;
   financialStatus: "AUTHORIZED" | "EXPIRED" | "PAID" | "PARTIALLY_PAID" | "PARTIALLY_REFUNDED" | "PENDING" | "REFUNDED" | "VOIDED" | null;
   transactions: readonly ShopifyTransaction[];
+  /** Invalid/missing commercial facts hold order pricing without discarding settlement facts. */
+  pricing: OrderPricingFacts | null;
   originalTotal: Money;
   currentTotal: Money;
   received: Money;

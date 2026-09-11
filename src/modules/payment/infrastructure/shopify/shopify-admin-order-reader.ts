@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { OrderPricingFacts } from "@/modules/order/public";
 import { money } from "@/shared/domain/money";
 import type { ShopifyAdminConfig } from "@/shared/infrastructure/config/shopify-admin-config";
 import {
@@ -40,6 +41,36 @@ const orderSchema = z.object({
     pageInfo: z.object({ hasNextPage: z.literal(false) }),
   }).refine((value) => new Set(value.nodes.map((line) => line.id)).size === value.nodes.length),
 });
+// Pricing is assessed independently: unusable commercial data must not erase valid settlement evidence.
+const pricingSchema = z.object({
+  taxesIncluded: z.boolean(), estimatedTaxes: z.boolean(), edited: z.boolean(),
+  subtotalPriceSet: moneyBag, currentSubtotalPriceSet: moneyBag,
+  totalTaxSet: moneyBag, currentTotalTaxSet: moneyBag,
+  totalPriceSet: moneyBag, originalTotalPriceSet: moneyBag, currentTotalPriceSet: moneyBag,
+  currentShippingPriceSet: moneyBag, originalTotalDutiesSet: moneyBag.nullable(), currentTotalDutiesSet: moneyBag.nullable(),
+  originalTotalAdditionalFeesSet: moneyBag.nullable(), currentTotalAdditionalFeesSet: moneyBag.nullable(), totalTipReceivedSet: moneyBag,
+  lineItems: z.object({ nodes: z.array(z.object({
+    quantity: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    currentQuantity: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), originalUnitPriceSet: moneyBag,
+    discountAllocations: z.array(z.object({ allocatedAmountSet: moneyBag })).max(MAX_ITEMS),
+  })).min(1).max(MAX_ITEMS), pageInfo: z.object({ hasNextPage: z.literal(false) }) }),
+  shippingLines: z.object({ nodes: z.array(z.object({
+    originalPriceSet: moneyBag, discountedPriceSet: moneyBag, currentDiscountedPriceSet: moneyBag, isRemoved: z.boolean(),
+  })).max(MAX_ITEMS), pageInfo: z.object({ hasNextPage: z.literal(false) }) }),
+}).transform((value): OrderPricingFacts => ({
+  taxesIncluded: value.taxesIncluded, estimatedTaxes: value.estimatedTaxes, edited: value.edited,
+  subtotal: value.subtotalPriceSet.amount, currentSubtotal: value.currentSubtotalPriceSet.amount,
+  tax: value.totalTaxSet.amount, currentTax: value.currentTotalTaxSet.amount,
+  total: value.totalPriceSet.amount, originalTotal: value.originalTotalPriceSet.amount, currentTotal: value.currentTotalPriceSet.amount,
+  currentShipping: value.currentShippingPriceSet.amount,
+  duties: value.originalTotalDutiesSet?.amount ?? 0, currentDuties: value.currentTotalDutiesSet?.amount ?? 0,
+  additionalFees: value.originalTotalAdditionalFeesSet?.amount ?? 0, currentAdditionalFees: value.currentTotalAdditionalFeesSet?.amount ?? 0,
+  tips: value.totalTipReceivedSet.amount,
+  lines: value.lineItems.nodes.map((line) => ({ quantity: line.quantity, currentQuantity: line.currentQuantity,
+    unitPrice: line.originalUnitPriceSet.amount, discounts: line.discountAllocations.map((allocation) => allocation.allocatedAmountSet.amount) })),
+  shipping: value.shippingLines.nodes.map((line) => ({ originalPrice: line.originalPriceSet.amount, discountedPrice: line.discountedPriceSet.amount,
+    currentDiscountedPrice: line.currentDiscountedPriceSet.amount, removed: line.isRemoved })),
+}));
 const refundSchema = z.object({
   id: gid("Refund"), updatedAt: date, order: orderSchema,
   transactions: z.object({
@@ -53,12 +84,22 @@ const envelopeSchema = z.object({
 });
 const MONEY_FIELDS = "shopMoney { amount currencyCode } presentmentMoney { amount currencyCode }";
 const TRANSACTION_FIELDS = `id kind status test parentTransaction { id } amountSet { ${MONEY_FIELDS} }`;
-const ORDER_FIELDS = `id cartToken updatedAt test cancelledAt displayFinancialStatus
+const ORDER_FIELDS = `id cartToken updatedAt test cancelledAt displayFinancialStatus taxesIncluded estimatedTaxes edited
+  subtotalPriceSet { ${MONEY_FIELDS} } currentSubtotalPriceSet { ${MONEY_FIELDS} }
+  totalTaxSet { ${MONEY_FIELDS} } currentTotalTaxSet { ${MONEY_FIELDS} } totalPriceSet { ${MONEY_FIELDS} }
+  currentShippingPriceSet { ${MONEY_FIELDS} }
+  originalTotalDutiesSet { ${MONEY_FIELDS} } currentTotalDutiesSet { ${MONEY_FIELDS} }
+  originalTotalAdditionalFeesSet { ${MONEY_FIELDS} } currentTotalAdditionalFeesSet { ${MONEY_FIELDS} }
+  totalTipReceivedSet { ${MONEY_FIELDS} }
+  shippingLines(first: ${MAX_ITEMS}) {
+    nodes { isRemoved originalPriceSet { ${MONEY_FIELDS} } discountedPriceSet { ${MONEY_FIELDS} } currentDiscountedPriceSet { ${MONEY_FIELDS} } }
+    pageInfo { hasNextPage }
+  }
   transactions(first: ${MAX_ITEMS + 1}) { ${TRANSACTION_FIELDS} }
   originalTotalPriceSet { ${MONEY_FIELDS} } currentTotalPriceSet { ${MONEY_FIELDS} }
   totalReceivedSet { ${MONEY_FIELDS} } totalRefundedSet { ${MONEY_FIELDS} }
   lineItems(first: ${MAX_ITEMS}) {
-    nodes { id quantity currentQuantity variant { id } originalUnitPriceSet { ${MONEY_FIELDS} } }
+    nodes { id quantity currentQuantity variant { id } originalUnitPriceSet { ${MONEY_FIELDS} } discountAllocations { allocatedAmountSet { ${MONEY_FIELDS} } } }
     pageInfo { hasNextPage }
   }`;
 const QUERY = `query BloomBoxCommerceReference($id: ID!) {
@@ -94,11 +135,13 @@ export class ShopifyAdminOrderReader implements ShopifyOrderReader {
       const node = z.object({ __typename: z.literal(expectedType), id: z.literal(reference.id) }).parse(result.data.node);
       const refund = node.__typename === "Refund" ? refundSchema.parse(result.data.node) : null;
       const order = refund ? refund.order : orderSchema.parse(result.data.node);
+      const rawOrder = refund ? z.object({ order: z.unknown() }).parse(result.data.node).order : result.data.node;
+      const pricing = pricingSchema.safeParse(rawOrder);
       return {
         shop: this.config.storeDomain, apiVersion: this.config.apiVersion,
         order: {
           id: order.id, cartToken: order.cartToken, updatedAt: order.updatedAt, test: order.test, cancelledAt: order.cancelledAt,
-          transactions: order.transactions.map(mapTransaction),
+          transactions: order.transactions.map(mapTransaction), pricing: pricing.success ? pricing.data : null,
           financialStatus: order.displayFinancialStatus, originalTotal: order.originalTotalPriceSet,
           currentTotal: order.currentTotalPriceSet, received: order.totalReceivedSet, refunded: order.totalRefundedSet,
           lines: order.lineItems.nodes.map((line) => ({
