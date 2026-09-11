@@ -1,0 +1,9 @@
+packages:
+  - .
+
+# Dependabot enforces a 7-day release age while regenerating this lockfile.
+# Allow only the reviewed baseline versions from PR #18, not future releases.
+minimumReleaseAgeExclude:
+  - '@types/node@24.13.4'
+  - 'next@16.3.4'
+  - 'eslint-config-next@16.3.4'

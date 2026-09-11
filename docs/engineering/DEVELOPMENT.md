@@ -49,6 +49,10 @@ Use pnpm only. Before adding a dependency, check platform or existing alternativ
 
 Do not hand-edit generated artifacts unless their generator requires it. GitHub Actions references remain pinned to full commit SHAs and are updated through reviewed Dependabot PRs.
 
+Dependabot keeps a seven-day cooldown. Its pnpm lockfile update can also apply that release-age gate to already-adopted dependencies, causing unrelated updates to fail when an urgent patch raised a minimum version inside the window. `pnpm-workspace.yaml` contains exact-version exceptions for the reviewed PR #18 baseline only; it does not exempt entire packages or disable cooldown. Future exceptions require evidence of the failed resolution and a reviewed version. Recheck these temporary entries after 2026-09-18 and remove them once the baseline has aged beyond seven days. Verify both a production and development update in a disposable copy with `pnpm update <name>@<version> --lockfile-only --no-save -r --config.minimumReleaseAge=10080`; never commit that diagnostic copy's dependency changes.
+
+Reference: [pnpm 10 exact-version release-age exceptions](https://pnpm.io/10.x/settings#minimumreleaseageexclude).
+
 ## Risk-based verification
 
 Test the changed behavior and likely regression, then choose the smallest sufficient gate:
