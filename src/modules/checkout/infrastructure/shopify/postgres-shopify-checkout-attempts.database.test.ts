@@ -280,6 +280,70 @@ describeDatabase("durable Shopify checkout attempts", () => {
       fulfillments: [{ id: "gid://shopify/Fulfillment/8801", order: { id: fixture.event.externalObjectId }, status: "SUCCESS",
         updatedAt: "2026-09-11T12:00:00Z", inTransitAt: "2026-09-11T10:00:00Z", deliveredAt: delivered ? "2026-09-11T11:00:00Z" : null }] };
   }
+  function quantityNode(fixture: Awaited<ReturnType<typeof acceptanceWorkflow>>, delivered = false) {
+    const source = fulfillmentNode(fixture, delivered);
+    return { ...source, updatedAt: fixture.source.updatedAt, lineItems: fixture.source.lineItems,
+      fulfillments: source.fulfillments.map((item) => ({ ...item, updatedAt: delivered ? "2026-09-11T13:00:00Z" : item.updatedAt, totalQuantity: 1,
+        fulfillmentLineItems: { nodes: [{ id: "gid://shopify/FulfillmentLineItem/1", quantity: 1, lineItem: { id: "gid://shopify/LineItem/1" } }], pageInfo: { hasNextPage: false } } })),
+    };
+  }
+  it("persists matched quantities once, holds stale reads, and keeps the newest physical evidence", async () => {
+    const fixture = await acceptanceWorkflow("gid://shopify/Order/8091", true, true);
+    const shipped = quantityNode(fixture); const delivered = quantityNode(fixture, true);
+    fixture.fulfillmentResponse.mockResolvedValue(shipped);
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: {
+      status: "UNFULFILLED", decision: { kind: "HELD" }, quantityAssessment: { status: "SHIPPED", ordered: 1, shipped: 1, delivered: 0 } } } });
+    fixture.fulfillmentResponse.mockResolvedValue(delivered);
+    const results = await Promise.all(Array.from({ length: 6 }, () => fixture.useCase.execute(fixture.event)));
+    expect(results.filter((result) => result.completion.outcome === "COMPLETED" && result.completion.fulfillment.outcome === "APPLIED")).toHaveLength(1);
+    expect(results[0]).toMatchObject({ completion: { fulfillment: { quantityAssessment: { status: "DELIVERED", delivered: 1 } } } });
+    const [saved] = await sql`SELECT * FROM bloombox.shopify_fulfillment_intakes WHERE purchase_intent_id = ${fixture.intent.id}`;
+    expect(saved.provider_quantity_assessment).toMatchObject({ status: "DELIVERED", ordered: 1, delivered: 1 });
+    fixture.fulfillmentResponse.mockResolvedValue(shipped);
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: {
+      providerActivity: "DELIVERED", quantityAssessment: { status: "REVIEW_REQUIRED", reason: "SOURCE_REGRESSION", shipped: null, delivered: null } } } });
+    expect((await sql`SELECT provider_quantity_source FROM bloombox.shopify_fulfillment_intakes WHERE fulfillment_id = ${saved.fulfillment_id}`)[0].provider_quantity_source)
+      .toEqual(saved.provider_quantity_source);
+    await expect(sql`UPDATE bloombox.shopify_fulfillment_intakes SET version = version + 1, provider_quantity_source = NULL
+      WHERE fulfillment_id = ${saved.fulfillment_id}`).rejects.toMatchObject({ code: "23514" });
+    await expect(sql`UPDATE bloombox.shopify_fulfillment_intakes SET version = version + 1,
+      provider_quantity_source = jsonb_set(provider_quantity_source, '{fulfillments,0,updatedAt}', '"2026-09-11T09:00:00Z"'::jsonb)
+      WHERE fulfillment_id = ${saved.fulfillment_id}`).rejects.toMatchObject({ code: "23514" });
+    fixture.fulfillmentResponse.mockResolvedValue(delivered);
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: { quantityAssessment: { status: "DELIVERED" } } } });
+    expect(await sql`SELECT id FROM bloombox.shipments WHERE fulfillment_id = ${saved.fulfillment_id}`).toHaveLength(0);
+  });
+  it("compares with accepted product quantities and never reports completion from invalid or partial data", async () => {
+    const fixture = await acceptanceWorkflow("gid://shopify/Order/8092", true, true);
+    const delivered = quantityNode(fixture, true);
+    fixture.fulfillmentResponse.mockResolvedValue({ ...delivered, lineItems: { ...delivered.lineItems,
+      nodes: delivered.lineItems.nodes.map((line) => ({ ...line, variant: { id: "gid://shopify/ProductVariant/999" } })) } });
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: {
+      quantityAssessment: { status: "REVIEW_REQUIRED", reason: "ORDER_ITEMS_CHANGED" }, decision: { kind: "HELD" } } } });
+    const [before] = await sql`SELECT provider_quantity_source FROM bloombox.shopify_fulfillment_intakes WHERE purchase_intent_id = ${fixture.intent.id}`;
+    fixture.fulfillmentResponse.mockResolvedValue({ ...delivered, lineItems: { ...delivered.lineItems, pageInfo: { hasNextPage: true } } });
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: {
+      providerActivity: "DELIVERED", quantityAssessment: { status: "UNVERIFIED", reason: "SOURCE_UNAVAILABLE", shipped: null } } } });
+    expect((await sql`SELECT provider_quantity_source FROM bloombox.shopify_fulfillment_intakes WHERE purchase_intent_id = ${fixture.intent.id}`)[0])
+      .toEqual(before);
+  });
+  it("rolls back quantity evidence with outbox failure and retries without duplicating progress", async () => {
+    const fixture = await acceptanceWorkflow("gid://shopify/Order/8093", true, true);
+    fixture.fulfillmentResponse.mockResolvedValue(quantityNode(fixture));
+    await fixture.useCase.execute(fixture.event);
+    const [before] = await sql`SELECT * FROM bloombox.shopify_fulfillment_intakes WHERE purchase_intent_id = ${fixture.intent.id}`;
+    fixture.fulfillmentResponse.mockResolvedValue(quantityNode(fixture, true));
+    await sql.unsafe(`CREATE FUNCTION bloombox.test_quantity_failure() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN IF NEW.event_type = 'fulfillment.shopify_intake.updated' THEN RAISE EXCEPTION 'quantity fault'; END IF; RETURN NEW; END; $$;
+      CREATE TRIGGER test_quantity_failure BEFORE INSERT ON bloombox.outbox_events FOR EACH ROW EXECUTE FUNCTION bloombox.test_quantity_failure();`);
+    try {
+      await expect(fixture.useCase.execute(fixture.event)).rejects.toEqual(new ShopifyFulfillmentIntakeError());
+      expect((await sql`SELECT * FROM bloombox.shopify_fulfillment_intakes WHERE fulfillment_id = ${before.fulfillment_id}`)[0]).toEqual(before);
+    } finally { await sql.unsafe("DROP TRIGGER test_quantity_failure ON bloombox.outbox_events; DROP FUNCTION bloombox.test_quantity_failure()"); }
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: { outcome: "APPLIED", quantityAssessment: { status: "DELIVERED" } } } });
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: { outcome: "DUPLICATE" } } });
+    expect(await sql`SELECT id FROM bloombox.outbox_events WHERE aggregate_id = ${before.fulfillment_id}`).toHaveLength(2);
+  });
   it("retains provider activity across concurrent reads, late empty responses and cancellation without projecting a whole shipment", async () => {
     const fixture = await acceptanceWorkflow("gid://shopify/Order/8081", true, true);
     fixture.fulfillmentResponse.mockResolvedValue(fulfillmentNode(fixture));

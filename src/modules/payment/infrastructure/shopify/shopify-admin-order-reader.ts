@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ShopifyFulfillmentUnavailableError, type ShopifyFulfillmentReader, type ShopifyFulfillmentSnapshot } from "@/modules/fulfillment/public";
+import { ShopifyFulfillmentUnavailableError, type ShopifyFulfillmentReader, type ShopifyFulfillmentSnapshot, type ShopifyFulfillmentQuantities } from "@/modules/fulfillment/public";
 import { DELIVERY_ADDRESS_TEXT_MAX_LENGTH, DELIVERY_POSTAL_INPUT_MAX_LENGTH, JAPAN_PREFECTURES, assessDeliveryDestination, isApprovedDeliveryCoverage, DELIVERY_COVERAGE_POLICY, type DeliveryCoveragePolicy } from "@/modules/fulfillment/public";
 import { ShopifyDeliveryDestinationUnavailableError, type ShopifyDeliveryDestinationReader, type ShopifyDestinationReference, type ShopifyDestinationAssessment } from "../../application/shopify-delivery-destination-reader";
 import type { OrderPricingFacts, ShopifyOrderAcceptance } from "@/modules/order/public";
@@ -13,6 +13,9 @@ import {
 export const SHOPIFY_ADMIN_READ_TIMEOUT_MS = 5_000;
 export const SHOPIFY_ADMIN_RESPONSE_MAX_BYTES = 256_000;
 const MAX_ITEMS = 100;
+// Bound the nested query cost as well as the response bytes; oversized orders require a separate reconciliation path.
+const MAX_FULFILLMENTS = 10;
+const MAX_FULFILLMENT_LINES = 20;
 const gid = (resource: string) => z.string().max(100).regex(new RegExp(`^gid://shopify/${resource}/[1-9]\\d*$`));
 const date = z.iso.datetime({ offset: true });
 const jpy = z.object({ currencyCode: z.literal("JPY"), amount: z.string().max(32)
@@ -132,20 +135,37 @@ const DESTINATION_QUERY = `query BloomBoxDeliveryDestination($id: ID!) {
 const FULFILLMENT_QUERY = `query BloomBoxFulfillmentObservation($id: ID!) {
   shop { myshopifyDomain }
   node(id: $id) { __typename ... on Order {
-    id test fulfillmentsCount { count precision }
-    fulfillments(first: ${MAX_ITEMS + 1}) { id status updatedAt inTransitAt deliveredAt order { id } }
+    id test updatedAt fulfillmentsCount { count precision }
+    lineItems(first: ${MAX_ITEMS}) { nodes { id quantity currentQuantity variant { id } } pageInfo { hasNextPage } }
+    fulfillments(first: ${MAX_FULFILLMENTS + 1}) { id status updatedAt inTransitAt deliveredAt order { id } totalQuantity
+      fulfillmentLineItems(first: ${MAX_FULFILLMENT_LINES}) { nodes { id quantity lineItem { id } } pageInfo { hasNextPage } }
+    }
   } }
 }`;
 const fulfillmentOrderSchema = z.object({
   __typename: z.literal("Order"), id: gid("Order"), test: z.boolean(),
-  fulfillmentsCount: z.object({ count: z.number().int().nonnegative().max(MAX_ITEMS), precision: z.literal("EXACT") }),
+  fulfillmentsCount: z.object({ count: z.number().int().nonnegative().max(MAX_FULFILLMENTS), precision: z.literal("EXACT") }),
   fulfillments: z.array(z.object({ id: gid("Fulfillment"), order: z.object({ id: gid("Order") }),
     status: z.enum(["CANCELLED", "ERROR", "FAILURE", "SUCCESS", "OPEN", "PENDING"]),
     updatedAt: date, inTransitAt: date.nullable(), deliveredAt: date.nullable(),
-  })).max(MAX_ITEMS),
+  })).max(MAX_FULFILLMENTS),
 }).refine((order) => order.fulfillmentsCount.count === order.fulfillments.length
   && new Set(order.fulfillments.map((item) => item.id)).size === order.fulfillments.length
   && order.fulfillments.every((item) => item.order.id === order.id));
+const fulfillmentQuantitySchema = z.object({
+  updatedAt: date,
+  lineItems: z.object({ nodes: z.array(z.object({ id: gid("LineItem"), variant: z.object({ id: gid("ProductVariant") }).nullable(),
+    quantity: z.number().int().positive().max(2_147_483_647), currentQuantity: z.number().int().nonnegative().max(2_147_483_647),
+  })).min(1).max(MAX_ITEMS), pageInfo: z.object({ hasNextPage: z.literal(false) }) }),
+  fulfillments: z.array(z.object({ id: gid("Fulfillment"), totalQuantity: z.number().int().positive().max(2_147_483_647),
+    fulfillmentLineItems: z.object({ nodes: z.array(z.object({ id: gid("FulfillmentLineItem"),
+      quantity: z.number().int().positive().max(2_147_483_647), lineItem: z.object({ id: gid("LineItem") }),
+    })).min(1).max(MAX_FULFILLMENT_LINES), pageInfo: z.object({ hasNextPage: z.literal(false) }) }),
+  })).max(MAX_FULFILLMENTS),
+}).refine((source) => new Set(source.lineItems.nodes.map((line) => line.id)).size === source.lineItems.nodes.length
+  && source.fulfillments.every((item) => item.fulfillmentLineItems.nodes.reduce((sum, line) => sum + line.quantity, 0) === item.totalQuantity)
+  && new Set(source.fulfillments.flatMap((item) => item.fulfillmentLineItems.nodes.map((line) => line.id))).size
+    === source.fulfillments.reduce((sum, item) => sum + item.fulfillmentLineItems.nodes.length, 0));
 const addressText = z.string().max(DELIVERY_ADDRESS_TEXT_MAX_LENGTH).nullable();
 const destinationSchema = z.object({
   __typename: z.literal("Order"), id: gid("Order"), updatedAt: date, test: z.boolean(), cancelledAt: date.nullable(), requiresShipping: z.boolean(),
@@ -182,8 +202,17 @@ export class ShopifyAdminOrderReader implements ShopifyOrderReader, ShopifyDeliv
       if (envelope.data.shop.myshopifyDomain !== reference.shop || order.id !== reference.orderId || order.test !== reference.test) {
         throw new ShopifyFulfillmentUnavailableError();
       }
-      return { shop: reference.shop, orderId: order.id, test: order.test,
-        fulfillments: order.fulfillments.map(({ id, status, updatedAt, inTransitAt, deliveredAt }) => ({ id, status, updatedAt, inTransitAt, deliveredAt })) };
+      const fulfillments = order.fulfillments.map(({ id, status, updatedAt, inTransitAt, deliveredAt }) => ({ id, status, updatedAt, inTransitAt, deliveredAt }));
+      // Missing quantity evidence must not erase the separate activity witness or permit a complete-delivery claim.
+      const parsed = fulfillmentQuantitySchema.safeParse(envelope.data.node);
+      const quantities: ShopifyFulfillmentQuantities | null = parsed.success ? { updatedAt: parsed.data.updatedAt,
+        lines: parsed.data.lineItems.nodes.map((line) => ({ id: line.id, variantId: line.variant?.id ?? null,
+          quantity: line.quantity, currentQuantity: line.currentQuantity })),
+        fulfillments: fulfillments.map((item, index) => ({ ...item, lines: parsed.data.fulfillments[index].fulfillmentLineItems.nodes.map((line) => ({
+          id: line.id, lineItemId: line.lineItem.id, quantity: line.quantity,
+        })) })),
+      } : null;
+      return { shop: reference.shop, orderId: order.id, test: order.test, fulfillments, quantities };
     } catch { throw new ShopifyFulfillmentUnavailableError(); }
   }
 
