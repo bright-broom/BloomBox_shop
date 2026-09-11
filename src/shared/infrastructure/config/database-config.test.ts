@@ -3,6 +3,7 @@ import {
   InvalidDatabaseConfigurationError,
   loadDatabaseConfig,
   loadOperatorDatabaseConfig,
+  loadPermissionManagerDatabaseConfig,
 } from "./database-config";
 import {
   InvalidDataProtectionConfigurationError,
@@ -23,6 +24,11 @@ describe("runtime configuration", () => {
 });
 
 describe("database configuration", () => {
+  it("requires a separate permission-manager connection without reusing other database credentials", () => {
+    const other = { DATABASE_URL: "postgres://localhost/app", DATABASE_OPERATOR_URL: "postgres://localhost/operator", DATABASE_WORKER_URL: "postgres://localhost/worker" };
+    expect(() => loadPermissionManagerDatabaseConfig(other)).toThrow(InvalidDatabaseConfigurationError);
+    expect(loadPermissionManagerDatabaseConfig({ ...other, DATABASE_PERMISSION_MANAGER_URL: "postgres://localhost/manager" }).url).toBe("postgres://localhost/manager");
+  });
   it("requires a dedicated operator connection without falling back to application credentials", () => {
     expect(() => loadOperatorDatabaseConfig({ DATABASE_URL: "postgres://localhost/app" })).toThrow(InvalidDatabaseConfigurationError);
     expect(loadOperatorDatabaseConfig({ DATABASE_URL: "postgres://localhost/app", DATABASE_OPERATOR_URL: "postgres://localhost/operator" }).url)

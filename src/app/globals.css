@@ -473,3 +473,37 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+.fulfillment-inbox-search { display: grid; gap: var(--space-4); margin-bottom: var(--space-7); }
+.fulfillment-inbox-search > button { justify-self: start; }
+.fulfillment-inbox-results { margin: var(--space-7) 0; }
+.fulfillment-inbox-results > p { margin-top: var(--space-3); }
+.fulfillment-inbox-list { list-style: none; padding: 0; margin: var(--space-6) 0; }
+.fulfillment-inbox-list > li { border-top: 1px solid var(--line); }
+.fulfillment-inbox-list > li:last-child { border-bottom: 1px solid var(--line); }
+.fulfillment-inbox-entry { display: block; padding: var(--space-6) 0; overflow-wrap: anywhere; }
+.fulfillment-inbox-entry > h3 { font-size: var(--text-body); font-weight: 500; }
+.fulfillment-inbox-entry > span { display: inline-block; margin-top: var(--space-4); color: var(--accent); }
+.fulfillment-inbox-facts { display: flex; flex-wrap: wrap; gap: var(--space-5) var(--space-7); margin-top: var(--space-4); }
+.fulfillment-inbox-facts dt { color: var(--ink-soft); font-size: var(--text-small); }
+.fulfillment-inbox-facts dd { margin: var(--space-2) 0 0; }
+.fulfillment-inbox-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-5); }
+
+.fulfillment-inbox-page { padding-top: var(--space-6); }
+.fulfillment-inbox-page .content-header { margin-block: var(--space-5) var(--space-6); }
+.fulfillment-inbox-search .form-hint { margin: 0; }
+
+.fulfillment-approval-form { margin-top: var(--space-7); padding-top: var(--space-6); border-top: 1px solid var(--line); max-width: var(--reading-max); }
+.fulfillment-approval-form > p, .fulfillment-approval-form form { margin-top: var(--space-4); }
+.fulfillment-approval-acknowledgement { display: flex; gap: var(--space-3); align-items: start; margin-bottom: var(--space-5); cursor: pointer; }
+.fulfillment-approval-acknowledgement input { flex-shrink: 0; margin-top: var(--space-2); accent-color: var(--accent); }
+.permission-management-list { display: grid; gap: var(--space-6); margin-block: var(--space-6); }
+.permission-card { max-width: var(--reading-max); border-top: 1px solid var(--line); padding-top: var(--space-5); overflow-wrap: anywhere; }
+.permission-card dl { display: grid; gap: var(--space-4); }
+.permission-card dt { color: var(--ink-soft); font-size: var(--text-small); }
+.permission-card dd { margin: 0; }
+.permission-history, .permission-revocation-form { margin-top: var(--space-5); }
+.permission-revocation-form form { display: grid; gap: var(--space-4); }
+.permission-revocation-form .fulfillment-approval-acknowledgement { margin-bottom: 0; }
+.permission-revoke-button { justify-self: start; color: var(--danger); border-color: var(--danger); }
+.permission-revoke-button:hover { background: var(--danger); color: var(--paper); }
