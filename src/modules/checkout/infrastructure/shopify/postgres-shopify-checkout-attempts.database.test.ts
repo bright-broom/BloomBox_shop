@@ -1,3 +1,4 @@
+import { PostgresFulfillmentInboxQuery } from "@/modules/fulfillment/infrastructure/postgres-fulfillment-inbox-query";
 import { PostgresShopifyOrderAcceptor } from "@/modules/order/infrastructure/postgres-shopify-order-acceptor";
 import { PostgresShopifyFulfillmentIntake } from "@/modules/fulfillment/infrastructure/postgres-shopify-fulfillment-intake";
 import { ShopifyFulfillmentIntakeError } from "@/modules/fulfillment/public";
@@ -300,6 +301,77 @@ describeDatabase("durable Shopify checkout attempts", () => {
     const approver = new PostgresShopifyFulfillmentApprover(approvalSql, true, identity, { approval: "APPROVED" }, fixture.clock);
     return { ...fixture, intakeRow: intake, operatorId, permissionId, identity, request, approver };
   }
+  it("lists only scoped test orders with stable, bounded pagination and no protected data or writes", async () => {
+    const fixtures = [];
+    for (let index = 0; index < 23; index++) fixtures.push(await approvalFixture(94000 + index));
+    const fixture = fixtures[0];
+    const query = new PostgresFulfillmentInboxQuery(approvalSql, true, fixture.identity, fixture.clock);
+    const before = await sql`SELECT count(*)::int AS count FROM bloombox.outbox_events`;
+    const entries = [];
+    let cursor: string | undefined;
+    let pages = 0;
+    do {
+      const result = await query.list({ shop: scope, ...(cursor ? { cursor } : {}) });
+      expect(result.entries.length).toBeLessThanOrEqual(20);
+      entries.push(...result.entries);
+      cursor = result.nextCursor ?? undefined;
+      if (++pages > 10) throw new Error("Pagination failed to advance");
+    } while (cursor);
+    expect(pages).toBeGreaterThan(1);
+    expect(new Set(entries.map((entry) => entry.fulfillmentId)).size).toBe(entries.length);
+    expect(entries.map((entry) => entry.reference)).toEqual(entries.map((entry) => entry.reference).sort());
+    for (const item of fixtures) expect(entries.some((entry) => entry.fulfillmentId === item.request.fulfillmentId)).toBe(true);
+    expect(JSON.stringify(entries)).not.toMatch(/address|recipient|ciphertext|operatorId|permissionId|idempotency|opaque-|token|gmail/);
+    expect(entries.find((entry) => entry.fulfillmentId === fixture.request.fulfillmentId))
+      .toMatchObject({ reference: "94000", totalMinor: 5000, status: "UNFULFILLED" });
+    expect(await sql`SELECT count(*)::int AS count FROM bloombox.outbox_events`).toEqual(before);
+    expect((await new PostgresFulfillmentInboxQuery(approvalSql, false, fixture.identity, fixture.clock).list({ shop: scope })).entries).toEqual([]);
+    await sql`INSERT INTO bloombox.fulfillment_operator_permissions (id, operator_id, provider_scope, enabled, valid_until, created_at, updated_at)
+      VALUES (${randomUUID()}, ${fixture.operatorId}, 'empty-shop.myshopify.com', true, ${new Date(acceptanceTime.getTime() + 60_000)}, ${acceptanceTime}, ${acceptanceTime})`;
+    expect(await query.list({ shop: "empty-shop.myshopify.com" })).toMatchObject({ entries: [], nextCursor: null });
+    const first = await query.list({ shop: scope });
+    if (!first.nextCursor) throw new Error("Expected second page");
+    await expect(query.list({ shop: "empty-shop.myshopify.com", cursor: first.nextCursor })).rejects.toEqual(new FulfillmentReviewError("INVALID_REQUEST"));
+    await expect(new PostgresFulfillmentInboxQuery(approvalSql, false, fixture.identity, fixture.clock)
+      .list({ shop: scope, cursor: first.nextCursor })).rejects.toEqual(new FulfillmentReviewError("INVALID_REQUEST"));
+    // Updating an intake's observed version must not reorder immutable cursor keys.
+    await sql`UPDATE bloombox.shopify_fulfillment_intakes SET version = version + 1, updated_at = updated_at + interval '1 second'
+      WHERE fulfillment_id = ${fixture.request.fulfillmentId}`;
+    expect((await query.list({ shop: scope })).entries.map((entry) => entry.fulfillmentId)).toEqual(first.entries.map((entry) => entry.fulfillmentId));
+    await sql`UPDATE bloombox.fulfillment_operator_permissions SET enabled = false, version = version + 1 WHERE id = ${fixture.permissionId}`;
+    await expect(query.list({ shop: scope, cursor: first.nextCursor })).rejects.toEqual(new FulfillmentReviewError("NOT_AUTHORIZED"));
+  });
+  it("rejects absent or expired inbox identity, wrong shops, forged and malformed pagination before returning data", async () => {
+    const fixture = await approvalFixture(94030);
+    const query = new PostgresFulfillmentInboxQuery(approvalSql, true, fixture.identity, fixture.clock);
+    await expect(new PostgresFulfillmentInboxQuery(approvalSql, true).list({ shop: scope })).rejects.toEqual(new FulfillmentReviewError("NOT_AUTHORIZED"));
+    await expect(query.list({ shop: "unknown.myshopify.com" })).rejects.toEqual(new FulfillmentReviewError("NOT_AUTHORIZED"));
+    for (const input of [{ shop: scope, cursor: "broken" }, { shop: scope, cursor: "x".repeat(601) }, { shop: scope, operatorId: fixture.operatorId }, { shop: "bad' OR true" }]) {
+      await expect(query.list(input)).rejects.toEqual(new FulfillmentReviewError("INVALID_REQUEST"));
+    }
+    fixture.identity.current.mockResolvedValueOnce({ operatorId: fixture.operatorId, expiresAt: acceptanceTime });
+    await expect(query.list({ shop: scope })).rejects.toEqual(new FulfillmentReviewError("NOT_AUTHORIZED"));
+    fixture.clock.mockReturnValueOnce(acceptanceTime).mockReturnValue(new Date(acceptanceTime.getTime() + 60_000));
+    await expect(query.list({ shop: scope })).rejects.toEqual(new FulfillmentReviewError("NOT_AUTHORIZED"));
+  });
+  it("serializes inbox reads with concurrent permission revocation", async () => {
+    const fixture = await approvalFixture(94031);
+    const connection = postgres(safeUrl(), { max: 1, ssl: false, connection: { role: "bloombox_fulfillment_approver" } });
+    let pending: Promise<unknown> | undefined;
+    try {
+      const [{ pid }] = await connection`SELECT pg_backend_pid() AS pid`;
+      await sql.begin(async (tx) => {
+        await tx`SELECT id FROM bloombox.fulfillment_operator_permissions WHERE id = ${fixture.permissionId} FOR UPDATE`;
+        pending = new PostgresFulfillmentInboxQuery(connection, true, fixture.identity, fixture.clock)
+          .list({ shop: scope }).then(() => null, (error: unknown) => error);
+        await vi.waitFor(async () => {
+          expect((await sql`SELECT wait_event_type FROM pg_stat_activity WHERE pid = ${pid}`)[0].wait_event_type).toBe("Lock");
+        }, { timeout: 2000, interval: 10 });
+        await tx`UPDATE bloombox.fulfillment_operator_permissions SET enabled = false, version = version + 1 WHERE id = ${fixture.permissionId}`;
+      });
+      expect(await pending).toEqual(new FulfillmentReviewError("NOT_AUTHORIZED"));
+    } finally { await pending; await connection.end({ timeout: 5 }); }
+  });
   it("reads a minimal scoped review with current evidence and immutable approval history", async () => {
     const fixture = await approvalFixture(93001);
     await fixture.approver.approve(fixture.request);

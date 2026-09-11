@@ -9,7 +9,7 @@
 3. 下表の値をサーバーの秘密管理に保存します。ユーザー指定のメールアドレス、実 subject、接続文字列や秘密情報を公開 Git・PR・チャットへ書き込まないでください。既存の環境ファイルを上書きせず、必要なキーだけ追加します。
 4. 最初は `AUTH_OPERATOR_BINDINGS=[]` としてログインを確認します。許可アカウントで本人がログインした際の「担当者登録用の情報」に Google subject が表示されます。サーバーの検証を経たこの値を、内部担当者 UUID と明示的に対応付けます。未登録の状態では DB に接続しません。
 5. [承認権限の運用](SHOPIFY_FULFILLMENT_APPROVAL.md) に従い、DB 管理者が店舗別権限を別途設定します。既存の NOLOGIN ロール `bloombox_fulfillment_approver` を専用ログイン接続へ限定付与し、`DATABASE_OPERATOR_URL` に指定します。一般アプリ・worker・DB 所有者の接続を使わず、この資格情報で実際の権限制限を確認します。DB 権限の変更は現在 SYSTEM 監査であり、人ごとの権限管理画面は今後の実装対象です。
-6. 対象レコードの内部発送 UUID を確認し、`/operations/fulfillments/<shop.myshopify.com>/<fulfillment UUID>` を開きます。Google subject の一致に加えて店舗権限・期限・test/live 区分を確認します。非認証・非認可・他店舗・存在しない対象はいずれも Not Found 画面になり、存在有無を区別しません。Next.js のストリーミング開始後は HTTP 200 の場合もあるため、HTTP ステータスだけで認可成功を判断しません。注文一覧や承認・発送ボタンは今回追加していません。
+6. ログイン後の「注文一覧」から `/operations/fulfillments` を開き、権限のある店舗ドメインを指定して対象注文を選びます（[一覧の仕様](OPERATOR_FULFILLMENT_INBOX.md)）。内部発送 UUID が分かる場合は従来どおり、`/operations/fulfillments/<shop.myshopify.com>/<fulfillment UUID>` を開きます。Google subject の一致に加えて店舗権限・期限・test/live 区分を確認します。非認証・非認可・他店舗・存在しない対象はいずれも Not Found 画面になり、存在有無を区別しません。Next.js のストリーミング開始後は HTTP 200 の場合もあるため、HTTP ステータスだけで認可成功を判断しません。承認・発送ボタンはまだ追加していません。
 
 | 環境変数 | 内容 |
 | --- | --- |

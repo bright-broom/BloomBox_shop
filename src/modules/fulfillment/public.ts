@@ -53,3 +53,4 @@ export { FulfillmentApprovalError, type FulfillmentOperatorIdentity, type Fulfil
   type FulfillmentApprovalReceipt, type ShopifyFulfillmentApprover } from "./application/approve-shopify-fulfillment";
 export { FulfillmentReviewError, type FulfillmentReview, type FulfillmentReviewQuery } from "./application/read-fulfillment-review";
 export { fulfillmentReviewSummary } from "./presentation/fulfillment-review-summary";
+export { FULFILLMENT_INBOX_PAGE_SIZE, type FulfillmentInbox, type FulfillmentInboxRequest, type FulfillmentInboxQuery } from "./application/read-fulfillment-inbox";
