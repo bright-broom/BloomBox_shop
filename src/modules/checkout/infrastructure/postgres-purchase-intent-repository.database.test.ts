@@ -513,7 +513,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       now: new Date("2026-08-21T00:11:00.000Z"),
       lockTimeoutMinutes: 5,
     });
-    expect(claimed).toEqual([event]);
+    expect(claimed).toEqual([{ kind: "READABLE", event }]);
     await expect(inbox.markFailed(
       event,
       "DependencyUnavailableError",
@@ -532,7 +532,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       now: new Date("2026-08-21T00:11:02.000Z"),
       lockTimeoutMinutes: 5,
     });
-    expect(retried).toEqual([event]);
+    expect(retried).toEqual([{ kind: "READABLE", event }]);
     await inbox.markProcessed(
       event,
       new Date("2026-08-21T00:11:03.000Z"),
