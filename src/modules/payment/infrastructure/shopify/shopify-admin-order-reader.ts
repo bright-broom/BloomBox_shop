@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { DELIVERY_ADDRESS_TEXT_MAX_LENGTH, DELIVERY_POSTAL_INPUT_MAX_LENGTH, JAPAN_PREFECTURES, assessDeliveryDestination, isApprovedDeliveryCoverage, DELIVERY_COVERAGE_POLICY, type DeliveryCoveragePolicy } from "@/modules/fulfillment/public";
 import { ShopifyDeliveryDestinationUnavailableError, type ShopifyDeliveryDestinationReader, type ShopifyDestinationReference, type ShopifyDestinationAssessment } from "../../application/shopify-delivery-destination-reader";
-import type { OrderPricingFacts } from "@/modules/order/public";
+import type { OrderPricingFacts, ShopifyOrderAcceptance } from "@/modules/order/public";
 import { money } from "@/shared/domain/money";
 import type { ShopifyAdminConfig } from "@/shared/infrastructure/config/shopify-admin-config";
 import {
@@ -134,6 +134,20 @@ const destinationSchema = z.object({
   shippingAddress: z.object({ countryCodeV2: z.string().max(2).nullable(), provinceCode: z.string().max(20).nullable(),
     zip: z.string().max(DELIVERY_POSTAL_INPUT_MAX_LENGTH).nullable(), name: addressText, city: addressText, address1: addressText }).nullable(),
 });
+const ACCEPTANCE_DESTINATION_QUERY = `query BloomBoxAcceptanceDestination($id: ID!) {
+  shop { myshopifyDomain }
+  node(id: $id) { __typename ... on Order {
+    id updatedAt test cancelledAt requiresShipping
+    shippingAddress { countryCodeV2 provinceCode zip name city address1 address2 phone }
+  } }
+}`;
+const acceptanceDestinationSchema = destinationSchema.extend({
+  shippingAddress: destinationSchema.shape.shippingAddress.unwrap().extend({
+    address2: addressText, phone: z.string().max(32).nullable(),
+  }).nullable(),
+});
+type AcceptanceDestination = Readonly<{ status: "READY"; address: ShopifyOrderAcceptance["address"] }>
+  | Extract<ShopifyDestinationAssessment, { status: "HELD" }>;
 
 /** Disconnected, read-only provider boundary. Returned facts do not prove a local purchase-intent association. */
 export class ShopifyAdminOrderReader implements ShopifyOrderReader, ShopifyDeliveryDestinationReader {
@@ -195,6 +209,30 @@ export class ShopifyAdminOrderReader implements ShopifyOrderReader, ShopifyDeliv
       const address = order.shippingAddress;
       return assessDeliveryDestination(address ? { countryCode: address.countryCodeV2, prefecture: japanesePrefecture(address.provinceCode),
         postalCode: address.zip, recipientName: address.name, city: address.city, addressLine: address.address1 } : null, this.coverage);
+    } catch {
+      throw new ShopifyDeliveryDestinationUnavailableError();
+    }
+  }
+
+  /** Infrastructure-only PII transfer to the acceptance command, never a public application query. */
+  async readAcceptanceDestination(reference: ShopifyDestinationReference): Promise<AcceptanceDestination> {
+    if (reference.shop !== this.config.storeDomain || !gid("Order").safeParse(reference.orderId).success
+      || !date.safeParse(reference.updatedAt).success || typeof reference.test !== "boolean") throw new InvalidShopifyReferenceError();
+    if (!isApprovedDeliveryCoverage(this.coverage)) return { status: "HELD", reason: "COVERAGE_NOT_APPROVED" };
+    try {
+      const envelope = envelopeSchema.parse(await this.request(reference.orderId, ACCEPTANCE_DESTINATION_QUERY));
+      if (envelope.data.shop.myshopifyDomain !== reference.shop) throw new ShopifyDeliveryDestinationUnavailableError();
+      const order = acceptanceDestinationSchema.parse(envelope.data.node);
+      if (order.id !== reference.orderId || order.test !== reference.test) throw new ShopifyDeliveryDestinationUnavailableError();
+      if (Date.parse(order.updatedAt) !== Date.parse(reference.updatedAt) || order.cancelledAt !== null) return { status: "HELD", reason: "ORDER_CHANGED" };
+      if (!order.requiresShipping) return { status: "HELD", reason: "SHIPPING_NOT_REQUIRED" };
+      const raw = order.shippingAddress;
+      if (!raw) return { status: "HELD", reason: "ADDRESS_MISSING" };
+      const address = { countryCode: raw.countryCodeV2, prefecture: japanesePrefecture(raw.provinceCode),
+        postalCode: raw.zip, recipientName: raw.name, city: raw.city, addressLine: raw.address1,
+        addressLine2: raw.address2, phone: raw.phone };
+      const assessment = assessDeliveryDestination(address, this.coverage);
+      return assessment.status === "HELD" ? assessment : { status: "READY", address };
     } catch {
       throw new ShopifyDeliveryDestinationUnavailableError();
     }

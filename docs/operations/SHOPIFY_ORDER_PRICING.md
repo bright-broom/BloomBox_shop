@@ -1,6 +1,6 @@
 # Shopify注文金額の照合
 
-2026-09-11時点。`ReconcileShopifyPayment`は決済観測を保存した後、同じAdmin API応答の金額をOrder所有の`assessOrderPricing`へ渡し、`pricing`を返します。これは注文受け入れに向けた金額検証であり、注文作成・確定・発送・通知の接続はまだ行いません。
+2026-09-11時点。`ReconcileShopifyPayment`は決済観測を保存した後、同じAdmin API応答の金額をOrder所有の`assessOrderPricing`へ渡し、`pricing`を返します。これは金額検証です。追加の任意注入Gatewayを通じて[注文確定保存](SHOPIFY_ORDER_ACCEPTANCE.md)へ接続しましたが、発送・通知・公開購入経路は未接続です。
 
 金額照合後の配送期限再確認も内部ワークフローに追加しました。[配送期限照合](SHOPIFY_DELIVERY_TIMING.md)。期限内という判定だけでは注文の確定保存・発送を許可しません。
 
@@ -11,7 +11,7 @@
 - 商品の単価×数量から、各明細の全`discountAllocations`を引き、割引後の商品小計と照合します。注文全体への割引も明細への配賦を使用します。
 - 送料は配送行の割引前・割引後・現在額を読みます。商品割引と送料割引を別々に扱い、送料無料を商品小計から再度差し引きません。
 - `taxesIncluded=true`なら割引後の商品小計＋割引後送料が総額です。税額は内数として保持し、二重加算しません。falseなら税額を一度加算します。税率や端数処理をローカルで推定しません。
-- 出力の`merchandise`と`shipping`は割引前で、税込/税別の区分を維持します。これに加え、検証済みの`snapshot`を返します。商品/送料の税額配賦は照合済みですが、注文・明細への書込処理はまだ接続していません。
+- 出力の`merchandise`と`shipping`は割引前で、税込/税別の区分を維持します。これに加え、検証済みの`snapshot`を返します。商品/送料の税額配賦は照合済みですが、任意注入のGatewayで他の受け入れ条件も検証した場合に限り、注文・明細へ保存します。
 
 参照: [Shopify Orderの金額・税込区分](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/Order)、[LineItemの単価と割引配賦](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/LineItem)、[ShippingLineの割引後送料](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/ShippingLine)。API 2026-07を前提とする合成データの検証で、実店舗での適合確認は未完了です。
 
@@ -27,7 +27,7 @@
 
 上記はテスト例であり、実店舗の税込/税別の承認や実際の税率・端数処理を確定するものではありません。M/L価格と紹介特典の資格・最低金額は変更しません。
 
-既存の`orders`には`tax_minor`（加算する外税）と`included_tax_minor`（内税）が既にあります。この2つを混同しない形に正規化しています。移行0008で`order_items`にもnullableの内税欄を追加しました。既存明細の不明な内税はNULLのまま維持します。[注文確定保存Adapter](SHOPIFY_ORDER_ACCEPTANCE.md)は承認済み条件・最新決済版・購入情報を再確認し、注文/明細/価格証跡を原子的に保存できます。ただし本照合ワークフローとは未接続なので、`snapshot`を返すだけでは保存済みの注文契約にはなりません。
+既存の`orders`には`tax_minor`（加算する外税）と`included_tax_minor`（内税）が既にあります。この2つを混同しない形に正規化しています。移行0008で`order_items`にもnullableの内税欄を追加しました。既存明細の不明な内税はNULLのまま維持します。[注文確定保存Adapter](SHOPIFY_ORDER_ACCEPTANCE.md)は承認済み条件・最新決済版・購入情報を再確認し、注文/明細/価格証跡を原子的に保存できます。本照合ワークフローから任意注入Gatewayで接続していますが、`snapshot`を返すだけでは保存済みの注文契約にはなりません。保存結果は`acceptance`で別途確認します。
 
 ## 保留するケース
 
