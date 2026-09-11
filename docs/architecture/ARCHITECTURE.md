@@ -102,6 +102,7 @@ Accepted decisions:
 
 - [ADR 0001: Shopify-first commerce boundary](adr/0001-shopify-first-commerce-boundary.md)
 - [ADR 0002: Commerce persistence and payment-ready boundaries](adr/0002-commerce-persistence-and-payment-boundaries.md)
+- [ADR 0003: Shopify Checkout with Shopify Payments and KOMOJU](adr/0003-shopify-payments-and-komoju.md) (implementation selection; live activation remains blocked)
 
 ## Architecture decision test
 

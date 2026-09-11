@@ -4,7 +4,7 @@
 
 Preview builds and a public product-preview deployment are supported. The production composition now has a Shopify Storefront catalog adapter, durable PurchaseIntent storage, a disabled Stripe connector, storefront search, order-status projection, and validated customer-information pages. Production commerce activation remains intentionally blocked until account-backed contract, E2E, tax, privacy, legal, support, recovery, and activation-decision evidence is recorded in `config/production-commerce-activation.json`. Preview では、ギフト設定からカート、配送先、注文確認、ダミー決済、完了までを Test Mode として再現します。Preview の Purchase Intent と個人情報は永続化しません。`pnpm check:production` is the executable source of truth for commerce blockers.
 
-Do not disable or bypass that check. Complete the Shopify and Stripe runbooks and approve the provider activation ADR first.
+Do not disable or bypass that check. ADR 0003 selects Shopify Checkout + Shopify Payments + KOMOJU for implementation. The new Shopify cart client is disconnected from the purchase flow; complete the integration and per-method evidence in [PAYMENTS.md](PAYMENTS.md) before activation. The current executable activation gate and activation JSON still describe the older Stripe candidate and remain blocked; replacing those requirements with the completed Shopify flow is required work, not a reason to mark Stripe evidence complete.
 
 ## Environments
 
@@ -41,7 +41,7 @@ The hosting provider must keep immutable deployment history so the frontend can 
 - Production secrets and environment protection are configured; no production secret reaches preview.
 - Monitoring identifies failed checkout handoff, provider errors, latency, and invalid webhook rates without logging PII.
 - If Stripe is activated, the test-mode evidence and account-side checklist in `STRIPE.md` are complete, Event reconciliation is healthy, and the live credentials are isolated from Preview.
-- The Stripe account contract has passed the manual `Stripe Test Mode Readiness` workflow with separate Checkout, reconciliation, and readiness credentials. The probe Session was expired and the evidence references the tested revision.
+- For a separately approved direct Stripe activation only, the Stripe account contract must pass the manual `Stripe Test Mode Readiness` workflow with separate Checkout, reconciliation, and readiness credentials. That workflow does not establish readiness for the selected Shopify + KOMOJU path.
 - If Stripe is activated while Shopify remains inventory authority, the approved activation ADR and test evidence cover reservation, release, oversell prevention, and reconciliation before any charge is accepted.
 - The release owner has exercised frontend rollback and confirmed Shopify orders remain intact.
 
