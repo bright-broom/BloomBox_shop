@@ -36,6 +36,8 @@ Provider integrations use narrow application-owned ports. A Stripe adapter may b
 - Handlers tolerate retries, duplicates, delay, and reordering. Scheduled reconciliation repairs missing or stale provider projections.
 - Sensitive payloads are minimized, encrypted where retention is required, and excluded from logs and provider metadata.
 
+Offline recovery of an exhausted Inbox event now uses a Payment-owned DB-owner PLAN/APPLY command, following the existing owner-maintenance pattern. A short-lived, content-bound plan and protected immutable audit receipt authorize one FAILED-to-PENDING retry budget reset. Runtime credentials cannot issue this command or forge its receipt. Queue state and receipt commit together; repeat requests consult the receipt without resetting work that has since progressed. This does not authorize commerce mutations, decrypt payloads, bypass worker idempotency, extend retention or activate Shopify. See [recovery scope and rollback](../../operations/WEBHOOK_RETRY.md).
+
 ## Alternatives considered
 
 ### Persist the existing Order aggregate
