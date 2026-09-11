@@ -5,6 +5,7 @@ import { evaluateSettlement, SettlementEvidenceConflictError, type SettlementSna
 import type { ShopifyDeliveryDestinationReader, ShopifyDestinationAssessment } from "./shopify-delivery-destination-reader";
 import type { ReadShopifyReference } from "./read-shopify-reference";
 import type { VerifiedProviderEvent } from "./receive-provider-webhook";
+import type { ShopifyOrderAcceptanceGateway, ShopifyOrderAcceptanceOutcome } from "./shopify-order-acceptance-gateway";
 export type ShopifyPaymentEvidenceResult = Readonly<{ outcome: "APPLIED" | "DUPLICATE" | "STALE"; status: SettlementStatus; version: number }>;
 export type ShopifyDeliveryTimingAssessment = DeliveryDateAssessment | Readonly<{ status: "HELD"; reason:
   "STALE_OBSERVATION" | "ORDER_CANCELLED" | "PAYMENT_NOT_SETTLED" | "PAYMENT_PENDING" | "PRICING_UNRESOLVED"
@@ -26,8 +27,9 @@ export class ReconcileShopifyPayment {
     private readonly deliveryPlans: ShopifyDeliveryPlanQuery,
     private readonly destinations: ShopifyDeliveryDestinationReader,
     private readonly now: () => Date = () => new Date(),
+    private readonly acceptance?: ShopifyOrderAcceptanceGateway,
   ) {}
-  async execute(event: VerifiedProviderEvent): Promise<ShopifyPaymentEvidenceResult & { pricing: OrderPricingAssessment; deliveryTiming: ShopifyDeliveryTimingAssessment; destination: ShopifyDestinationAssessment }> {
+  async execute(event: VerifiedProviderEvent): Promise<ShopifyPaymentEvidenceResult & { pricing: OrderPricingAssessment; deliveryTiming: ShopifyDeliveryTimingAssessment; destination: ShopifyDestinationAssessment; acceptance: ShopifyOrderAcceptanceOutcome }> {
     const source = await this.reader.execute(event);
     const order = source.order;
     if (order.test !== this.expectedTestMode || order.transactions.some((transaction) => transaction.test !== order.test)) {
@@ -58,7 +60,13 @@ export class ReconcileShopifyPayment {
       deliveryTiming = await this.assessDeliveryTiming(link, source.shop, snapshot, payment, pricing);
       if (deliveryTiming.status !== "WITHIN_WINDOW") destination = { status: "HELD", reason: "PREREQUISITES_UNRESOLVED" };
     }
-    return { ...payment, pricing, deliveryTiming, destination };
+    let acceptance: ShopifyOrderAcceptanceOutcome = { outcome: "HELD", reason: this.acceptance ? "PREREQUISITES_UNRESOLVED" : "NOT_CONFIGURED" };
+    if (this.acceptance && destination.status === "STRUCTURALLY_VALID_AND_COVERED" && deliveryTiming.status === "WITHIN_WINDOW"
+      && pricing.status === "MATCHED" && order.pricing && order.lines.length === 1 && order.lines[0].variantId) {
+      acceptance = await this.acceptance.acceptOrder({ ...link, shop: source.shop, paymentVersion: payment.version,
+        updatedAt: order.updatedAt, test: order.test, variantId: order.lines[0].variantId, pricing: order.pricing });
+    }
+    return { ...payment, pricing, deliveryTiming, destination, acceptance };
   }
 
   private async assessDeliveryTiming(link: ShopifyOrderLink, shop: string, source: SettlementSnapshot,
