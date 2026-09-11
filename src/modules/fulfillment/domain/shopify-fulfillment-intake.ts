@@ -1,5 +1,6 @@
 import { assessDeliveryDate } from "./delivery-date";
 import type { FulfillmentStatus } from "./fulfillment-status";
+import type { ShopifyFulfillmentActivity } from "./shopify-fulfillment-observation";
 
 export type FulfillmentIntakePolicy = Readonly<{ approval: "PENDING" | "APPROVED" }>;
 export const FULFILLMENT_INTAKE_POLICY: FulfillmentIntakePolicy = { approval: "PENDING" };
@@ -7,20 +8,22 @@ export type FulfillmentIntakeDecision = Readonly<{ kind: "CANCELLED" | "HELD"; r
   "ORDER_CANCELLED" | "FULLY_REFUNDED" | "ALREADY_CANCELLED" | "POST_SHIPMENT_REVIEW_REQUIRED"
   | "ACTIVE_FULFILLMENT_REVIEW_REQUIRED" | "ORDER_NOT_CONFIRMED" | "PARTIAL_REFUND"
   | "PAYMENT_UNSETTLED" | "PAYMENT_PENDING" | "ADDRESS_UNAVAILABLE" | "DELIVERY_UNAVAILABLE"
-  | "POLICY_NOT_APPROVED" | "INVENTORY_UNVERIFIED" }>;
+  | "POLICY_NOT_APPROVED" | "INVENTORY_UNVERIFIED" | "PROVIDER_FULFILLMENT_UNVERIFIED" | "EXTERNAL_FULFILLMENT_REVIEW_REQUIRED" }>;
 export type FulfillmentIntakeFacts = Readonly<{
   status: FulfillmentStatus | null; orderStatus: "PENDING_CONFIRMATION" | "CONFIRMED" | "CANCELLED" | "CLOSED";
   orderCancelled: boolean; total: number; captured: number; refunded: number; pendingTransactions: boolean;
-  addressAvailable: boolean; deliveryDate: string;
+  addressAvailable: boolean; deliveryDate: string; providerActivity: ShopifyFulfillmentActivity;
 }>;
 
 /** Intake never authorizes scheduling or shipping; verified inventory/dispatch integration is still absent. */
 export function assessFulfillmentIntake(facts: FulfillmentIntakeFacts, policy: FulfillmentIntakePolicy, now: Date): FulfillmentIntakeDecision {
+  if (["RECORDED", "IN_TRANSIT", "DELIVERED"].includes(facts.providerActivity)) return { kind: "HELD", reason: "EXTERNAL_FULFILLMENT_REVIEW_REQUIRED" };
   const cancellation = facts.orderCancelled || facts.orderStatus === "CANCELLED" ? "ORDER_CANCELLED"
     : facts.total > 0 && facts.refunded >= facts.total ? "FULLY_REFUNDED" : null;
   if (facts.status === "CANCELLED") return { kind: "CANCELLED", reason: cancellation ?? "ALREADY_CANCELLED" };
   if (facts.status && ["SHIPPED", "DELIVERED", "RETURNED"].includes(facts.status)) return { kind: "HELD", reason: "POST_SHIPMENT_REVIEW_REQUIRED" };
   if (facts.status && facts.status !== "UNFULFILLED") return { kind: "HELD", reason: "ACTIVE_FULFILLMENT_REVIEW_REQUIRED" };
+  if (facts.providerActivity === "UNVERIFIED") return { kind: "HELD", reason: "PROVIDER_FULFILLMENT_UNVERIFIED" };
   if (cancellation) return { kind: "CANCELLED", reason: cancellation };
   if (facts.orderStatus !== "CONFIRMED") return { kind: "HELD", reason: "ORDER_NOT_CONFIRMED" };
   if (facts.refunded > 0) return { kind: "HELD", reason: "PARTIAL_REFUND" };

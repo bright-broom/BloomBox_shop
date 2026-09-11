@@ -32,6 +32,8 @@ export {
 export { LookupPostalCode, type PostalCodeLookupResult } from "./application/lookup-postal-code";
 export { type ShopifyFulfillmentIntake, type ShopifyFulfillmentReference, type ShopifyFulfillmentIntakeResult, ShopifyFulfillmentIntakeError } from "./application/reconcile-shopify-fulfillment";
 export { FULFILLMENT_INTAKE_POLICY, type FulfillmentIntakePolicy, type FulfillmentIntakeDecision } from "./domain/shopify-fulfillment-intake";
+export { type ShopifyFulfillmentReader, type ShopifyFulfillmentSnapshot, ShopifyFulfillmentUnavailableError } from "./application/read-shopify-fulfillments";
+export { type ShopifyFulfillmentFact, type ShopifyFulfillmentActivity } from "./domain/shopify-fulfillment-observation";
 export {
   postalCodeLookupRequestSchema,
   postalCodeLookupResponseSchema,

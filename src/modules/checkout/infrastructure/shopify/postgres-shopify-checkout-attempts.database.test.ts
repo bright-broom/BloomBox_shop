@@ -251,17 +251,20 @@ describeDatabase("durable Shopify checkout attempts", () => {
       shippingAddress: { countryCodeV2: "JP", provinceCode: "JP-13", zip: "100-0001", name: "配送先の秘密", city: "千代田区",
         address1: "番地の秘密", address2: "建物の秘密", phone: "+810000000000" } };
     const finalDestination = vi.fn(async () => destination);
+    const fulfillmentSource = { __typename: "Order", id: orderId, test: true,
+      fulfillmentsCount: { count: 0, precision: "EXACT" }, fulfillments: [] };
+    const fulfillmentResponse = vi.fn(async (): Promise<unknown> => fulfillmentSource);
     const respond = (node: unknown) => Response.json({ data: { shop: { myshopifyDomain: scope }, node } }, { headers: { "x-shopify-api-version": config.apiVersion } });
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
       const query = JSON.parse(String(init?.body)).query;
       const node = query.includes("BloomBoxAcceptanceDestination") ? await finalDestination()
         : query.includes("BloomBoxDeliveryDestination") ? destination : source;
-      return respond(node);
+      return respond(query.includes("BloomBoxFulfillmentObservation") ? await fulfillmentResponse() : node);
     });
     const reader = new ShopifyAdminOrderReader(config, fetcher, acceptancePolicy.coverage);
     const clock = vi.fn(() => acceptanceTime);
     const orders = new PostgresShopifyOrderAcceptor(sql, protector, acceptancePolicy, clock);
-    const intake = new PostgresShopifyFulfillmentIntake(sql, true, { approval: "PENDING" }, clock);
+    const intake = new PostgresShopifyFulfillmentIntake(sql, true, { approval: "PENDING" }, clock, reader);
     const completion = { orders: new PostgresShopifyAcceptedOrderQuery(sql), payments: new PostgresShopifyOrderPaymentProjector(sql, true, clock),
       purchases: new PostgresShopifyPurchaseConverter(sql, clock), fulfillment: withFulfillment ? intake : undefined };
     const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), new PostgresShopifyOrderLinker(sql),
@@ -270,8 +273,82 @@ describeDatabase("durable Shopify checkout attempts", () => {
     const event = { provider: "SHOPIFY" as const, providerAccountId: scope, eventType: "shopify.order.changed",
       externalEventId: `synthetic-${orderId}`, externalObjectId: orderId, apiVersion: config.apiVersion, occurredAt: acceptanceTime,
       payload: { id: orderId, objectType: "shopify_order_reference", shippingAddress: { address2: "forged-address" } } };
-    return { intent, useCase, event, finalDestination, destination, clock, source, fetcher, respond, completion, intake };
+    return { intent, useCase, event, finalDestination, destination, clock, source, fetcher, respond, completion, intake, reader, fulfillmentSource, fulfillmentResponse };
   }
+  function fulfillmentNode(fixture: Awaited<ReturnType<typeof acceptanceWorkflow>>, delivered = false) {
+    return { ...fixture.fulfillmentSource, fulfillmentsCount: { count: 1, precision: "EXACT" },
+      fulfillments: [{ id: "gid://shopify/Fulfillment/8801", order: { id: fixture.event.externalObjectId }, status: "SUCCESS",
+        updatedAt: "2026-09-11T12:00:00Z", inTransitAt: "2026-09-11T10:00:00Z", deliveredAt: delivered ? "2026-09-11T11:00:00Z" : null }] };
+  }
+  it("retains provider activity across concurrent reads, late empty responses and cancellation without projecting a whole shipment", async () => {
+    const fixture = await acceptanceWorkflow("gid://shopify/Order/8081", true, true);
+    fixture.fulfillmentResponse.mockResolvedValue(fulfillmentNode(fixture));
+    const results = await Promise.all(Array.from({ length: 6 }, () => fixture.useCase.execute(fixture.event)));
+    expect(results.filter((result) => result.completion.outcome === "COMPLETED" && result.completion.fulfillment.outcome === "APPLIED")).toHaveLength(1);
+    expect(results[0]).toMatchObject({ completion: { fulfillment: { providerActivity: "IN_TRANSIT", status: "UNFULFILLED",
+      decision: { kind: "HELD", reason: "EXTERNAL_FULFILLMENT_REVIEW_REQUIRED" } } } });
+    fixture.fulfillmentResponse.mockResolvedValue(fulfillmentNode(fixture, true));
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: { outcome: "APPLIED", providerActivity: "DELIVERED" } } });
+    fixture.fulfillmentResponse.mockResolvedValue(fixture.fulfillmentSource);
+    fixture.fetcher.mockImplementation(async (_url, init) => fixture.respond(JSON.parse(String(init?.body)).query.includes("BloomBoxFulfillmentObservation")
+      ? await fixture.fulfillmentResponse() : { ...fixture.source, updatedAt: "2026-09-11T13:00:00Z", cancelledAt: "2026-09-11T13:00:00Z" }));
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: { providerActivity: "DELIVERED", status: "UNFULFILLED", decision: { kind: "HELD" } } } });
+    const [intake] = await sql`SELECT * FROM bloombox.shopify_fulfillment_intakes WHERE purchase_intent_id = ${fixture.intent.id}`;
+    expect(intake.provider_observation).toMatchObject({ activity: "DELIVERED", witness: { id: "gid://shopify/Fulfillment/8801", deliveredAt: "2026-09-11T11:00:00Z" } });
+    expect(await sql`SELECT id FROM bloombox.shipments WHERE fulfillment_id = ${intake.fulfillment_id}`).toHaveLength(0);
+    expect(await sql`SELECT id FROM bloombox.fulfillment_status_transitions WHERE fulfillment_id = ${intake.fulfillment_id}`).toHaveLength(1);
+    await expect(sql`UPDATE bloombox.shopify_fulfillment_intakes SET version = version + 1,
+      provider_observation = '{"activity":"NONE","witness":null}'::jsonb WHERE fulfillment_id = ${intake.fulfillment_id}`).rejects.toMatchObject({ code: "23514" });
+    await expect(sql`UPDATE bloombox.shopify_fulfillment_intakes SET version = version + 1,
+      provider_observation = jsonb_set(provider_observation, '{witness,id}', '"gid://shopify/Fulfillment/8802"'::jsonb)
+      WHERE fulfillment_id = ${intake.fulfillment_id}`).rejects.toMatchObject({ code: "23514" });
+  });
+  it("preserves completed payment on provider failure and holds cancellation when the reader is missing", async () => {
+    const fixture = await acceptanceWorkflow("gid://shopify/Order/8082", true, true);
+    fixture.fulfillmentResponse.mockRejectedValue(new Error("private-provider-details"));
+    await expect(fixture.useCase.execute(fixture.event)).rejects.toEqual(new ShopifyFulfillmentIntakeError());
+    expect((await sql`SELECT status FROM bloombox.purchase_intents WHERE id = ${fixture.intent.id}`)[0].status).toBe("CONVERTED");
+    expect(await sql`SELECT fulfillment_id FROM bloombox.shopify_fulfillment_intakes WHERE purchase_intent_id = ${fixture.intent.id}`).toHaveLength(0);
+    fixture.fulfillmentResponse.mockResolvedValue(fixture.fulfillmentSource);
+    await fixture.useCase.execute(fixture.event);
+    const accepted = await fixture.completion.orders.find(scope, fixture.event.externalObjectId);
+    if (!accepted) throw new Error("Expected accepted order");
+    const input = { ...accepted, shop: scope, externalOrderId: fixture.event.externalObjectId };
+    // A past empty read must not become a permanent permission to cancel.
+    expect(await new PostgresShopifyFulfillmentIntake(sql, true).reconcile(input))
+      .toMatchObject({ status: "UNFULFILLED", providerActivity: "UNVERIFIED", decision: { kind: "HELD", reason: "PROVIDER_FULFILLMENT_UNVERIFIED" } });
+    fixture.fulfillmentResponse.mockResolvedValue({ ...fixture.fulfillmentSource, test: false });
+    await expect(fixture.intake.reconcile(input)).rejects.toEqual(new ShopifyFulfillmentIntakeError());
+    fixture.fulfillmentResponse.mockResolvedValue(fulfillmentNode(fixture));
+    expect(await fixture.intake.reconcile(input)).toMatchObject({ providerActivity: "IN_TRANSIT", decision: { kind: "HELD" } });
+  });
+  it("records a late shipment after local cancellation as a conflict without reopening local state", async () => {
+    const fixture = await acceptanceWorkflow("gid://shopify/Order/8083", true, true);
+    await fixture.useCase.execute(fixture.event);
+    fixture.fetcher.mockImplementation(async (_url, init) => fixture.respond(JSON.parse(String(init?.body)).query.includes("BloomBoxFulfillmentObservation")
+      ? await fixture.fulfillmentResponse() : { ...fixture.source, updatedAt: "2026-09-11T13:00:00Z", cancelledAt: "2026-09-11T13:00:00Z" }));
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: { status: "CANCELLED", decision: { kind: "CANCELLED" } } } });
+    fixture.fulfillmentResponse.mockResolvedValue(fulfillmentNode(fixture, true));
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: { status: "CANCELLED", providerActivity: "DELIVERED",
+      decision: { kind: "HELD", reason: "EXTERNAL_FULFILLMENT_REVIEW_REQUIRED" } } } });
+  });
+  it("rolls back the observation and audit together on an outbox failure then retries once", async () => {
+    const fixture = await acceptanceWorkflow("gid://shopify/Order/8084", true, true);
+    await fixture.useCase.execute(fixture.event);
+    fixture.fulfillmentResponse.mockResolvedValue(fulfillmentNode(fixture, true));
+    const [before] = await sql`SELECT * FROM bloombox.shopify_fulfillment_intakes WHERE purchase_intent_id = ${fixture.intent.id}`;
+    await sql.unsafe(`CREATE FUNCTION bloombox.test_observation_failure() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN IF NEW.event_type = 'fulfillment.shopify_intake.updated' THEN RAISE EXCEPTION 'observation fault'; END IF; RETURN NEW; END; $$;
+      CREATE TRIGGER test_observation_failure BEFORE INSERT ON bloombox.outbox_events FOR EACH ROW EXECUTE FUNCTION bloombox.test_observation_failure();`);
+    try {
+      await expect(fixture.useCase.execute(fixture.event)).rejects.toEqual(new ShopifyFulfillmentIntakeError());
+      expect((await sql`SELECT * FROM bloombox.shopify_fulfillment_intakes WHERE fulfillment_id = ${before.fulfillment_id}`)[0]).toEqual(before);
+      expect(await sql`SELECT id FROM bloombox.audit_logs WHERE resource_id = ${before.fulfillment_id}`).toHaveLength(1);
+    } finally { await sql.unsafe("DROP TRIGGER test_observation_failure ON bloombox.outbox_events; DROP FUNCTION bloombox.test_observation_failure()"); }
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: { outcome: "APPLIED", providerActivity: "DELIVERED" } } });
+    expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: { outcome: "DUPLICATE", providerActivity: "DELIVERED" } } });
+    expect(await sql`SELECT id FROM bloombox.outbox_events WHERE aggregate_id = ${before.fulfillment_id}`).toHaveLength(2);
+  });
   it("records one held fulfillment, updates time-based holds and cancels untouched intake on full refund", async () => {
     const fixture = await acceptanceWorkflow("gid://shopify/Order/8031", true, true);
     const results = await Promise.all(Array.from({ length: 6 }, () => fixture.useCase.execute(fixture.event)));
@@ -288,9 +365,9 @@ describeDatabase("durable Shopify checkout attempts", () => {
     const refunded = { ...fixture.source, updatedAt: "2026-09-11T11:00:00Z", totalRefundedSet: bag(5000), currentTotalPriceSet: bag(0),
       transactions: [...fixture.source.transactions, { id: "gid://shopify/OrderTransaction/803102", kind: "REFUND", status: "SUCCESS", test: true,
         parentTransaction: { id: fixture.source.transactions[0].id }, amountSet: bag(5000) }] };
-    fixture.fetcher.mockImplementation(async () => fixture.respond(refunded));
+    fixture.fetcher.mockImplementation(async (_url, init) => fixture.respond(JSON.parse(String(init?.body)).query.includes("BloomBoxFulfillmentObservation") ? await fixture.fulfillmentResponse() : refunded));
     expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: { status: "CANCELLED", decision: { kind: "CANCELLED", reason: "FULLY_REFUNDED" } } } });
-    fixture.fetcher.mockImplementation(async () => fixture.respond(fixture.source));
+    fixture.fetcher.mockImplementation(async (_url, init) => fixture.respond(JSON.parse(String(init?.body)).query.includes("BloomBoxFulfillmentObservation") ? await fixture.fulfillmentResponse() : fixture.source));
     expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ outcome: "STALE", completion: { fulfillment: { outcome: "DUPLICATE", status: "CANCELLED" } } });
     expect(await sql`SELECT id FROM bloombox.fulfillment_status_transitions WHERE fulfillment_id = ${intake.fulfillment_id}`).toHaveLength(2);
     expect(await sql`SELECT id FROM bloombox.shipments WHERE fulfillment_id = ${intake.fulfillment_id}`).toHaveLength(0);
@@ -304,7 +381,7 @@ describeDatabase("durable Shopify checkout attempts", () => {
     await fixture.useCase.execute(fixture.event);
     const [intake] = await sql`SELECT * FROM bloombox.shopify_fulfillment_intakes WHERE purchase_intent_id = ${fixture.intent.id}`;
     await sql`UPDATE bloombox.fulfillments SET status = ${status}, version = version + 1 WHERE id = ${intake.fulfillment_id}`;
-    fixture.fetcher.mockImplementation(async () => fixture.respond({ ...fixture.source, updatedAt: "2026-09-11T11:00:00Z", cancelledAt: "2026-09-11T11:00:00Z" }));
+    fixture.fetcher.mockImplementation(async (_url, init) => fixture.respond(JSON.parse(String(init?.body)).query.includes("BloomBoxFulfillmentObservation") ? await fixture.fulfillmentResponse() : { ...fixture.source, updatedAt: "2026-09-11T11:00:00Z", cancelledAt: "2026-09-11T11:00:00Z" }));
     expect(await fixture.useCase.execute(fixture.event)).toMatchObject({ completion: { fulfillment: { status,
       decision: { kind: "HELD", reason: ["SHIPPED", "DELIVERED", "RETURNED"].includes(status) ? "POST_SHIPMENT_REVIEW_REQUIRED" : "ACTIVE_FULFILLMENT_REVIEW_REQUIRED" } } } });
     expect((await sql`SELECT status FROM bloombox.fulfillments WHERE id = ${intake.fulfillment_id}`)[0].status).toBe(status);
@@ -327,7 +404,7 @@ describeDatabase("durable Shopify checkout attempts", () => {
     const worker = postgres(safeUrl(), { max: 1, ssl: false });
     try {
       await worker`SET ROLE bloombox_worker`;
-      const intake = new PostgresShopifyFulfillmentIntake(worker, true, { approval: "APPROVED" }, () => acceptanceTime);
+      const intake = new PostgresShopifyFulfillmentIntake(worker, true, { approval: "APPROVED" }, () => acceptanceTime, fixture.reader);
       expect(await intake.reconcile(input)).toMatchObject({ outcome: "APPLIED", decision: { kind: "HELD", reason: "INVENTORY_UNVERIFIED" } });
       expect(await intake.reconcile(input)).toMatchObject({ outcome: "DUPLICATE" });
       for (const override of [{ orderId: randomUUID() }, { attemptId: randomUUID() }, { shop: "other.myshopify.com" }]) {

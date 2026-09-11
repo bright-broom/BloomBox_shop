@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ShopifyFulfillmentUnavailableError, type ShopifyFulfillmentReader, type ShopifyFulfillmentSnapshot } from "@/modules/fulfillment/public";
 import { DELIVERY_ADDRESS_TEXT_MAX_LENGTH, DELIVERY_POSTAL_INPUT_MAX_LENGTH, JAPAN_PREFECTURES, assessDeliveryDestination, isApprovedDeliveryCoverage, DELIVERY_COVERAGE_POLICY, type DeliveryCoveragePolicy } from "@/modules/fulfillment/public";
 import { ShopifyDeliveryDestinationUnavailableError, type ShopifyDeliveryDestinationReader, type ShopifyDestinationReference, type ShopifyDestinationAssessment } from "../../application/shopify-delivery-destination-reader";
 import type { OrderPricingFacts, ShopifyOrderAcceptance } from "@/modules/order/public";
@@ -128,6 +129,23 @@ const DESTINATION_QUERY = `query BloomBoxDeliveryDestination($id: ID!) {
     shippingAddress { countryCodeV2 provinceCode zip name city address1 }
   } }
 }`;
+const FULFILLMENT_QUERY = `query BloomBoxFulfillmentObservation($id: ID!) {
+  shop { myshopifyDomain }
+  node(id: $id) { __typename ... on Order {
+    id test fulfillmentsCount { count precision }
+    fulfillments(first: ${MAX_ITEMS + 1}) { id status updatedAt inTransitAt deliveredAt order { id } }
+  } }
+}`;
+const fulfillmentOrderSchema = z.object({
+  __typename: z.literal("Order"), id: gid("Order"), test: z.boolean(),
+  fulfillmentsCount: z.object({ count: z.number().int().nonnegative().max(MAX_ITEMS), precision: z.literal("EXACT") }),
+  fulfillments: z.array(z.object({ id: gid("Fulfillment"), order: z.object({ id: gid("Order") }),
+    status: z.enum(["CANCELLED", "ERROR", "FAILURE", "SUCCESS", "OPEN", "PENDING"]),
+    updatedAt: date, inTransitAt: date.nullable(), deliveredAt: date.nullable(),
+  })).max(MAX_ITEMS),
+}).refine((order) => order.fulfillmentsCount.count === order.fulfillments.length
+  && new Set(order.fulfillments.map((item) => item.id)).size === order.fulfillments.length
+  && order.fulfillments.every((item) => item.order.id === order.id));
 const addressText = z.string().max(DELIVERY_ADDRESS_TEXT_MAX_LENGTH).nullable();
 const destinationSchema = z.object({
   __typename: z.literal("Order"), id: gid("Order"), updatedAt: date, test: z.boolean(), cancelledAt: date.nullable(), requiresShipping: z.boolean(),
@@ -150,9 +168,24 @@ type AcceptanceDestination = Readonly<{ status: "READY"; address: ShopifyOrderAc
   | Extract<ShopifyDestinationAssessment, { status: "HELD" }>;
 
 /** Disconnected, read-only provider boundary. Returned facts do not prove a local purchase-intent association. */
-export class ShopifyAdminOrderReader implements ShopifyOrderReader, ShopifyDeliveryDestinationReader {
+export class ShopifyAdminOrderReader implements ShopifyOrderReader, ShopifyDeliveryDestinationReader, ShopifyFulfillmentReader {
   constructor(private readonly config: ShopifyAdminConfig, private readonly fetchImplementation: typeof fetch = fetch,
     private readonly coverage: DeliveryCoveragePolicy = DELIVERY_COVERAGE_POLICY) {}
+
+  /** No address, tracking number or tracking URL is requested. Any fulfillment is activity, even a cancelled one. */
+  async readFulfillments(reference: Readonly<{ shop: string; orderId: string; test: boolean }>): Promise<ShopifyFulfillmentSnapshot> {
+    try {
+      if (reference.shop !== this.config.storeDomain || !gid("Order").safeParse(reference.orderId).success
+        || typeof reference.test !== "boolean") throw new ShopifyFulfillmentUnavailableError();
+      const envelope = envelopeSchema.parse(await this.request(reference.orderId, FULFILLMENT_QUERY));
+      const order = fulfillmentOrderSchema.parse(envelope.data.node);
+      if (envelope.data.shop.myshopifyDomain !== reference.shop || order.id !== reference.orderId || order.test !== reference.test) {
+        throw new ShopifyFulfillmentUnavailableError();
+      }
+      return { shop: reference.shop, orderId: order.id, test: order.test,
+        fulfillments: order.fulfillments.map(({ id, status, updatedAt, inTransitAt, deliveredAt }) => ({ id, status, updatedAt, inTransitAt, deliveredAt })) };
+    } catch { throw new ShopifyFulfillmentUnavailableError(); }
+  }
 
   async read(reference: ShopifyReference): Promise<ShopifyReferenceSnapshot> {
     if (reference.shop !== this.config.storeDomain

@@ -3,7 +3,7 @@ import { assessFulfillmentIntake, type FulfillmentIntakeFacts } from "./shopify-
 import { FULFILLMENT_STATUSES } from "./fulfillment-status";
 
 const now = new Date("2026-09-11T12:00:00Z");
-const facts: FulfillmentIntakeFacts = { status: null, orderStatus: "CONFIRMED", orderCancelled: false,
+const facts: FulfillmentIntakeFacts = { status: null, providerActivity: "NONE", orderStatus: "CONFIRMED", orderCancelled: false,
   total: 5000, captured: 5000, refunded: 0, pendingTransactions: false, addressAvailable: true, deliveryDate: "2026-09-14" };
 const approved = { approval: "APPROVED" } as const;
 describe("Shopify fulfillment intake decisions", () => {
