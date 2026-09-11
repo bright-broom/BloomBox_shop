@@ -106,6 +106,7 @@ Decision records:
 - [ADR 0002: Commerce persistence and payment-ready boundaries](adr/0002-commerce-persistence-and-payment-boundaries.md)
 - [ADR 0003: Shopify Checkout with Shopify Payments and KOMOJU](adr/0003-shopify-payments-and-komoju.md) (implementation selection; live activation remains blocked)
 - [ADR 0004: Referral rewards preview](adr/0004-referral-rewards-preview.md) — proposed; production activation excluded
+- [ADR 0005: Fulfillment operator approval](adr/0005-fulfillment-operator-approval.md) — proposed for production; disconnected internal capability
 
 ## Architecture decision test
 

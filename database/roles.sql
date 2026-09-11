@@ -14,6 +14,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_readonly') THEN
     CREATE ROLE bloombox_readonly NOLOGIN;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_fulfillment_approver') THEN
+    CREATE ROLE bloombox_fulfillment_approver NOLOGIN;
+  END IF;
 END
 $$;
 
@@ -103,5 +106,19 @@ GRANT SELECT, INSERT ON bloombox.shopify_order_acceptances TO bloombox_worker;
 GRANT SELECT, INSERT, UPDATE ON bloombox.shopify_payment_projections TO bloombox_worker;
 GRANT SELECT, INSERT, UPDATE ON bloombox.shopify_fulfillment_intakes TO bloombox_worker;
 GRANT UPDATE (status, version, updated_at) ON bloombox.fulfillments TO bloombox_worker;
+
+GRANT USAGE ON SCHEMA bloombox TO bloombox_fulfillment_approver;
+GRANT SELECT ON bloombox.fulfillment_operator_permissions, bloombox.fulfillment_operator_approvals,
+  bloombox.shopify_fulfillment_intakes, bloombox.fulfillments, bloombox.shopify_payment_evidence,
+  bloombox.shopify_payment_projections, bloombox.payments, bloombox.orders, bloombox.order_items,
+  bloombox.order_gift_snapshots TO bloombox_fulfillment_approver;
+GRANT INSERT ON bloombox.fulfillment_operator_approvals, bloombox.audit_logs, bloombox.outbox_events
+  TO bloombox_fulfillment_approver;
+GRANT UPDATE (id) ON bloombox.fulfillment_operator_permissions, bloombox.fulfillments,
+  bloombox.orders, bloombox.payments TO bloombox_fulfillment_approver;
+GRANT UPDATE (order_id) ON bloombox.order_gift_snapshots TO bloombox_fulfillment_approver;
+GRANT UPDATE (purchase_intent_id) ON bloombox.shopify_payment_evidence TO bloombox_fulfillment_approver;
+GRANT UPDATE (payment_id) ON bloombox.shopify_payment_projections TO bloombox_fulfillment_approver;
+GRANT UPDATE (fulfillment_id) ON bloombox.shopify_fulfillment_intakes TO bloombox_fulfillment_approver;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA bloombox TO bloombox_readonly;

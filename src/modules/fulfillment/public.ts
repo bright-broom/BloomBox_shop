@@ -49,3 +49,5 @@ export { type ShopifyFulfillmentQuantities, type FulfillmentQuantityAssessment }
 export { type ShopifyFulfillmentStockSnapshot, type FulfillmentStockAssessment } from "./domain/shopify-fulfillment-stock";
 export { type ShopifyFulfillmentStockReader, ShopifyFulfillmentStockUnavailableError } from "./application/read-shopify-fulfillment-stock";
 export { parseShopifyFulfillmentStockSnapshot } from "./infrastructure/shopify-fulfillment-stock-schema";
+export { FulfillmentApprovalError, type FulfillmentOperatorIdentity, type FulfillmentApprovalRequest,
+  type FulfillmentApprovalReceipt, type ShopifyFulfillmentApprover } from "./application/approve-shopify-fulfillment";
