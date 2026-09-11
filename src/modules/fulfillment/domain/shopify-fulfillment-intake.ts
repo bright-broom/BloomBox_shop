@@ -2,20 +2,22 @@ import { assessDeliveryDate } from "./delivery-date";
 import type { FulfillmentStatus } from "./fulfillment-status";
 import type { ShopifyFulfillmentActivity } from "./shopify-fulfillment-observation";
 
+import type { FulfillmentQuantityAssessment } from "./shopify-fulfillment-quantities";
+import type { FulfillmentStockAssessment } from "./shopify-fulfillment-stock";
 export type FulfillmentIntakePolicy = Readonly<{ approval: "PENDING" | "APPROVED" }>;
 export const FULFILLMENT_INTAKE_POLICY: FulfillmentIntakePolicy = { approval: "PENDING" };
 export type FulfillmentIntakeDecision = Readonly<{ kind: "CANCELLED" | "HELD"; reason:
   "ORDER_CANCELLED" | "FULLY_REFUNDED" | "ALREADY_CANCELLED" | "POST_SHIPMENT_REVIEW_REQUIRED"
   | "ACTIVE_FULFILLMENT_REVIEW_REQUIRED" | "ORDER_NOT_CONFIRMED" | "PARTIAL_REFUND"
   | "PAYMENT_UNSETTLED" | "PAYMENT_PENDING" | "ADDRESS_UNAVAILABLE" | "DELIVERY_UNAVAILABLE"
-  | "POLICY_NOT_APPROVED" | "INVENTORY_UNVERIFIED" | "PROVIDER_FULFILLMENT_UNVERIFIED" | "EXTERNAL_FULFILLMENT_REVIEW_REQUIRED" }>;
+  | "POLICY_NOT_APPROVED" | "INVENTORY_UNVERIFIED" | "INVENTORY_REVIEW_REQUIRED" | "DISPATCH_APPROVAL_REQUIRED" | "FULFILLMENT_QUANTITIES_UNVERIFIED" | "PROVIDER_FULFILLMENT_UNVERIFIED" | "EXTERNAL_FULFILLMENT_REVIEW_REQUIRED" }>;
 export type FulfillmentIntakeFacts = Readonly<{
   status: FulfillmentStatus | null; orderStatus: "PENDING_CONFIRMATION" | "CONFIRMED" | "CANCELLED" | "CLOSED";
   orderCancelled: boolean; total: number; captured: number; refunded: number; pendingTransactions: boolean;
-  addressAvailable: boolean; deliveryDate: string; providerActivity: ShopifyFulfillmentActivity;
+  addressAvailable: boolean; deliveryDate: string; providerActivity: ShopifyFulfillmentActivity; stockAssessment?: FulfillmentStockAssessment; quantityAssessment?: FulfillmentQuantityAssessment;
 }>;
 
-/** Intake never authorizes scheduling or shipping; verified inventory/dispatch integration is still absent. */
+/** Intake never authorizes scheduling or shipping; dispatch approval remains separate. */
 export function assessFulfillmentIntake(facts: FulfillmentIntakeFacts, policy: FulfillmentIntakePolicy, now: Date): FulfillmentIntakeDecision {
   if (["RECORDED", "IN_TRANSIT", "DELIVERED"].includes(facts.providerActivity)) return { kind: "HELD", reason: "EXTERNAL_FULFILLMENT_REVIEW_REQUIRED" };
   const cancellation = facts.orderCancelled || facts.orderStatus === "CANCELLED" ? "ORDER_CANCELLED"
@@ -32,5 +34,8 @@ export function assessFulfillmentIntake(facts: FulfillmentIntakeFacts, policy: F
   if (!facts.addressAvailable) return { kind: "HELD", reason: "ADDRESS_UNAVAILABLE" };
   if (assessDeliveryDate(facts.deliveryDate, now).status !== "WITHIN_WINDOW") return { kind: "HELD", reason: "DELIVERY_UNAVAILABLE" };
   if (policy.approval !== "APPROVED") return { kind: "HELD", reason: "POLICY_NOT_APPROVED" };
-  return { kind: "HELD", reason: "INVENTORY_UNVERIFIED" };
+  if (!facts.stockAssessment || facts.stockAssessment.status === "UNVERIFIED") return { kind: "HELD", reason: "INVENTORY_UNVERIFIED" };
+  if (facts.stockAssessment.status !== "COVERED") return { kind: "HELD", reason: "INVENTORY_REVIEW_REQUIRED" };
+  if (facts.quantityAssessment?.status !== "NONE" || facts.quantityAssessment.reason !== "MATCHED") return { kind: "HELD", reason: "FULFILLMENT_QUANTITIES_UNVERIFIED" };
+  return { kind: "HELD", reason: "DISPATCH_APPROVAL_REQUIRED" };
 }

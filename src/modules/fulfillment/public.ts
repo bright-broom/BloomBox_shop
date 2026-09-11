@@ -46,3 +46,6 @@ export {
 } from "./domain/delivery-destination";
 
 export { type ShopifyFulfillmentQuantities, type FulfillmentQuantityAssessment } from "./domain/shopify-fulfillment-quantities";
+export { type ShopifyFulfillmentStockSnapshot, type FulfillmentStockAssessment } from "./domain/shopify-fulfillment-stock";
+export { type ShopifyFulfillmentStockReader, ShopifyFulfillmentStockUnavailableError } from "./application/read-shopify-fulfillment-stock";
+export { parseShopifyFulfillmentStockSnapshot } from "./infrastructure/shopify-fulfillment-stock-schema";

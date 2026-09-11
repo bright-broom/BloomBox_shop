@@ -2,10 +2,11 @@ import type { FulfillmentStatus } from "../domain/fulfillment-status";
 import type { FulfillmentIntakeDecision } from "../domain/shopify-fulfillment-intake";
 import type { ShopifyFulfillmentActivity } from "../domain/shopify-fulfillment-observation";
 import type { FulfillmentQuantityAssessment } from "../domain/shopify-fulfillment-quantities";
+import type { FulfillmentStockAssessment } from "../domain/shopify-fulfillment-stock";
 export type ShopifyFulfillmentReference = Readonly<{ shop: string; externalOrderId: string; orderId: string; purchaseIntentId: string; attemptId: string }>;
 export type ShopifyFulfillmentIntakeResult = Readonly<{
   outcome: "APPLIED" | "DUPLICATE"; fulfillmentId: string; status: FulfillmentStatus; decision: FulfillmentIntakeDecision;
-  providerActivity: ShopifyFulfillmentActivity; quantityAssessment: FulfillmentQuantityAssessment;
+  providerActivity: ShopifyFulfillmentActivity; quantityAssessment: FulfillmentQuantityAssessment; stockAssessment: FulfillmentStockAssessment;
 }>;
 export interface ShopifyFulfillmentIntake {
   reconcile(input: ShopifyFulfillmentReference): Promise<ShopifyFulfillmentIntakeResult>;
