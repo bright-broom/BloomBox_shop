@@ -29,7 +29,7 @@
 | P0-10 | 決済事業者のテスト環境設定 | 設定/証跡待ち。stripe-test Environmentなし | Stripe採用時は分離キー、送料、税、規約URL、署名Secret、Webhookイベント/API版を設定しReadiness workflow成功。Shopify採用時は対応する証跡に置換 |
 | P0-11 | 本番DB・権限・鍵の運用 | 外部環境未確認。Migration/Role/暗号化は実装済み | Application/Worker/Migration資格情報の分離、TLS、接続数、鍵保管・ローテーション、失効手順を本番相当環境で確認 |
 | P0-12 | デプロイとWorkerの設定 | 一部設定不足。確認したGitHub Secret一覧は空 | Deploy Hook、Migration URL、Worker Secret等を適切なスコープに設定。対象SHAの配備・health一致・Worker実行を確認。Previewへ本番資格情報を渡さない |
-| P0-13 | 新規決済停止と既存取引処理の分離 | 実装と手順の整合が必要。STRIPE.mdは停止後もWebhook/Worker継続を要求 | 新規購入だけを止め、停止前の支払済み取引・返金・照合が継続する緊急停止を実装・テスト。未検証の切替手順を本番運用に使わない |
+| P0-13 | 新規決済停止と既存取引処理の分離 | 受付専用フラグ、Applicationの拒否、顧客向けエラー、停止/再開/実行中Sessionの回帰テストを実装。Provider設定を維持する手順へ更新 | 残作業は本番相当環境での設定反映・遅延イベントの決済確定・再開演習。分散環境へ瞬時に反映する制御ではなく、発行済みSessionを取り消すものでもない |
 | P0-14 | 出荷処理・配送追跡更新 | 一部実装。状態機械/DB/表示はあるが出荷Command/連携なし | 権限付き準備・発送・配達更新、配送番号登録、顧客画面への反映。重複指示で二重発送しない。初期版は手動登録でも可 |
 | P0-15 | 注文・発送・返金通知 | Provider通知の証跡待ち。独自通知consumerなし | Providerに委譲する範囲と独自通知の必要性を決定。正しい宛先に一度だけ通知し、購入者/受取人を分離。独自配信を選ぶ場合だけOutbox consumer、retry、再送を実装 |
 | P0-16 | 法務・配送返品・問い合わせ情報 | 未承認。content/storefront.json、production gate | 実在する販売者情報・窓口・支払/引渡/返品条件等を担当者が確定し、案内ページとCheckoutを承認。単にapprovedへ変更しない |

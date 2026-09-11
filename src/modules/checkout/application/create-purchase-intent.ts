@@ -2,6 +2,7 @@ import { productId, type ProductRepository } from "@/modules/catalog/public";
 import { assertAvailableDeliveryDate } from "@/modules/fulfillment/public";
 import { multiplyMoney } from "@/shared/domain/money";
 import { BUSINESS_TIME_ZONE } from "@/shared/domain/time";
+import { CheckoutPausedError } from "./checkout-paused-error";
 import {
   catalogProductReference,
   commerceProductReference,
@@ -37,9 +38,11 @@ export class CreatePurchaseIntent {
     private readonly products: ProductRepository,
     private readonly intents: PurchaseIntentRepository,
     private readonly now: () => Date = () => new Date(),
+    private readonly acceptsNewCheckout: () => boolean = () => true,
   ) {}
 
   async execute(input: CreatePurchaseIntentInput): Promise<PurchaseIntent> {
+    if (!this.acceptsNewCheckout()) throw new CheckoutPausedError();
     const id = purchaseIntentId(input.requestId);
     const normalizedRecipientName = recipientName(input.recipientName);
     const normalizedGiftMessage = giftMessage(input.giftMessage);

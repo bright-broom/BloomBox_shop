@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { CheckoutPausedError } from "./checkout-paused-error";
 import { InMemoryProductRepository } from "@/modules/catalog/infrastructure/in-memory-product-repository";
 import { DeliveryDateUnavailableError } from "@/modules/fulfillment/public";
 import { InMemoryPurchaseIntentRepository } from "../infrastructure/in-memory-purchase-intent-repository";
@@ -10,6 +11,26 @@ import { CreatePurchaseIntent } from "./create-purchase-intent";
 import { PurchaseIntentIdempotencyConflictError } from "./create-purchase-intent";
 
 describe("CreatePurchaseIntent", () => {
+  it("rejects repeated submissions without reading or writing, and resumes with the same request", async () => {
+    const products = new InMemoryProductRepository();
+    const intents = new InMemoryPurchaseIntentRepository();
+    const find = vi.spyOn(intents, "findById");
+    const save = vi.spyOn(intents, "save");
+    let enabled = false;
+    const useCase = new CreatePurchaseIntent(
+      products, intents, () => new Date("2026-08-19T00:00:00.000Z"), () => enabled,
+    );
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await expect(useCase.execute(validInput())).rejects.toBeInstanceOf(CheckoutPausedError);
+    }
+    expect(find).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    enabled = true;
+    const intent = await useCase.execute(validInput());
+    await expect(useCase.execute(validInput())).resolves.toBe(intent);
+    expect(save).toHaveBeenCalledOnce();
+  });
+
   it("uses the server-side catalog price snapshot without creating an order", async () => {
     const products = new InMemoryProductRepository();
     const intents = new InMemoryPurchaseIntentRepository();
