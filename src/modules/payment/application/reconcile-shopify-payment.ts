@@ -1,5 +1,5 @@
 import { assessOrderPricing, type OrderPricingAssessment, type ShopifyAcceptedOrderQuery } from "@/modules/order/public";
-import { assessDeliveryDate, type DeliveryDateAssessment } from "@/modules/fulfillment/public";
+import { assessDeliveryDate, type DeliveryDateAssessment, type ShopifyFulfillmentIntake, type ShopifyFulfillmentIntakeResult } from "@/modules/fulfillment/public";
 import type { ShopifyOrderLink, ShopifyOrderLinker, ShopifyDeliveryPlanQuery, ShopifyPurchaseConverter, ShopifyPurchaseConversion } from "@/modules/checkout/public";
 import { evaluateSettlement, SettlementEvidenceConflictError, type SettlementSnapshot, type SettlementStatus } from "../domain/settlement-evidence";
 import type { ShopifyDeliveryDestinationReader, ShopifyDestinationAssessment } from "./shopify-delivery-destination-reader";
@@ -9,9 +9,11 @@ import type { ShopifyOrderAcceptanceGateway, ShopifyOrderAcceptanceOutcome } fro
 import type { ShopifyOrderPaymentProjector, ShopifyOrderPaymentResult } from "./project-shopify-order-payment";
 export type ShopifyOrderCompletionDependencies = Readonly<{
   orders: ShopifyAcceptedOrderQuery; payments: ShopifyOrderPaymentProjector; purchases: ShopifyPurchaseConverter;
+  fulfillment?: ShopifyFulfillmentIntake;
 }>;
 export type ShopifyOrderCompletionResult = Readonly<{ outcome: "HELD"; reason: "NOT_CONFIGURED" | "ORDER_NOT_ACCEPTED" }>
-  | Readonly<{ outcome: "COMPLETED"; payment: ShopifyOrderPaymentResult; purchase: { outcome: "CONVERTED" | "DUPLICATE" } }>;
+  | Readonly<{ outcome: "COMPLETED"; payment: ShopifyOrderPaymentResult; purchase: { outcome: "CONVERTED" | "DUPLICATE" };
+    fulfillment: ShopifyFulfillmentIntakeResult | Readonly<{ outcome: "HELD"; reason: "NOT_CONFIGURED" }> }>;
 export type ShopifyPaymentEvidenceResult = Readonly<{ outcome: "APPLIED" | "DUPLICATE" | "STALE"; status: SettlementStatus; version: number }>;
 export type ShopifyDeliveryTimingAssessment = DeliveryDateAssessment | Readonly<{ status: "HELD"; reason:
   "STALE_OBSERVATION" | "ORDER_CANCELLED" | "PAYMENT_NOT_SETTLED" | "PAYMENT_PENDING" | "PRICING_UNRESOLVED"
@@ -92,7 +94,9 @@ export class ReconcileShopifyPayment {
     // Each owner commits independently. A failure is resumable from the immutable accepted-order lookup.
     const payment = await this.completion.payments.project(input);
     const purchase = await this.completion.purchases.convert(input);
-    return { outcome: "COMPLETED", payment, purchase };
+    const fulfillment = this.completion.fulfillment ? await this.completion.fulfillment.reconcile(input)
+      : { outcome: "HELD" as const, reason: "NOT_CONFIGURED" as const };
+    return { outcome: "COMPLETED", payment, purchase, fulfillment };
   }
 
   private async assessDeliveryTiming(link: ShopifyOrderLink, shop: string, source: SettlementSnapshot,
