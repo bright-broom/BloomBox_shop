@@ -10,8 +10,64 @@ import { giftMessage, recipientName } from "../domain/purchase-intent-policy";
 import { InMemoryPurchaseIntentRepository } from "../infrastructure/in-memory-purchase-intent-repository";
 import type { CheckoutSessionProvider } from "./checkout-session-provider";
 import { CheckoutProviderMismatchError, StartCheckout } from "./start-checkout";
+import { CheckoutPausedError } from "./checkout-paused-error";
 
 describe("StartCheckout", () => {
+  it("blocks provider calls while paused and resumes idempotently", async () => {
+    const repository = new InMemoryPurchaseIntentRepository();
+    const intent = createIntent();
+    await repository.save(intent);
+    const provider = createProvider(intent.id);
+    let enabled = false;
+    const useCase = new StartCheckout(
+      repository, provider, () => new Date("2026-08-21T00:05:00.000Z"), () => enabled,
+    );
+    await expect(useCase.execute(intent.id)).rejects.toBeInstanceOf(CheckoutPausedError);
+    expect(provider.create).not.toHaveBeenCalled();
+    expect(provider.retrieve).not.toHaveBeenCalled();
+    enabled = true;
+    await useCase.execute(intent.id);
+    enabled = false;
+    await expect(useCase.execute(intent.id)).rejects.toBeInstanceOf(CheckoutPausedError);
+    expect(provider.retrieve).not.toHaveBeenCalled();
+    enabled = true;
+    await useCase.execute(intent.id);
+    expect(provider.create).toHaveBeenCalledOnce();
+    expect(provider.retrieve).toHaveBeenCalledOnce();
+  });
+
+  it("rechecks intake after repository lookup before creating an external session", async () => {
+    const repository = new InMemoryPurchaseIntentRepository();
+    const intent = createIntent();
+    await repository.save(intent);
+    const provider = createProvider(intent.id);
+    const enabled = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
+    const useCase = new StartCheckout(
+      repository, provider, () => new Date("2026-08-21T00:05:00.000Z"), enabled,
+    );
+    await expect(useCase.execute(intent.id)).rejects.toBeInstanceOf(CheckoutPausedError);
+    expect(provider.create).not.toHaveBeenCalled();
+    expect((await repository.findById(intent.id))?.status).toBe("READY_FOR_CHECKOUT");
+  });
+
+  it("still persists an external session accepted before intake was paused", async () => {
+    const repository = new InMemoryPurchaseIntentRepository();
+    const intent = createIntent();
+    await repository.save(intent);
+    const provider = createProvider(intent.id);
+    let enabled = true;
+    const session = await provider.retrieve("cs_test_123");
+    provider.create.mockImplementation(async () => {
+      enabled = false;
+      return session;
+    });
+    const useCase = new StartCheckout(
+      repository, provider, () => new Date("2026-08-21T00:05:00.000Z"), () => enabled,
+    );
+    await expect(useCase.execute(intent.id)).resolves.toMatchObject({ id: "cs_test_123" });
+    expect((await repository.findById(intent.id))?.externalCheckoutId).toBe("cs_test_123");
+  });
+
   it("creates one provider checkout and persists its reference", async () => {
     const repository = new InMemoryPurchaseIntentRepository();
     const intent = createIntent();

@@ -18,7 +18,7 @@ import {
 } from "@/modules/checkout/infrastructure/stripe/stripe-checkout-session-provider";
 import type { PurchaseIntentRepository } from "@/modules/checkout/domain/purchase-intent-repository";
 import { loadDataProtectionConfig } from "./config/data-protection-config";
-import { loadCheckoutProviderMode } from "./config/checkout-provider-config";
+import { loadCheckoutIntakeEnabled, loadCheckoutProviderMode } from "./config/checkout-provider-config";
 import { loadRuntimeMode } from "./config/runtime-config";
 import { loadStripeConfig } from "./config/stripe-config";
 import { loadShopifyStorefrontConfig } from "./config/shopify-storefront-config";
@@ -41,7 +41,12 @@ import { ZipcloudPostalAddressRepository } from "@/modules/fulfillment/infrastru
 
 const productRepository = createProductRepository();
 const purchaseIntentRepository = createPurchaseIntentRepository();
-const createPurchaseIntent = new CreatePurchaseIntent(productRepository, purchaseIntentRepository);
+const createPurchaseIntent = new CreatePurchaseIntent(
+  productRepository,
+  purchaseIntentRepository,
+  undefined,
+  loadCheckoutIntakeEnabled,
+);
 const startCheckout = createStartCheckout(purchaseIntentRepository);
 
 export const application = {
@@ -107,7 +112,7 @@ function createStartCheckout(intents: PurchaseIntentRepository): StartCheckout |
     new StripeSdkCheckoutApi(config),
     config.apiVersion,
   );
-  return new StartCheckout(intents, provider);
+  return new StartCheckout(intents, provider, undefined, loadCheckoutIntakeEnabled);
 }
 
 let stripeWebhookReceiver: ReceiveProviderWebhook | undefined;

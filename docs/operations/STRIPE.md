@@ -48,6 +48,7 @@ Application runtime:
 ```text
 BLOOMBOX_RUNTIME_MODE=production
 BLOOMBOX_CHECKOUT_PROVIDER=stripe
+BLOOMBOX_CHECKOUT_INTAKE_ENABLED=true
 BLOOMBOX_PUBLIC_ORIGIN=https://<production-origin>
 SHOPIFY_STORE_DOMAIN=<shop>.myshopify.com
 SHOPIFY_STOREFRONT_ACCESS_TOKEN=<storefront-access-token>
@@ -137,8 +138,11 @@ Use Stripe test payment methods only in a Stripe Sandbox/Test Mode. Never test w
 
 ## Emergency controls
 
-- Stop new Stripe Checkout creation by setting `BLOOMBOX_CHECKOUT_PROVIDER=preview` and deploying the known-good revision. Never change the provider of an in-flight PurchaseIntent.
+- Stop new purchase intake by setting `BLOOMBOX_CHECKOUT_INTAKE_ENABLED=false` and deploying this setting to every application instance. Keep `BLOOMBOX_CHECKOUT_PROVIDER=stripe`, the production runtime, provider credentials, and reconciliation schedule unchanged. Never change the provider of an in-flight PurchaseIntent.
+- The intake flag defaults to `true` for backward compatibility and accepts only the strings `true` or `false`. Invalid values reject purchase intake but do not disable settlement services. Purchase-intent creation and Checkout initiation check the flag on each invocation; Checkout checks again before creating an external Session. Paused submissions return a customer-facing message without a draft or Checkout URL, preserving the cart for retry.
+- This is a deployment-scoped control, not a distributed instantaneous cancellation. Requests already sent to Stripe and previously issued Checkout URLs may still complete. Persist their returned Session references and continue receiving verified events. If existing Sessions must be expired, handle that separately through the provider under an approved incident procedure; do not abandon accepted payment facts.
 - Keep the Webhook endpoint and reconciliation worker available while checkout creation is disabled so accepted payments continue to settle into Order and support records.
+- Before reopening, verify a paused submission creates no new intent or Session, verify delayed/duplicate events still settle, and confirm reconciliation is healthy. Set `BLOOMBOX_CHECKOUT_INTAKE_ENABLED=true` on all instances to resume. A customer may retry the same request; existing idempotency rules remain in force. Do not roll back to a revision without this control while relying on the flag to stop intake.
 - For uncertain payment state, query Stripe by the stored Session or PaymentIntent ID and reconcile; never create a replacement charge speculatively.
 - Rotate an exposed Stripe or worker secret immediately, update the protected environment, and replay only verified provider events.
 - Roll application code back independently of the database. Correct applied schemas with a new forward migration and never delete accepted commerce facts.

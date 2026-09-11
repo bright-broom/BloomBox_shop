@@ -1,6 +1,7 @@
 import type { CheckoutSession, CheckoutSessionProvider } from "./checkout-session-provider";
 import { purchaseIntentId, type PurchaseIntentId } from "../domain/purchase-intent";
 import type { PurchaseIntentRepository } from "../domain/purchase-intent-repository";
+import { CheckoutPausedError } from "./checkout-paused-error";
 
 export const MINIMUM_CHECKOUT_WINDOW_MINUTES = 30;
 
@@ -37,9 +38,11 @@ export class StartCheckout {
     private readonly intents: PurchaseIntentRepository,
     private readonly provider: CheckoutSessionProvider,
     private readonly now: () => Date = () => new Date(),
+    private readonly acceptsNewCheckout: () => boolean = () => true,
   ) {}
 
   async execute(rawId: string): Promise<CheckoutSession> {
+    if (!this.acceptsNewCheckout()) throw new CheckoutPausedError();
     const id = purchaseIntentId(rawId);
     const intent = await this.intents.findById(id);
     if (!intent) throw new PurchaseIntentNotFoundError();
@@ -59,6 +62,7 @@ export class StartCheckout {
     const minimumExpiry = occurredAt.getTime() + MINIMUM_CHECKOUT_WINDOW_MINUTES * 60 * 1000;
     if (intent.expiresAt.getTime() < minimumExpiry) throw new CheckoutWindowExpiredError();
 
+    if (!this.acceptsNewCheckout()) throw new CheckoutPausedError();
     const checkoutSession = await this.provider.create(
       intent,
       `purchase-intent:${intent.id}:checkout:v1`,

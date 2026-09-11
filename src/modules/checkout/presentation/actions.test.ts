@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { money } from "@/shared/domain/money";
+import { CheckoutPausedError } from "../application/checkout-paused-error";
 
 const { execute } = vi.hoisted(() => ({ execute: vi.fn() }));
 
@@ -60,6 +61,12 @@ describe("createPurchaseIntentAction", () => {
 
     expect(state.fieldErrors?.recipientName).toBeDefined();
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("returns an expected pause message without a checkout redirect or draft", async () => {
+    execute.mockRejectedValue(new CheckoutPausedError());
+    const state = await createPurchaseIntentAction({}, formData());
+    expect(state).toEqual({ error: new CheckoutPausedError().message });
   });
 });
 
