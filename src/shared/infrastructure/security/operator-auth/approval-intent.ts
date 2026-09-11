@@ -4,7 +4,8 @@ import { z } from "zod";
 import { FulfillmentApprovalError, type FulfillmentApprovalRequest } from "@/modules/fulfillment/public";
 
 const audience = "bloombox:fulfillment-approval-intent:v1";
-const maxAgeSeconds = 300;
+export const OPERATOR_APPROVAL_INTENT_SECONDS = 300;
+const maxAgeSeconds = OPERATOR_APPROVAL_INTENT_SECONDS;
 const claimsSchema = z.object({
   shop: z.string().max(255).regex(/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/),
   fulfillmentId: z.uuid(), reviewedIntakeVersion: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
