@@ -1,3 +1,4 @@
+import { SizeComparison } from "@/ui/size-comparison";
 import { ProductCard } from "@/ui/product-card";
 import { application } from "@/shared/infrastructure/composition-root";
 import { siteContent } from "@/shared/infrastructure/content/site-content";
@@ -48,11 +49,11 @@ export default async function HomePage() {
           </div>
           <Link className="secondary-button" href="/flowers">{home.collection.action}<span aria-hidden="true">↗</span></Link>
         </div>
-        <div className="product-grid">
+        {products.some((product) => product.previewOffer) ? <SizeComparison products={products} /> : <div className="product-grid">
           {products.length > 0 ? products.map((product) => (
             <ProductCard key={product.id} product={product} />
           )) : <p className="catalog-empty" role="status">{siteContent.catalog.emptyMessage}</p>}
-        </div>
+        </div>}
       </section>
 
       <section className="how-it-works section-shell" aria-labelledby="guide-title">

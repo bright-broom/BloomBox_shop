@@ -16,6 +16,7 @@ import {
   storeCart,
   storePreviewBuyer,
   storePreviewDraft,
+  storePreparedPreviewDraft,
   type BrowserCartItem,
   type PreviewBuyer,
 } from "./browser-checkout-session";
@@ -62,12 +63,23 @@ describe("browser checkout session", () => {
   });
   afterEach(() => vi.useRealTimers());
 
+  it("rejects a delayed checkout response after the gift was changed without losing current input", () => {
+    storeCart(storage, cart); storePreviewBuyer(storage, buyer);
+    const changed = { ...cart, requestId: "12345678-abcd-4000-8000-123456789013", giftMessage: "新しいメッセージ" };
+    storeCart(storage, changed);
+    expect(() => storePreparedPreviewDraft(storage, cart.requestId, previewDraft("old"))).toThrow(CartChangedError);
+    expect(readRecoverableCart(storage)?.giftMessage).toBe("新しいメッセージ");
+    expect(readPreviewDraft(storage)).toBeNull();
+    storePreparedPreviewDraft(storage, changed.requestId, { ...previewDraft("new"), shippingAmount: 0 });
+    expect(readPreviewDraft(storage)?.shippingAmount).toBe(0);
+  });
+
   it("keeps the server-confirmed referral discount and request reference in the test receipt", () => {
     storeCart(storage, cart); storePreviewBuyer(storage, buyer);
     storePreviewDraft(storage, previewDraft("BB-REFERRAL")); acceptPreviewReview(storage);
     const receipt = completePreviewCheckout(storage, new Date(), {
       requestId: cart.requestId, productId: cart.productId, quantity: cart.quantity,
-      subtotalAmount: cart.unitAmount * cart.quantity, discountAmount: 500, couponId: "test-coupon", tracked: true,
+      subtotalAmount: cart.unitAmount * cart.quantity, discountAmount: 500, shippingAmount: PREVIEW_SHIPPING_AMOUNT, totalAmount: cart.unitAmount * cart.quantity + PREVIEW_SHIPPING_AMOUNT - 500, couponId: "test-coupon", tracked: true,
     });
     expect(receipt).toMatchObject({ requestId: cart.requestId, referralTracked: true, discountAmount: 500,
       totalAmount: cart.unitAmount * cart.quantity + PREVIEW_SHIPPING_AMOUNT - 500 });
@@ -79,12 +91,13 @@ describe("browser checkout session", () => {
   it.each([
     { requestId: "22345678-abcd-4000-8000-123456789012" }, { productId: "other-product" },
     { quantity: 1 }, { subtotalAmount: 1 }, { discountAmount: -1 }, { discountAmount: 99_999 },
+    { shippingAmount: 0 }, { totalAmount: 1 },
   ])("rejects stale or inconsistent discount confirmation without clearing the buyer's draft: %j", (change) => {
     storeCart(storage, cart); storePreviewBuyer(storage, buyer);
     storePreviewDraft(storage, previewDraft("BB-REFERRAL")); acceptPreviewReview(storage);
     expect(completePreviewCheckout(storage, new Date(), {
       requestId: cart.requestId, productId: cart.productId, quantity: cart.quantity,
-      subtotalAmount: cart.unitAmount * cart.quantity, discountAmount: 500, couponId: "test-coupon", tracked: true,
+      subtotalAmount: cart.unitAmount * cart.quantity, discountAmount: 500, shippingAmount: PREVIEW_SHIPPING_AMOUNT, totalAmount: cart.unitAmount * cart.quantity + PREVIEW_SHIPPING_AMOUNT - 500, couponId: "test-coupon", tracked: true,
       ...change,
     })).toBeNull();
     expect(readCart(storage)).toEqual(cart); expect(readPreviewBuyer(storage)).toEqual(buyer);

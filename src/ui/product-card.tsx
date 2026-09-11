@@ -2,6 +2,7 @@ import type { Product } from "@/modules/catalog/public";
 import { formatMoney } from "@/shared/domain/money";
 import Image from "next/image";
 import Link from "next/link";
+import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 
 export function ProductCard({ product, headingLevel = 3 }: { product: Product; headingLevel?: 2 | 3 }) {
   const Heading = headingLevel === 2 ? "h2" : "h3";
@@ -32,7 +33,7 @@ export function ProductCard({ product, headingLevel = 3 }: { product: Product; h
             ))}
           </ul>
         </div>
-        <p className="price">{formatMoney(product.price)} <small>税込</small></p>
+        <p className="price">{formatMoney(product.price)} <small>{product.previewOffer ? giftExperienceContent.launch.taxNote : "税込"}</small></p>
       </div>
     </article>
   );

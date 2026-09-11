@@ -1,9 +1,11 @@
+import legacyCatalog from "../infrastructure/fixtures/legacy-catalog.json";
+import { loadCatalog } from "../infrastructure/catalog-content";
 import { describe, expect, it } from "vitest";
 import { InMemoryProductRepository } from "../infrastructure/in-memory-product-repository";
 import { SearchProducts } from "./search-products";
 
 describe("SearchProducts", () => {
-  const useCase = new SearchProducts(new InMemoryProductRepository());
+  const useCase = new SearchProducts(new InMemoryProductRepository(loadCatalog(legacyCatalog)));
 
   it("searches normalized product and producer text", async () => {
     const result = await useCase.execute({ query: "  チューリップ　" });

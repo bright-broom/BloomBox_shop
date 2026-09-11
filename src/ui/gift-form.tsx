@@ -1,5 +1,8 @@
 "use client";
 
+import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
+import { recordPreviewMetric } from "@/shared/infrastructure/preview-metrics";
+import { previewTotals, LAUNCH_PREVIEW_QUANTITY } from "@/modules/checkout/public";
 import {
   GIFT_MESSAGE_MAX_LENGTH,
   GIFT_QUANTITY_MAX,
@@ -21,7 +24,10 @@ import Link from "next/link";
 import { useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
 import { formatMoney, multiplyMoney, type Money } from "@/shared/domain/money";
 
+type SizeOption = { id: string; name: string; size: "M" | "L"; price: Money; shippingAmount: number };
+
 type GiftFormProps = {
+  sizeOptions?: readonly SizeOption[];
   productId: string;
   productName: string;
   unitPrice: Money;
@@ -36,17 +42,23 @@ export function GiftForm(props: GiftFormProps) {
 }
 
 function GiftConfigurationForm({
-  productId, productName, unitPrice, minDeliveryDate, maxDeliveryDate, initialCart,
+  productId: initialProductId, productName: initialProductName, unitPrice: initialUnitPrice, minDeliveryDate, maxDeliveryDate, initialCart, sizeOptions = [],
 }: GiftFormProps & { initialCart: BrowserCartItem | null }) {
   // Snapshot the cart once: a background revision must not overwrite in-progress typing.
   const [cartAtOpen] = useState(initialCart);
-  const editingCart = cartAtOpen?.productId === productId ? cartAtOpen : null;
+  const editingCart = cartAtOpen && (cartAtOpen.productId === initialProductId || sizeOptions.some((option) => option.id === cartAtOpen.productId)) ? cartAtOpen : null;
+  const [selectedId, setSelectedId] = useState(initialProductId);
+  const selection = sizeOptions.find((option) => option.id === selectedId);
+  const productId = selection?.id ?? initialProductId;
+  const productName = selection?.name ?? initialProductName;
+  const unitPrice = selection?.price ?? initialUnitPrice;
+  const copy = giftExperienceContent.launch;
   const replacingCart = Boolean(cartAtOpen && !editingCart);
   const [replacementAccepted, setReplacementAccepted] = useState(false);
   const router = useRouter();
   const [state, setState] = useState<CreatePurchaseIntentFormState>({});
   const [pending, setPending] = useState(false);
-  const [quantity, setQuantity] = useState(editingCart?.quantity ?? GIFT_QUANTITY_MIN);
+  const [quantity, setQuantity] = useState(sizeOptions.length ? LAUNCH_PREVIEW_QUANTITY : editingCart?.quantity ?? GIFT_QUANTITY_MIN);
 
   function addToCart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -110,6 +122,15 @@ function GiftConfigurationForm({
         </div>
         <span><i aria-hidden="true">*</i> 必須項目</span>
       </div>
+      {selection ? <div className="form-field">
+        <label htmlFor="gift-size">{copy.sizeLabel}</label>
+        <select id="gift-size" value={selectedId} disabled={pending} onChange={(event) => { setSelectedId(event.target.value); const option = sizeOptions.find((option) => option.id === event.target.value); if (option) recordPreviewMetric({ name: "size_select", size: option.size }); }} aria-describedby="size-help">
+          {sizeOptions.map((option) => <option key={option.id} value={option.id}>{option.size} — {formatMoney(option.price)} / {copy.totalLabel} {formatMoney({ ...option.price, amount: previewTotals(option.price.amount, option.shippingAmount).totalAmount })}</option>)}
+        </select>
+        <p id="size-help" className="field-note">{copy.sizeChangeNote}</p>
+        <dl className="checkout-details"><div><dt>{copy.productLabel}</dt><dd>{formatMoney(unitPrice)}</dd></div><div><dt>{copy.shippingLabel}</dt><dd>{formatMoney({ ...unitPrice, amount: selection.shippingAmount })}</dd></div><div><dt>{copy.totalLabel}</dt><dd>{formatMoney({ ...unitPrice, amount: previewTotals(unitPrice.amount, selection.shippingAmount).totalAmount })}</dd></div></dl>
+        <p className="field-note">{copy.taxNote}。{copy.quantityNote}</p>
+      </div> : null}
       <div className="form-field">
         <label htmlFor="quantity"><span>01</span> 数量 <i aria-hidden="true">*</i></label>
         <select
@@ -122,12 +143,12 @@ function GiftConfigurationForm({
           required
         >
           {Array.from(
-            { length: GIFT_QUANTITY_MAX - GIFT_QUANTITY_MIN + 1 },
+            { length: selection ? 1 : GIFT_QUANTITY_MAX - GIFT_QUANTITY_MIN + 1 },
             (_, index) => GIFT_QUANTITY_MIN + index,
           ).map((quantity) => <option key={quantity} value={quantity}>{quantity} 点</option>)}
         </select>
         <p className="field-note" id="quantity-summary" aria-live="polite">
-          商品小計 {formatMoney(multiplyMoney(unitPrice, quantity))}（税込・送料別）
+          商品小計 {formatMoney(multiplyMoney(unitPrice, quantity))}（{selection ? copy.taxNote : "税込・送料別"}）
         </p>
         <FieldError id="quantity-error" messages={state.fieldErrors?.quantity} />
       </div>

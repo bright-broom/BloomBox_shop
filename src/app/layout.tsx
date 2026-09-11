@@ -8,6 +8,7 @@ import { loadSiteUrlConfig } from "@/shared/infrastructure/config/site-url-confi
 import { MobileNavigation } from "@/ui/mobile-navigation";
 import { HeaderCartLink } from "@/ui/header-cart-link";
 import { referralContent } from "@/shared/infrastructure/content/referral-content";
+import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import "./globals.css";
 
 const sans = Noto_Sans_JP({
@@ -95,6 +96,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                 <Link href="/guide">ご利用ガイド</Link>
                 <Link href="/shipping-returns">配送・返品</Link>
                 <Link href="/faq">よくあるご質問</Link>
+                <Link href="/gift-next">{giftExperienceContent.recipient.label}</Link>
+                {loadRuntimeMode() === "preview" ? <Link href="/preview/gift-experience">{giftExperienceContent.preview.navLabel}</Link> : null}
                 {loadRuntimeMode() === "preview" && loadCheckoutProviderMode() === "preview" ? <Link href="/referrals">{referralContent.navLabel}</Link> : null}
               </nav>
               <nav className="footer-nav" aria-label="BloomBoxについて">

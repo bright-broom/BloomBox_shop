@@ -17,6 +17,7 @@ const catalogItemSchema = z.object({
   flowers: z.array(z.string().trim().min(1)).min(1),
   grower: z.string().trim().min(1).max(120),
   available: z.boolean(),
+  previewOffer: z.object({ family: z.string().regex(/^[a-z-]+$/), size: z.enum(["M", "L"]), shippingAmount: z.number().int().nonnegative() }).optional(),
 });
 
 const catalogSchema = z.array(catalogItemSchema).min(1).superRefine((items, context) => {
@@ -35,8 +36,8 @@ const catalogSchema = z.array(catalogItemSchema).min(1).superRefine((items, cont
   }
 });
 
-export function loadCatalog(): readonly Product[] {
-  return catalogSchema.parse(catalog).map((item) => ({
+export function loadCatalog(input: unknown = catalog): readonly Product[] {
+  return catalogSchema.parse(input).map((item) => ({
     id: productId(item.id),
     externalReference: item.id,
     slug: item.slug,
@@ -51,5 +52,6 @@ export function loadCatalog(): readonly Product[] {
     flowers: item.flowers,
     grower: item.grower,
     available: item.available,
+    previewOffer: item.previewOffer,
   }));
 }

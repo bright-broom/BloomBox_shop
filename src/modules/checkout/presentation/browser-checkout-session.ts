@@ -6,6 +6,9 @@ import {
 } from "@/modules/fulfillment/public";
 import { createPurchaseIntentSchema } from "./create-purchase-intent-schema";
 import type { PreviewReferralQuote } from "./preview-referral-actions";
+import { recordPreviewMetric } from "@/shared/infrastructure/preview-metrics";
+import { PREVIEW_SHIPPING_AMOUNT, previewTotals } from "../domain/preview-pricing";
+export { PREVIEW_SHIPPING_AMOUNT } from "../domain/preview-pricing";
 
 const CART_STORAGE_KEY = "bloombox.checkout.cart.v1";
 const BUYER_STORAGE_KEY = "bloombox.checkout.buyer.v1";
@@ -14,7 +17,6 @@ const REVIEW_STORAGE_KEY = "bloombox.checkout.preview-review.v1";
 const RECEIPT_STORAGE_KEY = "bloombox.checkout.preview-receipt.v1";
 
 export const CHECKOUT_SESSION_CHANGED_EVENT = "bloombox:checkout-session-changed";
-export const PREVIEW_SHIPPING_AMOUNT = 1_100;
 export const PREVIEW_PAYMENT_LAST_FOUR = "4242";
 
 // A valid stored draft may need a new delivery date. Reading must not hide it.
@@ -49,6 +51,7 @@ const previewDraftSchema = z.object({
   quantity: z.number().int().positive(),
   deliveryDate: z.iso.date(),
   subtotalAmount: z.number().int().nonnegative(),
+  shippingAmount: z.number().int().nonnegative().default(PREVIEW_SHIPPING_AMOUNT),
 });
 
 const previewReviewSchema = z.object({
@@ -139,10 +142,15 @@ export function readPreviewDraft(storage: CheckoutStorage): PreviewDraft | null 
   return readStored(storage, DRAFT_STORAGE_KEY, previewDraftSchema);
 }
 
-export function storePreviewDraft(storage: CheckoutStorage, draft: PreviewDraft): void {
+export function storePreviewDraft(storage: CheckoutStorage, draft: z.input<typeof previewDraftSchema>): void {
   writeStored(storage, DRAFT_STORAGE_KEY, previewDraftSchema.parse(draft));
   storage.removeItem(REVIEW_STORAGE_KEY);
   notifyCheckoutSessionChanged();
+}
+
+export function storePreparedPreviewDraft(storage: CheckoutStorage, requestId: string, draft: z.input<typeof previewDraftSchema>): void {
+  if (readRecoverableCart(storage)?.requestId !== requestId) throw new CartChangedError();
+  storePreviewDraft(storage, draft);
 }
 
 export function readPreviewReview(storage: CheckoutStorage): PreviewReview | null {
@@ -191,6 +199,8 @@ export function completePreviewCheckout(
     settlement.requestId !== cart.requestId || settlement.productId !== cart.productId
     || settlement.quantity !== cart.quantity || settlement.quantity !== draft.quantity
     || settlement.subtotalAmount !== draft.subtotalAmount
+    || settlement.shippingAmount !== draft.shippingAmount
+    || settlement.totalAmount !== draft.subtotalAmount + draft.shippingAmount - settlement.discountAmount
     || !Number.isSafeInteger(settlement.discountAmount) || settlement.discountAmount < 0
     || settlement.discountAmount > settlement.subtotalAmount
   )) return null;
@@ -203,14 +213,15 @@ export function completePreviewCheckout(
     quantity: draft.quantity,
     deliveryDate: draft.deliveryDate,
     subtotalAmount: draft.subtotalAmount,
-    shippingAmount: PREVIEW_SHIPPING_AMOUNT,
+    shippingAmount: settlement?.shippingAmount ?? draft.shippingAmount,
     discountAmount: settlement?.discountAmount ?? 0,
     requestId: cart.requestId,
     referralTracked: settlement?.tracked ?? false,
-    totalAmount: draft.subtotalAmount + PREVIEW_SHIPPING_AMOUNT - (settlement?.discountAmount ?? 0),
+    totalAmount: previewTotals(draft.subtotalAmount, draft.shippingAmount, settlement?.discountAmount ?? 0).totalAmount,
   });
 
   writeStored(storage, RECEIPT_STORAGE_KEY, receipt);
+  recordPreviewMetric({ name: "preview_purchase", requestId: cart.requestId, referralUsed: receipt.discountAmount > 0 }, storage);
   storage.removeItem(CART_STORAGE_KEY);
   storage.removeItem(BUYER_STORAGE_KEY);
   storage.removeItem(DRAFT_STORAGE_KEY);

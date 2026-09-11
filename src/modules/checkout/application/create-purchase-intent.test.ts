@@ -1,3 +1,5 @@
+import legacyCatalog from "@/modules/catalog/infrastructure/fixtures/legacy-catalog.json";
+import { loadCatalog } from "@/modules/catalog/infrastructure/catalog-content";
 import { describe, expect, it, vi } from "vitest";
 import { CheckoutPausedError } from "./checkout-paused-error";
 import { InMemoryProductRepository } from "@/modules/catalog/infrastructure/in-memory-product-repository";
@@ -11,8 +13,16 @@ import { CreatePurchaseIntent } from "./create-purchase-intent";
 import { PurchaseIntentIdempotencyConflictError } from "./create-purchase-intent";
 
 describe("CreatePurchaseIntent", () => {
+  it("snapshots the selected launch size and refuses an unpriced multiple-box shipment", async () => {
+    const useCase = new CreatePurchaseIntent(new InMemoryProductRepository(), new InMemoryPurchaseIntentRepository(), () => new Date("2026-08-19T00:00:00.000Z"));
+    const input = validInput({ productId: "prod_bloombox_l" });
+    const intent = await useCase.execute(input);
+    expect(intent.item).toMatchObject({ productName: "BLOOM BOX L", unitPriceSnapshot: { amount: 8000 }, productId: "prod_bloombox_l" });
+    await expect(useCase.execute({ ...input, productId: "prod_bloombox_m" })).rejects.toBeInstanceOf(PurchaseIntentIdempotencyConflictError);
+    await expect(useCase.execute({ ...input, requestId: "12345678-abcd-4000-8000-123456789013", quantity: 2 })).rejects.toBeInstanceOf(InvalidPurchaseIntentInputError);
+  });
   it("rejects repeated submissions without reading or writing, and resumes with the same request", async () => {
-    const products = new InMemoryProductRepository();
+    const products = new InMemoryProductRepository(loadCatalog(legacyCatalog));
     const intents = new InMemoryPurchaseIntentRepository();
     const find = vi.spyOn(intents, "findById");
     const save = vi.spyOn(intents, "save");
@@ -32,7 +42,7 @@ describe("CreatePurchaseIntent", () => {
   });
 
   it("uses the server-side catalog price snapshot without creating an order", async () => {
-    const products = new InMemoryProductRepository();
+    const products = new InMemoryProductRepository(loadCatalog(legacyCatalog));
     const intents = new InMemoryPurchaseIntentRepository();
     const useCase = new CreatePurchaseIntent(
       products,
@@ -92,7 +102,7 @@ describe("CreatePurchaseIntent", () => {
 
 function createUseCase(): CreatePurchaseIntent {
   return new CreatePurchaseIntent(
-    new InMemoryProductRepository(),
+    new InMemoryProductRepository(loadCatalog(legacyCatalog)),
     new InMemoryPurchaseIntentRepository(),
     () => new Date("2026-08-19T00:00:00.000Z"),
   );

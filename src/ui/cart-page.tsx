@@ -4,46 +4,50 @@ import { createPurchaseIntentAction } from "@/modules/checkout/presentation/acti
 import {
   readRecoverableCart,
   removeCart,
-  storePreviewDraft,
+  storePreparedPreviewDraft,
+  CartChangedError,
   type BrowserCartItem,
 } from "@/modules/checkout/presentation/browser-checkout-session";
 import { isAvailableDeliveryDate } from "@/modules/fulfillment/public";
 import { formatMoney, money, multiplyMoney } from "@/shared/domain/money";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect } from "react";
+import { useActionState } from "react";
 import { useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
+import { FlowerLoading } from "@/ui/flower-loading";
+import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
+import { recordPreviewMetric } from "@/shared/infrastructure/preview-metrics";
 
 export function CartPage({
   added,
   checkoutCancelled,
   previewMode,
+  previewPrices,
 }: {
   added: boolean;
   checkoutCancelled: boolean;
   previewMode: boolean;
+  previewPrices: readonly { productId: string; unitAmount: number; shippingAmount: number }[];
 }) {
   const router = useRouter();
   const revision = useCheckoutSessionRevision();
   const cart: BrowserCartItem | null | undefined = revision === null
     ? undefined
     : readRecoverableCart(window.sessionStorage);
-  const [state, formAction, pending] = useActionState(createPurchaseIntentAction, {});
-
-  useEffect(() => {
-    if (state.checkout) window.location.assign(state.checkout.url);
-    if (state.draft) {
-      storePreviewDraft(window.sessionStorage, {
-        version: 1,
-        displayId: state.draft.displayId,
-        productName: state.draft.productName,
-        quantity: state.draft.quantity,
-        deliveryDate: state.draft.deliveryDate,
-        subtotalAmount: state.draft.subtotalAmount,
-      });
-      router.push("/checkout/test");
+  const [state, formAction, pending] = useActionState(async (previous: Parameters<typeof createPurchaseIntentAction>[0], formData: FormData) => {
+    try {
+      const result = await createPurchaseIntentAction(previous, formData);
+      if (result.checkout) window.location.assign(result.checkout.url);
+      if (result.draft) {
+        storePreparedPreviewDraft(window.sessionStorage, result.draft.requestId, { version: 1, ...result.draft });
+        recordPreviewMetric({ name: "begin_checkout", requestId: result.draft.requestId });
+        router.push("/checkout/test");
+      }
+      return result;
+    } catch (error) {
+      return { error: error instanceof CartChangedError ? error.message : "購入手続きを進められませんでした。入力内容はカートに残っています。同じ操作を再試行してください。" };
     }
-  }, [router, state.checkout, state.draft]);
+  }, {});
 
   function clearCart() {
     removeCart(window.sessionStorage);
@@ -67,7 +71,8 @@ export function CartPage({
   }
 
   const deliveryDateAvailable = isAvailableDeliveryDate(cart.deliveryDate);
-  const unitPrice = money(cart.unitAmount);
+  const previewPrice = previewPrices.find((price) => price.productId === cart.productId);
+  const unitPrice = money(previewPrice?.unitAmount ?? cart.unitAmount);
   const subtotal = multiplyMoney(unitPrice, cart.quantity);
 
   return (
@@ -115,8 +120,8 @@ export function CartPage({
         <h2>ご注文内容</h2>
         <dl>
           <div><dt>商品小計</dt><dd>{formatMoney(subtotal)}</dd></div>
-          <div><dt>送料</dt><dd>決済前に表示</dd></div>
-          <div className="checkout-total-row"><dt>お支払い合計</dt><dd>決済前に確定</dd></div>
+          <div><dt>送料</dt><dd>{previewPrice ? formatMoney(money(previewPrice.shippingAmount)) : "決済前に表示"}</dd></div>
+          <div className="checkout-total-row"><dt>お支払い合計</dt><dd>{previewPrice ? formatMoney(money(subtotal.amount + previewPrice.shippingAmount)) : "決済前に確定"}</dd></div>
         </dl>
         <form action={formAction}>
           <input type="hidden" name="requestId" value={cart.requestId} />
@@ -135,6 +140,7 @@ export function CartPage({
             {pending ? "安全に準備しています…" : "購入手続きへ"}
             <span aria-hidden="true">→</span>
           </button>
+          {pending ? <FlowerLoading compact title={giftExperienceContent.loading.cart} /> : null}
         </form>
         <p className="checkout-policy-copy">
           1 回のご注文につき、お届け先は 1 か所です。購入手続きの中で送料と最終合計をご確認いただけます。

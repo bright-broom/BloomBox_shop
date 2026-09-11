@@ -3,7 +3,6 @@
 import {
   completePreviewCheckout,
   PREVIEW_PAYMENT_LAST_FOUR,
-  PREVIEW_SHIPPING_AMOUNT,
   readCart,
   readPreviewBuyer,
   readPreviewDraft,
@@ -15,6 +14,8 @@ import { formatMoney, money } from "@/shared/domain/money";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { FlowerLoading } from "@/ui/flower-loading";
+import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import {
   MissingCheckoutState,
   PreviewCheckoutUnavailable,
@@ -53,7 +54,7 @@ export function PreviewPayment({ enabled }: { enabled: boolean }) {
   }
 
   const discountAmount = quote?.requestId === cart.requestId && quote.subtotalAmount === draft.subtotalAmount && !skipReferral ? quote.discountAmount : 0;
-  const totalAmount = draft.subtotalAmount + PREVIEW_SHIPPING_AMOUNT - discountAmount;
+  const totalAmount = draft.subtotalAmount + draft.shippingAmount - discountAmount;
 
   async function applyReferral() {
     if (!cart || !draft) return;
@@ -61,7 +62,7 @@ export function PreviewPayment({ enabled }: { enabled: boolean }) {
     try {
       const result = await quotePreviewReferralAction({ requestId: cart.requestId, productId: cart.productId, quantity: cart.quantity });
       if (result.error) { setPaymentError(result.error); return; }
-      if (result.quote?.subtotalAmount !== draft.subtotalAmount) {
+      if (result.quote?.subtotalAmount !== draft.subtotalAmount || result.quote?.shippingAmount !== draft.shippingAmount) {
         setPaymentError("商品価格が変わりました。カートからもう一度お進みください。"); return;
       }
       setQuote(result.quote); setSkipReferral(false);
@@ -77,7 +78,7 @@ export function PreviewPayment({ enabled }: { enabled: boolean }) {
     try {
       const result = await settlePreviewReferralAction({
         requestId: cart.requestId, productId: cart.productId, quantity: cart.quantity,
-        expectedSubtotal: draft.subtotalAmount, couponId: discountAmount ? quote?.couponId : null,
+        expectedSubtotal: draft.subtotalAmount, expectedShipping: draft.shippingAmount, couponId: discountAmount ? quote?.couponId : null,
       });
       if (!result.quote && !(skipReferral && result.unavailable)) {
         setPaymentError(result.error ?? referralCopy.loadError); return;
@@ -124,13 +125,14 @@ export function PreviewPayment({ enabled }: { enabled: boolean }) {
           <label className="consent-field"><input type="checkbox" checked={skipReferral} disabled={pending} onChange={(event) => { setSkipReferral(event.target.checked); setQuote(undefined); setReferralNotice(undefined); }} /><span>{referralCopy.quoteSkip}</span></label>
         </section>
         {paymentError ? <p className="form-error" role="alert">{paymentError}</p> : null}
+        {pending ? <FlowerLoading compact title={giftExperienceContent.loading.payment} tipIndex={1} /> : null}
       </div>
       <aside className="checkout-totals">
         <p className="eyebrow">PAYMENT SUMMARY</p>
         <h2>テスト注文</h2>
         <dl>
           <div><dt>{draft.productName} × {draft.quantity} 点</dt><dd>{formatMoney(money(draft.subtotalAmount))}</dd></div>
-          <div><dt>テスト送料</dt><dd>{formatMoney(money(PREVIEW_SHIPPING_AMOUNT))}</dd></div>
+          <div><dt>テスト送料</dt><dd>{formatMoney(money(draft.shippingAmount))}</dd></div>
           {discountAmount > 0 ? <div><dt>{referralCopy.discountLabel}</dt><dd>−{formatMoney(money(discountAmount))}</dd></div> : null}
           <div className="checkout-total-row"><dt>お支払い合計</dt><dd>{formatMoney(money(totalAmount))}</dd></div>
         </dl>

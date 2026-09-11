@@ -7,8 +7,8 @@
   --field: #f7f7f7;
   --line: #e9e9eb;
   --control-border: #858a95;
-  --accent: #0171e3;
-  --accent-hover: #005cbf;
+  --accent: #16804a;
+  --accent-hover: #10663b;
   --positive: #247447;
   --danger: #b42318;
   --danger-surface: #fff0ed;
@@ -341,6 +341,18 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
 .state-page .primary-button { margin-top: var(--space-5); }
 .loading-state { min-height: 70vh; display: grid; place-content: center; gap: var(--space-4); text-align: center; }
 .loading-flower { font-size: var(--text-section); animation: turn 2.4s linear infinite; }
+.loading-flower { display: inline-block; }
+.loading-state { padding: var(--page-gutter); }
+.flower-progress { margin-block: var(--space-5); text-align: center; }
+.flower-tip { max-width: var(--reading-max); margin-inline: auto; padding: var(--space-5); background: var(--surface); border-radius: var(--radius-card); }
+.flower-tip p { font-size: var(--text-small); line-height: var(--leading-body); }
+.size-comparison { width: 100%; margin-block: var(--space-6); }
+.size-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--space-5); }
+.size-option { padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-card); }
+.size-option .primary-button { width: 100%; }
+.gift-next-page { max-width: 960px; padding-block: var(--space-section); }
+.gift-next-page h1 { font-size: var(--text-section); }
+.gift-next-page > * + * { margin-top: var(--space-6); }
 @keyframes turn { to { transform: rotate(360deg); } }
 
 /* 960: navigation / commerce columns; 768: chapter rhythm; 520: single cards. */
