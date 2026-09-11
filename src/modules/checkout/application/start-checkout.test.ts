@@ -60,8 +60,16 @@ describe("StartCheckout", () => {
     await repository.save(intent);
     const provider = createProvider(purchaseIntentId("87654321-abcd-4000-8000-123456789012"));
 
-    await expect(new StartCheckout(repository, provider).execute(intent.id))
+    const useCase = new StartCheckout(
+      repository,
+      provider,
+      () => new Date("2026-08-21T00:05:00.000Z"),
+    );
+
+    await expect(useCase.execute(intent.id))
       .rejects.toBeInstanceOf(CheckoutProviderMismatchError);
+    expect(provider.create).toHaveBeenCalledOnce();
+    expect((await repository.findById(intent.id))?.status).toBe("READY_FOR_CHECKOUT");
   });
 });
 

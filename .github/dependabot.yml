@@ -10,6 +10,14 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       default-days: 7
+    ignore:
+      # The architecture checker uses the TypeScript 5 JavaScript compiler API.
+      # Upgrade the compiler in a dedicated tooling migration.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # Keep Node types aligned with the Node 24 CI/runtime baseline.
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
     groups:
       production-dependencies:
         dependency-type: production
