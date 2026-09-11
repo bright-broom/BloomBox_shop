@@ -16,10 +16,16 @@ export const CHECKOUT_SESSION_CHANGED_EVENT = "bloombox:checkout-session-changed
 export const PREVIEW_SHIPPING_AMOUNT = 1_100;
 export const PREVIEW_PAYMENT_LAST_FOUR = "4242";
 
-const cartItemSchema = createPurchaseIntentSchema.extend({
+// A valid stored draft may need a new delivery date. Reading must not hide it.
+const recoverableCartItemSchema = createPurchaseIntentSchema.extend({
+  deliveryDate: z.iso.date(),
   version: z.literal(1),
   productName: z.string().trim().min(1).max(80),
   unitAmount: z.number().int().nonnegative(),
+});
+
+const cartItemSchema = recoverableCartItemSchema.extend({
+  deliveryDate: createPurchaseIntentSchema.shape.deliveryDate,
 });
 
 export const previewBuyerSchema = z.object({
@@ -73,12 +79,36 @@ export function readCart(storage: CheckoutStorage): BrowserCartItem | null {
   return readStored(storage, CART_STORAGE_KEY, cartItemSchema);
 }
 
-export function storeCart(storage: CheckoutStorage, cart: BrowserCartItem): void {
-  writeStored(storage, CART_STORAGE_KEY, cartItemSchema.parse(cart));
-  storage.removeItem(BUYER_STORAGE_KEY);
+export function readRecoverableCart(storage: CheckoutStorage): BrowserCartItem | null {
+  return readStored(storage, CART_STORAGE_KEY, recoverableCartItemSchema);
+}
+
+export class CartChangedError extends Error {
+  constructor() {
+    super("カートが変更されています。カートへ戻り、最新の内容から編集してください。");
+    this.name = "CartChangedError";
+  }
+}
+
+export function storeCart(
+  storage: CheckoutStorage,
+  cart: BrowserCartItem,
+  expectedRequestId?: string | null,
+): void {
+  const validated = cartItemSchema.parse(cart);
+  const previous = readRecoverableCart(storage);
+  if (expectedRequestId !== undefined && (previous?.requestId ?? null) !== expectedRequestId) {
+    throw new CartChangedError();
+  }
+  // A different recipient/product must not inherit the previous recipient's address.
+  if (!previous || previous.productId !== validated.productId || previous.recipientName !== validated.recipientName) {
+    storage.removeItem(BUYER_STORAGE_KEY);
+  }
   storage.removeItem(DRAFT_STORAGE_KEY);
   storage.removeItem(REVIEW_STORAGE_KEY);
   storage.removeItem(RECEIPT_STORAGE_KEY);
+  // Invalidate approval before changing the cart, even when a storage write fails.
+  writeStored(storage, CART_STORAGE_KEY, validated);
   notifyCheckoutSessionChanged();
 }
 
@@ -95,7 +125,9 @@ export function readPreviewBuyer(storage: CheckoutStorage): PreviewBuyer | null 
 }
 
 export function storePreviewBuyer(storage: CheckoutStorage, buyer: PreviewBuyer): void {
-  writeStored(storage, BUYER_STORAGE_KEY, previewBuyerSchema.parse(buyer));
+  const validated = previewBuyerSchema.parse(buyer);
+  storage.removeItem(REVIEW_STORAGE_KEY);
+  writeStored(storage, BUYER_STORAGE_KEY, validated);
   notifyCheckoutSessionChanged();
 }
 

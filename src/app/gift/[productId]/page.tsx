@@ -4,8 +4,8 @@ import { application } from "@/shared/infrastructure/composition-root";
 import { formatMoney } from "@/shared/domain/money";
 import { GiftForm } from "@/ui/gift-form";
 import { CheckoutProgress } from "@/ui/checkout-progress";
-import { randomUUID } from "node:crypto";
 import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
@@ -45,14 +45,20 @@ export default async function GiftPage({ params }: GiftPageProps) {
           </div>
           <p className="summary-note">税込・送料別</p>
         </aside>
-        <GiftForm
+        {product.available ? <GiftForm
           productId={product.id}
           productName={product.name}
           unitPrice={product.price}
           minDeliveryDate={getEarliestDeliveryDate()}
           maxDeliveryDate={getLatestDeliveryDate()}
-          requestId={randomUUID()}
-        />
+        /> : (
+          <div className="checkout-empty" role="status">
+            <h2>この花は現在ご注文いただけません</h2>
+            <p>別の花をお選びください。保存済みのカートの内容はそのままです。</p>
+            <Link className="primary-button" href="/flowers">季節の花を見る</Link>
+            <Link className="text-link" href="/cart">カートへ戻る</Link>
+          </div>
+        )}
       </div>
     </section>
   );

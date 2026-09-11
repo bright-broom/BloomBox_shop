@@ -1,10 +1,13 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getEarliestDeliveryDate } from "@/modules/fulfillment/public";
 import {
+  CartChangedError,
   completePreviewCheckout,
   acceptPreviewReview,
   PREVIEW_SHIPPING_AMOUNT,
   readCart,
+  readRecoverableCart,
+  readPreviewReview,
   readCheckoutSessionSnapshot,
   readPreviewBuyer,
   readPreviewDraft,
@@ -56,6 +59,104 @@ describe("browser checkout session", () => {
 
   beforeEach(() => {
     storage = new MemoryStorage();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("keeps expired delivery drafts recoverable but never checkout-ready", () => {
+    storeCart(storage, cart);
+    storePreviewBuyer(storage, buyer);
+    storePreviewDraft(storage, previewDraft("BB-EXPIRED"));
+    acceptPreviewReview(storage);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(`${cart.deliveryDate}T00:00:00+09:00`));
+
+    expect(readRecoverableCart(storage)).toEqual(cart);
+    expect(readCart(storage)).toBeNull();
+    expect(completePreviewCheckout(storage)).toBeNull();
+    expect(() => storeCart(storage, cart)).toThrow();
+    expect(readRecoverableCart(storage)).toEqual(cart);
+
+    const renewed = { ...cart, requestId: "22345678-abcd-4000-8000-123456789012", deliveryDate: getEarliestDeliveryDate() };
+    storeCart(storage, renewed, cart.requestId);
+    expect(readCart(storage)).toEqual(renewed);
+    expect(readPreviewDraft(storage)).toBeNull();
+    expect(readPreviewReview(storage)).toBeNull();
+  });
+
+  it.each(["2026-02-30", "not-a-date"])("never recovers malformed date %s", (deliveryDate) => {
+    storage.setItem("bloombox.checkout.cart.v1", JSON.stringify({ ...cart, deliveryDate }));
+    expect(readRecoverableCart(storage)).toBeNull();
+  });
+
+  it("does not relax quantity validation when recovering a draft", () => {
+    storage.setItem("bloombox.checkout.cart.v1", JSON.stringify({ ...cart, quantity: 99 }));
+    expect(readRecoverableCart(storage)).toBeNull();
+  });
+
+  it("keeps the same recipient's address while invalidating the previous amount and consent", () => {
+    storeCart(storage, cart);
+    storePreviewBuyer(storage, buyer);
+    storePreviewDraft(storage, previewDraft("BB-BEFORE-EDIT"));
+    acceptPreviewReview(storage);
+    const updated = { ...cart, requestId: "22345678-abcd-4000-8000-123456789012", quantity: 3, giftMessage: "ありがとう" };
+
+    storeCart(storage, updated, cart.requestId);
+
+    expect(readCart(storage)).toEqual(updated);
+    expect(readPreviewBuyer(storage)).toEqual(buyer);
+    expect(readPreviewDraft(storage)).toBeNull();
+    expect(readPreviewReview(storage)).toBeNull();
+    expect(completePreviewCheckout(storage)).toBeNull();
+  });
+
+  it.each([
+    { recipientName: "別の受取人" },
+    { productId: "prod_other_03" },
+  ])("clears previous address when recipient/product changes: %j", (change) => {
+    storeCart(storage, cart);
+    storePreviewBuyer(storage, buyer);
+    storeCart(storage, { ...cart, ...change }, cart.requestId);
+    expect(readPreviewBuyer(storage)).toBeNull();
+  });
+
+  it("requires a new review after editing buyer or delivery address details", () => {
+    storeCart(storage, cart);
+    storePreviewBuyer(storage, buyer);
+    storePreviewDraft(storage, previewDraft("BB-BUYER-EDIT"));
+    acceptPreviewReview(storage);
+
+    storePreviewBuyer(storage, { ...buyer, addressLine1: "変更後の配送先 2-2" });
+
+    expect(readPreviewDraft(storage)).not.toBeNull();
+    expect(readPreviewReview(storage)).toBeNull();
+    expect(completePreviewCheckout(storage)).toBeNull();
+  });
+
+  it("rejects stale edits without modifying the newer cart or checkout progress", () => {
+    storeCart(storage, cart);
+    storePreviewBuyer(storage, buyer);
+    storePreviewDraft(storage, previewDraft("BB-NEWER"));
+    acceptPreviewReview(storage);
+    const revision = readCheckoutSessionSnapshot(storage);
+
+    expect(() => storeCart(storage, { ...cart, quantity: 3 }, "22345678-abcd-4000-8000-123456789012"))
+      .toThrow(CartChangedError);
+    expect(() => storeCart(storage, cart, null)).toThrow(CartChangedError);
+    expect(readCheckoutSessionSnapshot(storage)).toBe(revision);
+  });
+
+  it("retains the old cart and invalidates approval if the edited cart cannot be written", () => {
+    storeCart(storage, cart);
+    storePreviewBuyer(storage, buyer);
+    storePreviewDraft(storage, previewDraft("BB-BEFORE-FAILURE"));
+    acceptPreviewReview(storage);
+    vi.spyOn(storage, "setItem").mockImplementationOnce(() => { throw new Error("QuotaExceededError"); });
+
+    expect(() => storeCart(storage, { ...cart, quantity: 3 }, cart.requestId)).toThrow("QuotaExceededError");
+    expect(readCart(storage)).toEqual(cart);
+    expect(readPreviewDraft(storage)).toBeNull();
+    expect(readPreviewReview(storage)).toBeNull();
+    expect(completePreviewCheckout(storage)).toBeNull();
   });
 
   it("validates cart data read from untrusted browser storage", () => {
