@@ -51,27 +51,26 @@ export class ShopifyStorefrontFetchClient implements ShopifyStorefrontClient {
           },
           body: JSON.stringify({ query, variables }),
           redirect: "error",
+          cache: "no-store",
           signal: controller.signal,
         });
         if (isRetryableStatus(response.status) && attempt < SHOPIFY_REQUEST_MAX_ATTEMPTS) {
+          await response.body?.cancel();
           await this.delay(retryDelayMilliseconds(response, attempt));
           continue;
         }
-        if (!response.ok) throw new ShopifyCatalogResponseError();
-        const text = await response.text();
-        if (Buffer.byteLength(text, "utf8") > SHOPIFY_RESPONSE_MAX_BYTES) {
+        if (!response.ok || !response.body
+          || response.headers.get("x-shopify-api-version") !== this.config.apiVersion) {
+          try { await response.body?.cancel(); }
+          catch { throw new ShopifyCatalogResponseError(); }
           throw new ShopifyCatalogResponseError();
         }
-        try {
-          const json: unknown = JSON.parse(text);
-          if (isRetryableGraphqlResponse(json) && attempt < SHOPIFY_REQUEST_MAX_ATTEMPTS) {
-            await this.delay(Math.min(1_000 * 2 ** (attempt - 1), 2_000));
-            continue;
-          }
-          return json;
-        } catch {
-          throw new ShopifyCatalogResponseError();
+        const json = await readBoundedJson(response.body);
+        if (isRetryableGraphqlResponse(json) && attempt < SHOPIFY_REQUEST_MAX_ATTEMPTS) {
+          await this.delay(Math.min(1_000 * 2 ** (attempt - 1), 2_000));
+          continue;
         }
+        return json;
       } catch (error) {
         if (
           attempt < SHOPIFY_REQUEST_MAX_ATTEMPTS
@@ -87,6 +86,34 @@ export class ShopifyStorefrontFetchClient implements ShopifyStorefrontClient {
         clearTimeout(timeout);
       }
     }
+    throw new ShopifyCatalogResponseError();
+  }
+}
+
+/** Count decoded response bytes while streaming, even without Content-Length. */
+async function readBoundedJson(body: ReadableStream<Uint8Array>): Promise<unknown> {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > SHOPIFY_RESPONSE_MAX_BYTES) {
+        try { await reader.cancel(); }
+        catch { throw new ShopifyCatalogResponseError(); }
+        throw new ShopifyCatalogResponseError();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  try {
+    const json: unknown = JSON.parse(Buffer.concat(chunks, size).toString("utf8"));
+    return json;
+  } catch {
     throw new ShopifyCatalogResponseError();
   }
 }
@@ -107,7 +134,8 @@ function isRetryableGraphqlResponse(value: unknown): boolean {
 }
 
 function retryDelayMilliseconds(response: Response, attempt: number): number {
-  const retryAfter = Number(response.headers.get("retry-after"));
+  const header = response.headers.get("retry-after");
+  const retryAfter = header?.trim() ? Number(header) : NaN;
   if (Number.isFinite(retryAfter) && retryAfter >= 0) return Math.min(retryAfter * 1_000, 2_000);
   return 100 * 2 ** (attempt - 1);
 }
