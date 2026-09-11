@@ -110,8 +110,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
             </div>
           </div>
           <div className="product-grid">
-            {relatedProducts.map((candidate, index) => (
-              <ProductCard key={candidate.id} product={candidate} index={index} />
+            {relatedProducts.map((candidate) => (
+              <ProductCard key={candidate.id} product={candidate} />
             ))}
           </div>
         </section>

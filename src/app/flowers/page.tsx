@@ -84,8 +84,8 @@ export default async function FlowersPage({ searchParams }: FlowersPageProps) {
         <span>{String(result.products.length).padStart(2, "0")} / {String(result.total).padStart(2, "0")} COLLECTIONS</span>
       </div>
       <div className="product-grid">
-        {result.products.length > 0 ? result.products.map((product, index) => (
-          <ProductCard key={product.id} product={product} index={index} />
+        {result.products.length > 0 ? result.products.map((product) => (
+          <ProductCard key={product.id} product={product} headingLevel={2} />
         )) : (
           <div className="catalog-empty" role="status">
             <p>{result.total === 0 ? siteContent.catalog.emptyMessage : siteContent.catalog.noResultsMessage}</p>
