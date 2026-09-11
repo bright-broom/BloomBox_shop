@@ -7,7 +7,7 @@
 1. Google Cloud で OAuth 同意画面と「ウェブアプリケーション」の OAuth クライアントを準備します。必要なスコープは `openid email` です。一般 Gmail を使う場合は外部向けのアプリ設定が必要で、テスト公開中は対象アカウントをテストユーザーに登録します。[Google の設定手順](https://developers.google.com/identity/openid-connect/openid-connect#settingup) を確認してください。
 2. 環境ごとの正規オリジンを決め、承認済みリダイレクト URI に **`AUTH_URL` のオリジン + `/api/operator-auth/callback/google`** を登録します。ローカルなら `http://localhost:3000/api/operator-auth/callback/google`。本番は HTTPS とし、ローカル用クライアント・秘密情報を分けます。アプリ配下のパスを AUTH_URL に含めません。
 3. 下表の値をサーバーの秘密管理に保存します。ユーザー指定のメールアドレス、実 subject、接続文字列や秘密情報を公開 Git・PR・チャットへ書き込まないでください。既存の環境ファイルを上書きせず、必要なキーだけ追加します。
-4. 最初は `AUTH_OPERATOR_BINDINGS=[]` としてログインを確認します。許可アカウントで本人がログインした際の「担当者登録用の情報」に Google subject が表示されます。サーバーの検証を経たこの値を、内部担当者 UUID と明示的に対応付けます。未登録の状態では DB に接続しません。
+4. 最初は `AUTH_OPERATOR_BINDINGS=[]` としてログインを確認します。許可アカウントで本人がログインした際の「担当者登録用の情報」に Google subject が表示されます。サーバーの検証を経たこの値を、内部担当者 UUID と明示的に対応付けます。未登録の状態では DB に接続しません。対応付けを反映した後は再ログインが必要です。
 5. [承認権限の運用](SHOPIFY_FULFILLMENT_APPROVAL.md) に従い、DB 管理者が店舗別権限を別途設定します。既存の NOLOGIN ロール `bloombox_fulfillment_approver` を専用ログイン接続へ限定付与し、`DATABASE_OPERATOR_URL` に指定します。一般アプリ・worker・DB 所有者の接続を使わず、この資格情報で実際の権限制限を確認します。初期登録はSYSTEM監査です。[管理画面](OPERATOR_PERMISSION_MANAGEMENT.md)からの失効は実施者をOPERATOR監査に記録します。管理には通常の承認権限と別の店舗管理権限・専用接続が必要です。
 6. ログイン後の「注文一覧」から `/operations/fulfillments` を開き、権限のある店舗ドメインを指定して対象注文を選びます（[一覧の仕様](OPERATOR_FULFILLMENT_INBOX.md)）。内部発送 UUID が分かる場合は従来どおり、`/operations/fulfillments/<shop.myshopify.com>/<fulfillment UUID>` を開きます。Google subject の一致に加えて店舗権限・期限・test/live 区分を確認します。非認証・非認可・他店舗・存在しない対象はいずれも Not Found 画面になり、存在有無を区別しません。Next.js のストリーミング開始後は HTTP 200 の場合もあるため、HTTP ステータスだけで認可成功を判断しません。承認・発送ボタンはまだ追加していません。
 
@@ -18,7 +18,7 @@
 | `AUTH_SECRET` | 暗号学的に安全な乱数から生成した 32 文字以上の秘密値 |
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | 環境専用の Google OAuth クライアント ID / シークレット |
 | `AUTH_OPERATOR_EMAILS` | ログインを許可する確認済みメールのカンマ区切りリスト（最大20件） |
-| `AUTH_OPERATOR_BINDINGS` | `[{"subject":"<verified Google sub>","operatorId":"<internal UUID>"}]`。両識別子を一意にする。既定 `[]` |
+| `AUTH_OPERATOR_BINDINGS` | `[{"subject":"<verified Google sub>","operatorId":"<internal UUID>","sessionVersion":0}]`。両識別子を一意にする。版は省略時0で、増やすと対象者の既存セッションを拒否する。既定 `[]` |
 | `OPERATOR_SHOPIFY_MODE` | `test`（既定）または `live`。表示対象の決済区分で、発送を有効にする設定ではない |
 | `DATABASE_OPERATOR_URL` | 専用の PostgreSQL 接続。未設定時に他の接続へフォールバックしない |
 | `DATABASE_SSL_MODE` / `DATABASE_MAX_CONNECTIONS` | 既存 DB 設定と共通。既定 verify-full / 5 |
@@ -31,7 +31,7 @@ Auth.js の OIDC 検証（PKCE、state、nonce、issuer、audience、有効期�
 
 セッションは暗号化した HttpOnly / SameSite=Lax / host-only Cookie で、HTTPS では Secure と `__Host-` を使います。ログインから15分の絶対期限を持ち、閲覧で期限を延長しません。Google access/refresh token、氏名、画像を保存せず、ブラウザーに返すセッションは subject と期限だけです。エラーの生ログやプロフィールは出力しません。管理画面・認証応答は private/no-store、no-referrer、検索除外です。
 
-許可メールの削除は次の要求でログイン状態を無効化し、subject 対応付けの削除は次の参照で担当者権限を失わせます。DB の店舗権限失効も各参照で再確認します。秘密値の更新は全 Cookie を無効にします。ログアウトは現在のブラウザー Cookie を削除しますが、盗まれた Cookie の個別失効にはサーバー側セッション台帳が未実装です。緊急時は許可リスト・対応付け・DB 権限の削除、または秘密値の更新を使います。Google 側のアカウント変更通知も未接続のため、本番利用前にこの制約を評価します。
+許可メールの削除は次の要求でログイン状態を無効化し、subject 対応付けの追加・削除・内部UUID変更も再ログインを必要とします。DB の店舗権限失効も各参照で再確認します。秘密値の更新は全 Cookie を無効にします。ログアウトは現在のブラウザー Cookie を削除します。登録済み担当者の `sessionVersion` を増やすと、その担当者の全ブラウザーの古いCookieを拒否できます（[手順・制約・初回導入の影響](OPERATOR_SESSION_REVOCATION.md)）。変更は全稼働プロセスへ反映し、一度失効した版に戻さないでください。端末単位のセッション台帳とGoogle側のアカウント変更通知は未実装です。アカウント自体のアクセス停止には許可リスト・対応付け・DB権限の削除を使います。
 
 ## 検証と残件
 
