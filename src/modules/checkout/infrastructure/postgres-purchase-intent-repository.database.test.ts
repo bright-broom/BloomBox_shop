@@ -55,8 +55,8 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       ORDER BY version
     `;
 
-    expect(rows).toHaveLength(16);
-    expect(rows.map((row) => row.version)).toEqual(["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016"]);
+    expect(rows).toHaveLength(17);
+    expect(rows.map((row) => row.version)).toEqual(["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017"]);
     expect(rows.every((row) => /^[0-9a-f]{64}$/.test(row.checksum))).toBe(true);
   });
 

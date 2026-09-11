@@ -497,3 +497,13 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
 .fulfillment-approval-form > p, .fulfillment-approval-form form { margin-top: var(--space-4); }
 .fulfillment-approval-acknowledgement { display: flex; gap: var(--space-3); align-items: start; margin-bottom: var(--space-5); cursor: pointer; }
 .fulfillment-approval-acknowledgement input { flex-shrink: 0; margin-top: var(--space-2); accent-color: var(--accent); }
+.permission-management-list { display: grid; gap: var(--space-6); margin-block: var(--space-6); }
+.permission-card { max-width: var(--reading-max); border-top: 1px solid var(--line); padding-top: var(--space-5); overflow-wrap: anywhere; }
+.permission-card dl { display: grid; gap: var(--space-4); }
+.permission-card dt { color: var(--ink-soft); font-size: var(--text-small); }
+.permission-card dd { margin: 0; }
+.permission-history, .permission-revocation-form { margin-top: var(--space-5); }
+.permission-revocation-form form { display: grid; gap: var(--space-4); }
+.permission-revocation-form .fulfillment-approval-acknowledgement { margin-bottom: 0; }
+.permission-revoke-button { justify-self: start; color: var(--danger); border-color: var(--danger); }
+.permission-revoke-button:hover { background: var(--danger); color: var(--paper); }

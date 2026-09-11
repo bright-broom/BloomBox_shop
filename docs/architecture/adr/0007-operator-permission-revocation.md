@@ -1,6 +1,6 @@
 # ADR 0007: Audited operator permission revocation
 
-Status: Proposed for production; internal revocation capability, not a public administration route.
+Status: Proposed for production; scoped revocation command and authenticated management screen implemented, real configuration pending.
 
 Date: 2026-09-12. Extends ADR 0005 and ADR 0006.
 
@@ -16,8 +16,16 @@ A separate NOLOGIN database role has prerequisite reads/identity-column locks an
 
 Migration 0016 adds manager grants, immutable receipts and the restricted disable function. Apply it and reapply dedicated role grants before composing the capability. Manager provisioning remains a privileged, SYSTEM-audited bootstrap operation; real managers must be designated separately. No actual grant, authentication setting or production-policy activation accompanies this change.
 
-The first implementation is an internal command with database integration evidence. A protected review screen, authenticated request composition, submission limits and real-identity E2E remain required before exposing management operations. Reuse the established Google identity boundary when connecting it, never accept operator IDs from request parameters. Rollback disconnects the capability and retains grants, revisions, receipts and audits; disable-only database rights must not be replaced with broad UPDATE grants.
+The initial internal command is now connected to a protected review screen and Server Action through the established Google identity boundary. A separate DATABASE_PERMISSION_MANAGER_URL is mandatory; no fallback to approval/application credentials is allowed. Real manager designation, Google configuration and real-identity E2E remain activation prerequisites. Rollback disconnects the capability and retains grants, revisions, receipts and audits; disable-only database rights must not be replaced with broad UPDATE grants.
 
 ## Verification
 
 667 ordinary tests and 116 isolated PostgreSQL tests pass, including sixteen migrations applied twice, six concurrent same-key requests, competing keys, cross-shop and expired authority, rollback of the permission/receipt/SYSTEM audit on OPERATOR audit failure, re-enabled target replay rejection, actual lock-wait races, disable-only role privileges and immediate denial in the existing review query. Type/lint/static checks, production build and dependency audit pass. These are synthetic internal-command checks; no real manager is provisioned and no management endpoint or provider E2E is activated.
+
+## Authenticated management screen
+
+`/operations/permissions` reauthorizes the scoped manager on each bounded query, locks the grant and checks database time after reads. Its default is the first currently authorized shop; explicit shop changes still require that scope. Cursor positions grant no authority. Migration 0017 adds lookup indexes. The DTO contains only operator registration UUIDs, permission state/expiry/version and latest actor/reason/time history, without Google subjects, emails, customer data or tokens.
+
+Enabled targets receive a purpose-separated encrypted review intent, bound to the exact shop/permission/version, current actor/session expiry, runtime mode and a server-generated idempotency key. It lasts at most five minutes. The Server Action requires canonical Origin, validated fields, a fixed reason and acknowledgement, then consumes the existing shared ten-per-minute operator allowance before decoding context and invoking the transactional revoker. Approval and revocation share that allowance intentionally; the legacy table name is retained. Revocation is independent of merchant sales approval, so pending commerce policy cannot prevent authorized access removal.
+
+Failure keeps the same context and selected reason for retry; reason changes require renewed acknowledgement. The native form reset is cancelled because it otherwise clears selection after an Action failure. A committed revocation remains successful if view revalidation fails. The new permission-manager DB role receives only the existing allowance-table rights, not approval or commerce writes. All management responses retain private/no-store, no-referrer and noindex controls. Real grants remain unconfigured.
