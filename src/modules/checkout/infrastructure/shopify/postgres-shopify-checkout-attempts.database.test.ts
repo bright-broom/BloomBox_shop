@@ -1,4 +1,9 @@
 import { PostgresShopifyOrderAcceptor } from "@/modules/order/infrastructure/postgres-shopify-order-acceptor";
+import { ShopifyAdminOrderReader } from "@/modules/payment/infrastructure/shopify/shopify-admin-order-reader";
+import { ShopifyAdminOrderAcceptor } from "@/modules/payment/infrastructure/shopify/shopify-admin-order-acceptor";
+import { ReadShopifyReference } from "@/modules/payment/application/read-shopify-reference";
+import { ReconcileShopifyPayment } from "@/modules/payment/application/reconcile-shopify-payment";
+import { ShopifyDeliveryDestinationUnavailableError } from "@/modules/payment/application/shopify-delivery-destination-reader";
 import { ShopifyOrderAcceptanceConflictError, ShopifyOrderAcceptancePersistenceError,
   type ShopifyOrderAcceptance, type ShopifyOrderAcceptancePolicy } from "@/modules/order/application/accept-shopify-order";
 import { PostgresShopifyDeliveryPlanQuery } from "./postgres-shopify-delivery-plan-query";
@@ -203,7 +208,7 @@ describeDatabase("durable Shopify checkout attempts", () => {
     } finally { await worker.end({ timeout: 5 }); }
   });
   const acceptanceTime = new Date("2026-09-11T12:00:00Z");
-  const acceptancePolicy: ShopifyOrderAcceptancePolicy = { approval: "APPROVED", testMode: true, taxesIncluded: true,
+  const acceptancePolicy: Extract<ShopifyOrderAcceptancePolicy, { approval: "APPROVED" }> = { approval: "APPROVED", testMode: true, taxesIncluded: true,
     coverage: { approval: "APPROVED", prefectures: ["東京都"], excludedPostalPrefixes: [] },
     shippingByProduct: { shopify_test: 1000 }, piiRetentionDays: 90 };
   async function acceptanceInput(orderId: string, taxesIncluded = true): Promise<ShopifyOrderAcceptance> {
@@ -220,6 +225,76 @@ describeDatabase("durable Shopify checkout attempts", () => {
       address: { countryCode: "JP", prefecture: "東京都", postalCode: "100-0001", recipientName: "配送宛名", city: "千代田区",
         addressLine: "秘密の番地", addressLine2: "秘密の建物", phone: "000-0000-0000" } };
   }
+  async function acceptanceWorkflow(orderId: string) {
+    const intent = await prepare(); await flow(intent).useCase.execute(intent.id);
+    const config = { storeDomain: scope, accessToken: "synthetic-admin-key", apiVersion: "2026-07" } as const;
+    const bag = (amount: number) => ({ shopMoney: { amount: String(amount), currencyCode: "JPY" }, presentmentMoney: { amount: String(amount), currencyCode: "JPY" } });
+    const source = { __typename: "Order", id: orderId, updatedAt: paidSnapshot().updatedAt, test: true, cancelledAt: null,
+      cartToken: `opaque-${intent.id}`, displayFinancialStatus: "PAID", taxesIncluded: true, estimatedTaxes: false, edited: false,
+      originalTotalPriceSet: bag(5000), currentTotalPriceSet: bag(5000), totalPriceSet: bag(5000), totalReceivedSet: bag(5000), totalRefundedSet: bag(0),
+      subtotalPriceSet: bag(4000), currentSubtotalPriceSet: bag(4000), totalTaxSet: bag(454), currentTotalTaxSet: bag(454),
+      currentShippingPriceSet: bag(1000), originalTotalDutiesSet: null, currentTotalDutiesSet: null,
+      originalTotalAdditionalFeesSet: null, currentTotalAdditionalFeesSet: null, totalTipReceivedSet: bag(0),
+      transactions: [{ id: saleTransaction.id, kind: "SALE", status: "SUCCESS", test: true, parentTransaction: null, amountSet: bag(5000) }],
+      lineItems: { nodes: [{ id: "gid://shopify/LineItem/1", variant: { id: "gid://shopify/ProductVariant/101" }, quantity: 1, currentQuantity: 1,
+        originalUnitPriceSet: bag(4000), discountAllocations: [], taxLines: [{ priceSet: bag(363) }] }], pageInfo: { hasNextPage: false } },
+      shippingLines: { nodes: [{ originalPriceSet: bag(1000), discountedPriceSet: bag(1000), currentDiscountedPriceSet: bag(1000),
+        isRemoved: false, taxLines: [{ priceSet: bag(91) }] }], pageInfo: { hasNextPage: false } } };
+    const destination = { __typename: "Order", id: orderId, updatedAt: source.updatedAt, test: true, cancelledAt: null, requiresShipping: true,
+      shippingAddress: { countryCodeV2: "JP", provinceCode: "JP-13", zip: "100-0001", name: "配送先の秘密", city: "千代田区",
+        address1: "番地の秘密", address2: "建物の秘密", phone: "+810000000000" } };
+    const finalDestination = vi.fn(async () => destination);
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
+      const query = JSON.parse(String(init?.body)).query;
+      const node = query.includes("BloomBoxAcceptanceDestination") ? await finalDestination()
+        : query.includes("BloomBoxDeliveryDestination") ? destination : source;
+      return Response.json({ data: { shop: { myshopifyDomain: scope }, node } }, { headers: { "x-shopify-api-version": config.apiVersion } });
+    });
+    const reader = new ShopifyAdminOrderReader(config, fetcher, acceptancePolicy.coverage);
+    const clock = vi.fn(() => acceptanceTime);
+    const orders = new PostgresShopifyOrderAcceptor(sql, protector, acceptancePolicy, clock);
+    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), new PostgresShopifyOrderLinker(sql),
+      new PostgresShopifyPaymentEvidence(sql), true, new PostgresShopifyDeliveryPlanQuery(sql), reader, clock,
+      new ShopifyAdminOrderAcceptor(reader, orders, acceptancePolicy));
+    const event = { provider: "SHOPIFY" as const, providerAccountId: scope, eventType: "shopify.order.changed",
+      externalEventId: `synthetic-${orderId}`, externalObjectId: orderId, apiVersion: config.apiVersion, occurredAt: acceptanceTime,
+      payload: { id: orderId, objectType: "shopify_order_reference", shippingAddress: { address2: "forged-address" } } };
+    return { intent, useCase, event, finalDestination, destination, clock };
+  }
+  it("connects authenticated provider reads to durable acceptance and recovers after protected-data failure", async () => {
+    const fixture = await acceptanceWorkflow("gid://shopify/Order/8051");
+    fixture.finalDestination.mockRejectedValueOnce(new Error("配送先の秘密"));
+    await expect(fixture.useCase.execute(fixture.event)).rejects.toEqual(new ShopifyDeliveryDestinationUnavailableError());
+    expect((await sql`SELECT status, version FROM bloombox.shopify_payment_evidence WHERE purchase_intent_id = ${fixture.intent.id}`)[0])
+      .toEqual({ status: "CAPTURED", version: 1 });
+    expect(await sql`SELECT id FROM bloombox.orders WHERE purchase_intent_id = ${fixture.intent.id}`).toHaveLength(0);
+    const result = await fixture.useCase.execute(fixture.event);
+    expect(result).toMatchObject({ outcome: "DUPLICATE", acceptance: { outcome: "CREATED" } });
+    if (result.acceptance.outcome === "HELD") throw new Error("Expected accepted workflow order");
+    const { orderId } = result.acceptance;
+    const repeats = await Promise.all(Array.from({ length: 6 }, () => fixture.useCase.execute(fixture.event)));
+    expect(repeats.every((repeat) => repeat.acceptance.outcome === "DUPLICATE")).toBe(true);
+    expect(await sql`SELECT id FROM bloombox.orders WHERE purchase_intent_id = ${fixture.intent.id}`).toHaveLength(1);
+    const [gift] = await sql`SELECT pii_key_id, address_ciphertext FROM bloombox.order_gift_snapshots WHERE order_id = ${orderId}`;
+    const address = JSON.parse(protector.unprotect({ keyId: gift.pii_key_id, ciphertext: gift.address_ciphertext }, `order:${orderId}:address:v1`));
+    expect(address).toMatchObject({ addressLine2: "建物の秘密", phone: "+810000000000", postalCode: "1000001" });
+    const audits = await sql`SELECT safe_metadata FROM bloombox.audit_logs WHERE resource_id = ${orderId}`;
+    const events = await sql`SELECT payload FROM bloombox.outbox_events WHERE aggregate_id = ${orderId}`;
+    expect(audits).toHaveLength(1); expect(events).toHaveLength(1);
+    expect(JSON.stringify([result, repeats, audits, events])).not.toMatch(/秘密|810000|forged-address|1000001/);
+  });
+  it("holds changed provider data and a delivery cutoff crossed during the final address read", async () => {
+    const fixture = await acceptanceWorkflow("gid://shopify/Order/8052");
+    fixture.finalDestination.mockResolvedValueOnce({ ...fixture.destination, updatedAt: "2026-09-11T10:00:01Z" });
+    expect((await fixture.useCase.execute(fixture.event)).acceptance).toEqual({ outcome: "HELD", reason: "ORDER_CHANGED" });
+    fixture.finalDestination.mockImplementationOnce(async () => {
+      fixture.clock.mockReturnValue(new Date("2026-09-11T15:00:00Z")); return fixture.destination;
+    });
+    expect((await fixture.useCase.execute(fixture.event)).acceptance).toEqual({ outcome: "HELD", reason: "DELIVERY_UNAVAILABLE" });
+    expect(await sql`SELECT id FROM bloombox.orders WHERE purchase_intent_id = ${fixture.intent.id}`).toHaveLength(0);
+    expect((await sql`SELECT status, version FROM bloombox.shopify_payment_evidence WHERE purchase_intent_id = ${fixture.intent.id}`)[0])
+      .toEqual({ status: "CAPTURED", version: 1 });
+  });
   it("accepts one real order with immutable tax evidence and encrypted gift/address snapshots across concurrent retries", async () => {
     const input = await acceptanceInput("gid://shopify/Order/8101");
     const writer = new PostgresShopifyOrderAcceptor(sql, protector, acceptancePolicy, () => acceptanceTime);
