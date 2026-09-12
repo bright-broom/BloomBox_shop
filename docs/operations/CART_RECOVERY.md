@@ -45,3 +45,11 @@
 休業日・締切・地域制約、実在庫予約、Shopify Checkout、出荷・追跡更新、通知連携は未完了。[残課題台帳](BACKLOG.md)の前提条件と受入条件に従って進める。
 
 戻す場合はこの機能PRをrevertする。DB・環境変数・外部サービスの変更はない。保存形式v1を維持しているためデータ移行は不要。ただし旧実装へ戻すと、期限外の日付を持つカートは再び空表示となる。
+
+## Preview form save failures — 2026-09-12
+
+Buyer information and review confirmation forms now catch storage failures during submission. They display a generic `role="alert"` message, retain the current form, and navigate only after saving succeeds. Retrying clears the previous message. Storage exception details and entered personal data are not logged or included in the error text. Existing storage formats, approval invalidation order and pricing are unchanged.
+
+Verification: six submit-handler regression tests cover quota/security exceptions, successful retries, cleared error state and save-before-navigation ordering. Four failure cases reproduced uncaught exceptions before the change. `pnpm check:ci` passed (759 tests, 138 external/DB-dependent tests skipped). Local Chrome confirmed M gift → cart (JPY 5,000) → buyer form → review → dummy payment screen, with no horizontal overflow on the 320px review page. Fault injection is a unit-level check; browser storage settings were not changed. No real payment or Shopify checkout E2E was run.
+
+Scope: this change covers writes during these two submit operations. Storage access failures while initially loading a page and other cart/storage operations are separate remaining work. Revert the form changes to roll back; there is no migration or environment change.
