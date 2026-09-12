@@ -332,7 +332,7 @@ describeDatabase("durable Shopify checkout attempts", () => {
     expect(await processor.execute()).toEqual({ claimed: 1, processed: 0, retryScheduled: 1, failed: 0 });
     const [pending] = await sql`SELECT status, processed_at, last_error_code FROM bloombox.webhook_inbox WHERE external_event_id = ${fixture.event.externalEventId}`;
     expect(pending).toMatchObject({ status: "PENDING", processed_at: null,
-      last_error_code: reason === "live-order" ? "SettlementEvidenceConflictError" : "ShopifyCommerceIncompleteError" });
+      last_error_code: reason === "live-order" ? "SettlementEvidenceConflictError" : "ShopifyCommerceConfigurationHoldError" });
     if (reason === "live-order") {
       expect(await fixture.completion.orders.find(scope, fixture.event.externalObjectId)).toBeNull();
       expect(await sql`SELECT * FROM bloombox.shopify_payment_evidence WHERE purchase_intent_id = ${fixture.intent.id}`).toHaveLength(0);

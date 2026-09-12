@@ -146,3 +146,5 @@ GRANT USAGE ON SCHEMA bloombox TO bloombox_inbox_monitor;
 GRANT SELECT (id, commerce_provider, provider_account_id, status, received_at, available_at,
   locked_at, attempts, payload_expires_at, payload_purged_at)
   ON bloombox.webhook_inbox TO bloombox_inbox_monitor;
+-- Fixed categories only; the raw last_error_code column remains inaccessible.
+GRANT SELECT ON bloombox.shopify_inbox_diagnostic_metadata TO bloombox_inbox_monitor;

@@ -38,6 +38,8 @@ Provider integrations use narrow application-owned ports. A Stripe adapter may b
 
 Offline recovery of an exhausted Inbox event now uses a Payment-owned DB-owner PLAN/APPLY command, following the existing owner-maintenance pattern. A short-lived, content-bound plan and protected immutable audit receipt authorize one FAILED-to-PENDING retry budget reset. Runtime credentials cannot issue this command or forge its receipt. Queue state and receipt commit together; repeat requests consult the receipt without resetting work that has since progressed. This does not authorize commerce mutations, decrypt payloads, bypass worker idempotency, extend retention or activate Shopify. See [recovery scope and rollback](../../operations/WEBHOOK_RETRY.md).
 
+Offline Inbox diagnostics now expose only allowlisted last-failure categories through an owner-backed security-barrier view (migration 0021). Existing metadata access is retained; the monitor cannot read raw error codes, external references, payloads or commerce data. Unknown values collapse to UNKNOWN inside SQL. The bounded single-view scan reports the last observed failure, not current order authority; no completion, retry or dispatch decision changes. See [diagnostic semantics and rollout](../../operations/SHOPIFY_INBOX_DIAGNOSTICS.md).
+
 ## Alternatives considered
 
 ### Persist the existing Order aggregate
