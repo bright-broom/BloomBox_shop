@@ -7,6 +7,7 @@ import {
   readPreviewBuyer,
   readPreviewDraft,
   readPreviewReview,
+  PreviewCheckoutCleanupError,
   type BrowserCartItem,
   type PreviewDraft,
 } from "@/modules/checkout/presentation/browser-checkout-session";
@@ -93,7 +94,14 @@ export function PreviewPayment({ enabled }: { enabled: boolean }) {
         setPaymentError("テスト決済を完了できませんでした。注文内容をもう一度ご確認ください。"); return;
       }
       router.replace("/checkout/test/complete");
-    } catch { setCompleted(false); setPaymentError("完了情報を保存できませんでした。同じ操作を再試行してください。"); }
+    } catch (error) {
+      if (error instanceof PreviewCheckoutCleanupError) {
+        router.replace("/checkout/test/complete");
+      } else {
+        setCompleted(false);
+        setPaymentError("完了情報を保存できませんでした。同じ操作を再試行してください。");
+      }
+    }
     finally {
       setPending(false);
     }
