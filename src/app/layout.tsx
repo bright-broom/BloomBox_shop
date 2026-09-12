@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Noto_Sans_JP, League_Gothic } from "next/font/google";
+import { Noto_Sans_JP } from "next/font/google";
 import Link from "next/link";
 import { siteContent } from "@/shared/infrastructure/content/site-content";
 import { loadRuntimeMode } from "@/shared/infrastructure/config/runtime-config";
@@ -13,12 +13,6 @@ import "./globals.css";
 
 const sans = Noto_Sans_JP({
   variable: "--font-sans",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const display = League_Gothic({
-  variable: "--font-display",
   subsets: ["latin"],
   display: "swap",
 });
@@ -49,7 +43,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ja">
-      <body className={`${sans.variable} ${display.variable}`}>
+      <body className={sans.variable}>
         <a className="skip-link" href="#main-content">本文へ移動</a>
         <div className="service-bar" aria-label="BloomBox のサービス情報">
           {(loadRuntimeMode() === "preview"
