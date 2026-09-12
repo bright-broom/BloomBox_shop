@@ -1,3 +1,6 @@
+import { PostgresWebhookInbox } from "@/modules/payment/infrastructure/postgres-webhook-inbox";
+import { ProcessProviderInbox } from "@/modules/payment/application/process-provider-inbox";
+import { ShopifyCommerceEventProcessor } from "@/modules/payment/application/shopify-commerce-event-processor";
 import { OperatorApprovalIntent } from "@/shared/infrastructure/security/operator-auth/approval-intent";
 import { PostgresFulfillmentInboxQuery } from "@/modules/fulfillment/infrastructure/postgres-fulfillment-inbox-query";
 import { PostgresShopifyOrderAcceptor } from "@/modules/order/infrastructure/postgres-shopify-order-acceptor";
@@ -57,6 +60,7 @@ const scope = "example-shop.myshopify.com";
 
 describeDatabase("durable Shopify checkout attempts", () => {
   const sql = postgres(safeUrl(), { max: 4, ssl: false });
+  const inboxWorkerSql = postgres(safeUrl(), { max: 4, ssl: false, connection: { role: "bloombox_worker" } });
   const approvalSql = postgres(safeUrl(), { max: 4, ssl: false, connection: { role: "bloombox_fulfillment_approver" } });
   const protector = new AesGcmDataProtector({ activeKeyId: "test", keys: new Map([["test", Buffer.alloc(32, 21)]]) });
   const intents = new PostgresPurchaseIntentRepository(sql, protector);
@@ -68,7 +72,7 @@ describeDatabase("durable Shopify checkout attempts", () => {
     });
     await sql.unsafe((await readFile("database/roles.sql", "utf8")).replace(/^\\set ON_ERROR_STOP on$/m, ""));
   });
-  afterAll(async () => { await approvalSql.end({ timeout: 5 }); await sql.end({ timeout: 5 }); });
+  afterAll(async () => { await inboxWorkerSql.end({ timeout: 5 }); await approvalSql.end({ timeout: 5 }); await sql.end({ timeout: 5 }); });
   async function prepare() { const intent = makeIntent(); await intents.save(intent); return intent; }
   function flow(intent: PurchaseIntent, repo: ShopifyCheckoutAttempts = attempts, enabled = () => true) {
     const cart = cartFor(intent);
@@ -239,7 +243,7 @@ describeDatabase("durable Shopify checkout attempts", () => {
       address: { countryCode: "JP", prefecture: "東京都", postalCode: "100-0001", recipientName: "配送宛名", city: "千代田区",
         addressLine: "秘密の番地", addressLine2: "秘密の建物", phone: "000-0000-0000" } };
   }
-  async function acceptanceWorkflow(orderId: string, complete = false, withFulfillment = false, withStock = false) {
+  async function acceptanceWorkflow(orderId: string, complete = false, withFulfillment = false, withStock = false, commerceSql = sql) {
     const intent = await prepare(); await flow(intent).useCase.execute(intent.id);
     const config = { storeDomain: scope, accessToken: "synthetic-admin-key", apiVersion: "2026-07" } as const;
     const bag = (amount: number) => ({ shopMoney: { amount: String(amount), currencyCode: "JPY" }, presentmentMoney: { amount: String(amount), currencyCode: "JPY" } });
@@ -277,18 +281,64 @@ describeDatabase("durable Shopify checkout attempts", () => {
     });
     const reader = new ShopifyAdminOrderReader(config, fetcher, acceptancePolicy.coverage);
     const clock = vi.fn(() => acceptanceTime);
-    const orders = new PostgresShopifyOrderAcceptor(sql, protector, acceptancePolicy, clock);
-    const intake = new PostgresShopifyFulfillmentIntake(sql, true, { approval: withStock ? "APPROVED" : "PENDING" }, clock, reader, withStock ? { readFulfillmentStock: stockResponse } : undefined);
-    const completion = { orders: new PostgresShopifyAcceptedOrderQuery(sql), payments: new PostgresShopifyOrderPaymentProjector(sql, true, clock),
-      purchases: new PostgresShopifyPurchaseConverter(sql, clock), fulfillment: withFulfillment ? intake : undefined };
-    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), new PostgresShopifyOrderLinker(sql),
-      new PostgresShopifyPaymentEvidence(sql), true, new PostgresShopifyDeliveryPlanQuery(sql), reader, clock,
+    const orders = new PostgresShopifyOrderAcceptor(commerceSql, protector, acceptancePolicy, clock);
+    const intake = new PostgresShopifyFulfillmentIntake(commerceSql, true, { approval: withStock ? "APPROVED" : "PENDING" }, clock, reader, withStock ? { readFulfillmentStock: stockResponse } : undefined);
+    const completion = { orders: new PostgresShopifyAcceptedOrderQuery(commerceSql), payments: new PostgresShopifyOrderPaymentProjector(commerceSql, true, clock),
+      purchases: new PostgresShopifyPurchaseConverter(commerceSql, clock), fulfillment: withFulfillment ? intake : undefined };
+    const useCase = new ReconcileShopifyPayment(new ReadShopifyReference(reader), new PostgresShopifyOrderLinker(commerceSql),
+      new PostgresShopifyPaymentEvidence(commerceSql), true, new PostgresShopifyDeliveryPlanQuery(commerceSql), reader, clock,
       new ShopifyAdminOrderAcceptor(reader, orders, acceptancePolicy), complete ? completion : undefined);
     const event = { provider: "SHOPIFY" as const, providerAccountId: scope, eventType: "shopify.order.changed",
       externalEventId: `synthetic-${orderId}`, externalObjectId: orderId, apiVersion: config.apiVersion, occurredAt: acceptanceTime,
       payload: { id: orderId, objectType: "shopify_order_reference", shippingAddress: { address2: "forged-address" } } };
     return { intent, useCase, event, finalDestination, destination, clock, source, fetcher, respond, completion, intake, reader, fulfillmentSource, fulfillmentResponse, stockSource, stockResponse };
   }
+  it("retries a partially committed queue event and completes once without duplicate commerce writes", async () => {
+    const fixture = await acceptanceWorkflow("gid://shopify/Order/99001", true, true, true, inboxWorkerSql);
+    const inbox = new PostgresWebhookInbox(inboxWorkerSql, protector, randomUUID, fixture.clock, { provider: "SHOPIFY", accountId: scope });
+    const processor = new ProcessProviderInbox(inbox, new ShopifyCommerceEventProcessor(fixture.useCase, { shop: scope, apiVersion: "2026-07" }), fixture.clock, randomUUID, 1);
+    await inbox.record(fixture.event);
+    const interrupted = vi.spyOn(fixture.intake, "reconcile").mockRejectedValueOnce(new ShopifyFulfillmentIntakeError());
+    expect(await processor.execute()).toEqual({ claimed: 1, processed: 0, retryScheduled: 1, failed: 0 });
+    const [pending] = await sql`SELECT status, available_at, processed_at FROM bloombox.webhook_inbox WHERE external_event_id = ${fixture.event.externalEventId}`;
+    expect(pending.status).toBe("PENDING"); expect(pending.processed_at).toBeNull();
+    const accepted = await fixture.completion.orders.find(scope, fixture.event.externalObjectId);
+    expect(accepted).not.toBeNull();
+    expect((await intents.findById(fixture.intent.id))?.status).toBe("CONVERTED");
+    interrupted.mockRestore();
+    fixture.clock.mockReturnValue(new Date(pending.available_at));
+    fixture.stockSource.checkedAt = new Date(pending.available_at).toISOString();
+    fixture.finalDestination.mockClear();
+    expect(await processor.execute()).toEqual({ claimed: 1, processed: 1, retryScheduled: 0, failed: 0 });
+    expect(fixture.finalDestination).not.toHaveBeenCalled();
+    expect(await inbox.record(fixture.event)).toBe("DUPLICATE");
+    expect(await processor.execute()).toEqual({ claimed: 0, processed: 0, retryScheduled: 0, failed: 0 });
+    // Another notification for the same source also resumes the same accepted order.
+    await inbox.record({ ...fixture.event, externalEventId: fixture.event.externalEventId + "-duplicate" });
+    expect((await processor.execute()).processed).toBe(1);
+    expect(await fixture.completion.orders.find(scope, fixture.event.externalObjectId)).toEqual(accepted);
+    const intakes = await sql`SELECT * FROM bloombox.shopify_fulfillment_intakes WHERE purchase_intent_id = ${fixture.intent.id}`;
+    expect(intakes).toHaveLength(1);
+    expect(await sql`SELECT id FROM bloombox.shipments WHERE fulfillment_id = ${intakes[0].fulfillment_id}`).toHaveLength(0);
+  });
+
+  it.each(["missing-completion", "missing-fulfillment", "live-order"] as const)("never completes an unresolved queue event: %s", async (reason) => {
+    const id = { "missing-completion": 99002, "missing-fulfillment": 99003, "live-order": 99004 }[reason];
+    const fixture = await acceptanceWorkflow(`gid://shopify/Order/${id}`, reason !== "missing-completion", reason !== "missing-fulfillment", true, inboxWorkerSql);
+    if (reason === "live-order") { fixture.source.test = false; fixture.source.transactions[0].test = false; }
+    const inbox = new PostgresWebhookInbox(inboxWorkerSql, protector, randomUUID, fixture.clock, { provider: "SHOPIFY", accountId: scope });
+    await inbox.record(fixture.event);
+    const processor = new ProcessProviderInbox(inbox, new ShopifyCommerceEventProcessor(fixture.useCase, { shop: scope, apiVersion: "2026-07" }), fixture.clock, randomUUID, 1);
+    expect(await processor.execute()).toEqual({ claimed: 1, processed: 0, retryScheduled: 1, failed: 0 });
+    const [pending] = await sql`SELECT status, processed_at, last_error_code FROM bloombox.webhook_inbox WHERE external_event_id = ${fixture.event.externalEventId}`;
+    expect(pending).toMatchObject({ status: "PENDING", processed_at: null,
+      last_error_code: reason === "live-order" ? "SettlementEvidenceConflictError" : "ShopifyCommerceIncompleteError" });
+    if (reason === "live-order") {
+      expect(await fixture.completion.orders.find(scope, fixture.event.externalObjectId)).toBeNull();
+      expect(await sql`SELECT * FROM bloombox.shopify_payment_evidence WHERE purchase_intent_id = ${fixture.intent.id}`).toHaveLength(0);
+    }
+  });
+
   async function approvalFixture(externalId: number) {
     const fixture = await acceptanceWorkflow(`gid://shopify/Order/${externalId}`, true, true, true);
     await fixture.useCase.execute(fixture.event);
