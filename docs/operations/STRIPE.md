@@ -4,7 +4,7 @@ This runbook prepares the dormant Stripe connector defined by ADR 0002. Do not e
 
 ## Fixed integration contract
 
-- API version: `2026-07-29.dahlia`, pinned by the installed Stripe SDK and checked-in configuration.
+- API version: `2026-07-29.dahlia`, pinned by checked-in configuration and explicit per-request options, independently of the installed SDK default.
 - Checkout model: hosted Stripe Checkout Session in `payment` mode.
 - Currency: JPY.
 - Tax model: `automatic_tax` and the price/shipping `tax_behavior` are configured as one invariant. `inclusive` or `exclusive` requires automatic tax; `unspecified` requires it to be disabled.
@@ -14,6 +14,8 @@ This runbook prepares the dormant Stripe connector defined by ADR 0002. Do not e
 - Payment authority: verified Stripe webhook or authenticated Stripe Events API response, never the browser success URL.
 - Provider assignment: one PurchaseIntent uses one provider after Checkout creation and cannot switch in flight.
 - Redirect authority: Checkout URLs must be HTTPS and use `checkout.stripe.com` or one explicitly configured custom Checkout hostname. Mode and Session ID prefixes must agree.
+
+SDK updates do not upgrade the wire API or the webhook endpoint automatically. Checkout create/retrieve and every Events pagination request set the configured API version using supported per-request options. Session retrieval passes options as the third argument, after an empty parameter object. Offline webhook signature verification performs no API call and still rejects a signed event with a different version. This preserves the existing contract without an unsafe cast to the SDK's latest-only constructor type. Real-SDK transport tests verify the outgoing version header, checkout idempotency and event pagination. A deliberate API upgrade remains a separate change with webhook/account validation. See [Stripe API versioning](https://docs.stripe.com/api/versioning?lang=node).
 
 ## Account-side setup
 

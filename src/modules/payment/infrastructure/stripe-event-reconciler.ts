@@ -29,9 +29,8 @@ export interface StripeEventSource {
 export class StripeSdkEventSource implements StripeEventSource {
   private readonly stripe: Stripe;
 
-  constructor(config: StripeConfig) {
+  constructor(private readonly config: StripeConfig) {
     this.stripe = new Stripe(config.reconciliationSecretKey, {
-      apiVersion: config.apiVersion,
       appInfo: { name: "BloomBox", version: "0.1.0" },
       maxNetworkRetries: 2,
       timeout: 10_000,
@@ -43,7 +42,7 @@ export class StripeSdkEventSource implements StripeEventSource {
     return this.stripe.events.list({
       created: { gte: Math.floor(since.getTime() / 1000) },
       limit: 100,
-    });
+    }, { apiVersion: this.config.apiVersion });
   }
 }
 

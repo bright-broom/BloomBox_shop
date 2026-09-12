@@ -137,7 +137,7 @@ function paymentIntent() {
 }
 
 function signature(payload: string): string {
-  const stripe = new Stripe(config.checkoutSecretKey, { apiVersion: config.apiVersion });
+  const stripe = new Stripe(config.checkoutSecretKey);
   return stripe.webhooks.generateTestHeaderString({
     payload,
     secret: config.webhookSecret,
