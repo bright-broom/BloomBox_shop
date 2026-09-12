@@ -29,7 +29,7 @@
 
 Auth.js の OIDC 検証（PKCE、state、nonce、issuer、audience、有効期限）に加え、jose で Google 固定公開鍵エンドポイントによる RS256 署名を検証します。プロバイダー通信は Google の限定ホスト、5秒の期限、256KiB の受信上限、リダイレクト禁止を適用します。認証 POST は同一オリジンと CSRF、または Next.js Server Action の検証を通し、本文を8KiBに制限します。Server Action は Next.js 自身の本文制限を使用します。
 
-セッションは暗号化した HttpOnly / SameSite=Lax / host-only Cookie で、HTTPS では Secure と `__Host-` を使います。ログインから15分の絶対期限を持ち、閲覧で期限を延長しません。Google access/refresh token、氏名、画像を保存せず、ブラウザーに返すセッションは subject と期限だけです。エラーの生ログやプロフィールは出力しません。管理画面・認証応答は private/no-store、no-referrer、検索除外です。
+セッションは暗号化した HttpOnly / SameSite=Lax / host-only Cookie で、HTTPS では Secure と `__Host-` を使います。ログインから15分の絶対期限を持ち、閲覧で期限を延長しません。Google access/refresh token、氏名、画像を保存せず、ブラウザーに返すセッションは subject と期限だけです。エラーの生ログやプロフィールは出力しません。管理画面・認証応答は private/no-store・検索除外です。管理画面は Referrer-Policy: same-origin とし、同一サイト内の通常フォーム送信に必要な Origin を保持します。外部サイトへの Referer は送りません。認証 API 応答は no-referrer を維持します。
 
 許可メールの削除は次の要求でログイン状態を無効化し、subject 対応付けの追加・削除・内部UUID変更も再ログインを必要とします。DB の店舗権限失効も各参照で再確認します。秘密値の更新は全 Cookie を無効にします。ログアウトは現在のブラウザー Cookie を削除します。登録済み担当者の `sessionVersion` を増やすと、その担当者の全ブラウザーの古いCookieを拒否できます（[手順・制約・初回導入の影響](OPERATOR_SESSION_REVOCATION.md)）。変更は全稼働プロセスへ反映し、一度失効した版に戻さないでください。端末単位のセッション台帳とGoogle側のアカウント変更通知は未実装です。アカウント自体のアクセス停止には許可リスト・対応付け・DB権限の削除を使います。
 
@@ -50,3 +50,9 @@ NextAuth 5.0.0-beta.32 を固定採用しています。依存監査と合成プ
 - 画像：[モバイル](evidence/operator-login-mobile.png)／[デスクトップ](evidence/operator-login-desktop.png)。いずれも接続情報未設定の画面で、実アカウント情報を含みません。
 
 権限管理画面は `DATABASE_PERMISSION_MANAGER_URL` を追加で必要とします。一般担当者や未設定の接続では保護データを返しません。実管理者の自動登録は行いません。
+
+## 通常フォーム送信の修正
+
+ブラウザーで再ログイン時に `Origin: null` により Server Action が拒否される問題を確認しました。管理画面の `no-referrer` を `same-origin` へ変更し、通常フォーム送信の Origin と外部への参照元非送信を両立します。送信元の検証・Cookie・CSRF・店舗権限・承認条件は維持します。ロールバック時は同じフォーム障害が再発するため、送信元検証を緩めず、ログインを無効にして原因を解消してください。
+
+修正時の検証: `pnpm check:ci`（通常748件、静的検査・型・Lint・ビルド）が成功しました。ローカルの実Google再ログインで、登録済み担当者の表示と、店舗権限未登録時の注文拒否を確認しました。設定変更前に旧セッションが拒否されることも確認しています。検証用アカウントの識別子・認証情報・DB接続先は公開Gitに含めません。これはVercelや実Shopify注文の稼働証跡ではありません。
