@@ -1,5 +1,5 @@
 export type VerifiedProviderEvent = Readonly<{
-  provider: "STRIPE";
+  provider: "STRIPE" | "SHOPIFY";
   providerAccountId: string;
   externalEventId: string;
   eventType: string;
@@ -16,8 +16,8 @@ export class InvalidProviderWebhookError extends Error {
   }
 }
 
-export interface ProviderWebhookVerifier {
-  verify(rawBody: string, signature: string): VerifiedProviderEvent | null;
+export interface ProviderWebhookVerifier<Body = string, Signature = string> {
+  verify(rawBody: Body, signature: Signature): VerifiedProviderEvent | null;
 }
 
 export interface WebhookInbox {
@@ -28,13 +28,13 @@ export interface ProviderEventProcessor {
   process(event: VerifiedProviderEvent): Promise<void>;
 }
 
-export class ReceiveProviderWebhook {
+export class ReceiveProviderWebhook<Body = string, Signature = string> {
   constructor(
-    private readonly verifier: ProviderWebhookVerifier,
+    private readonly verifier: ProviderWebhookVerifier<Body, Signature>,
     private readonly inbox: WebhookInbox,
   ) {}
 
-  async execute(rawBody: string, signature: string): Promise<"IGNORED" | "INSERTED" | "DUPLICATE"> {
+  async execute(rawBody: Body, signature: Signature): Promise<"IGNORED" | "INSERTED" | "DUPLICATE"> {
     const event = this.verifier.verify(rawBody, signature);
     if (!event) return "IGNORED";
     return this.inbox.record(event);

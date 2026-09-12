@@ -97,6 +97,7 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
   ) {}
 
   async process(event: VerifiedProviderEvent): Promise<void> {
+    if (event.provider !== "STRIPE") throw new InvalidStripeCommerceEventError();
     if (event.eventType.startsWith("checkout.session.")) {
       await this.processCheckoutEvent(event);
       return;

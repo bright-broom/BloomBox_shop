@@ -1,3 +1,5 @@
+import { SizeComparison } from "@/ui/size-comparison";
+import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import type { Metadata } from "next";
 import { application } from "@/shared/infrastructure/composition-root";
 import { ProductCard } from "@/ui/product-card";
@@ -34,6 +36,7 @@ export default async function FlowersPage({ searchParams }: FlowersPageProps) {
     occasion: criteria.occasion,
     sort: criteria.sort,
   });
+  const launchPreview = result.products.length > 0 && result.products.every((product) => product.previewOffer);
 
   return (
     <section className="catalog-page section-shell">
@@ -43,11 +46,10 @@ export default async function FlowersPage({ searchParams }: FlowersPageProps) {
           <h1>気持ちに似合う、<br />今の花。</h1>
         </div>
         <p>
-          その季節にいちばん美しい花を、信頼するつくり手から。
-          色や形だけでなく、贈る場面まで想像して束ねています。
+          {launchPreview ? giftExperienceContent.launch.lead : "その季節にいちばん美しい花を、信頼するつくり手から。色や形だけでなく、贈る場面まで想像して束ねています。"}
         </p>
       </header>
-      <form className="catalog-tools" method="get" role="search">
+      {!launchPreview ? <form className="catalog-tools" method="get" role="search">
         <div className="catalog-search-field">
           <label htmlFor="catalog-query">花や贈る場面から探す</label>
           <input
@@ -78,21 +80,21 @@ export default async function FlowersPage({ searchParams }: FlowersPageProps) {
           </select>
         </div>
         <button className="secondary-button" type="submit">条件を適用</button>
-      </form>
+      </form> : null}
       <div className="filter-row" aria-live="polite">
         <span>{result.products.length === result.total ? "すべての季節の花" : "検索結果"}</span>
-        <span>{String(result.products.length).padStart(2, "0")} / {String(result.total).padStart(2, "0")} COLLECTIONS</span>
+        <span>{String(result.products.length).padStart(2, "0")} / {String(result.total).padStart(2, "0")} {launchPreview ? "SIZES" : "COLLECTIONS"}</span>
       </div>
-      <div className="product-grid">
-        {result.products.length > 0 ? result.products.map((product, index) => (
-          <ProductCard key={product.id} product={product} index={index} />
+      {result.products.some((product) => product.previewOffer) ? <SizeComparison products={result.products} /> : <div className="product-grid">
+        {result.products.length > 0 ? result.products.map((product) => (
+          <ProductCard key={product.id} product={product} headingLevel={2} />
         )) : (
           <div className="catalog-empty" role="status">
             <p>{result.total === 0 ? siteContent.catalog.emptyMessage : siteContent.catalog.noResultsMessage}</p>
             {result.total > 0 ? <Link className="text-link" href="/flowers">条件をクリア</Link> : null}
           </div>
         )}
-      </div>
+      </div>}
     </section>
   );
 }

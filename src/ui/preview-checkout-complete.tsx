@@ -5,6 +5,8 @@ import { formatMoney, money } from "@/shared/domain/money";
 import Link from "next/link";
 import { useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
 import { PreviewCheckoutUnavailable, TestModeBanner } from "@/ui/preview-checkout-shared";
+import { PreviewReferralOrder } from "@/ui/preview-referral-order";
+import { referralContent } from "@/shared/infrastructure/content/referral-content";
 
 export function PreviewCheckoutComplete({ enabled }: { enabled: boolean }) {
   const revision = useCheckoutSessionRevision();
@@ -44,6 +46,7 @@ export function PreviewCheckoutComplete({ enabled }: { enabled: boolean }) {
         <div><dt>お届け希望日</dt><dd>{receipt.deliveryDate}</dd></div>
         <div><dt>商品小計</dt><dd>{formatMoney(money(receipt.subtotalAmount))}</dd></div>
         <div><dt>テスト送料</dt><dd>{formatMoney(money(receipt.shippingAmount))}</dd></div>
+        {receipt.discountAmount > 0 ? <div><dt>{referralContent.discountLabel}</dt><dd>−{formatMoney(money(receipt.discountAmount))}</dd></div> : null}
         <div><dt>テスト合計</dt><dd>{formatMoney(money(receipt.totalAmount))}</dd></div>
       </dl>
       <p className="data-minimization-note">
@@ -55,6 +58,7 @@ export function PreviewCheckoutComplete({ enabled }: { enabled: boolean }) {
         </Link>
         <Link className="text-link" href="/cart">空のカートを確認する</Link>
       </div>
+      <PreviewReferralOrder requestId={receipt.requestId} tracked={receipt.referralTracked} />
     </>
   );
 }

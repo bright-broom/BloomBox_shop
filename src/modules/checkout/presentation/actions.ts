@@ -1,6 +1,8 @@
 "use server";
 
 import { DeliveryDateUnavailableError } from "@/modules/fulfillment/public";
+import { productId } from "@/modules/catalog/public";
+import { PREVIEW_SHIPPING_AMOUNT } from "../domain/preview-pricing";
 import { formatMoney } from "@/shared/domain/money";
 import { application } from "@/shared/infrastructure/composition-root";
 import { reportUnexpectedError } from "@/shared/infrastructure/observability/report-unexpected-error";
@@ -35,13 +37,17 @@ export async function createPurchaseIntentAction(
     if (prepared.checkoutSession) {
       return { checkout: { url: prepared.checkoutSession.url } };
     }
+    const product = await application.getProduct.byId(productId(parsed.data.productId));
+    if (!product?.available) throw new ProductUnavailableError();
     return {
       draft: {
+        requestId: parsed.data.requestId,
         displayId: intent.displayId,
         productName: intent.item.productName,
         quantity: intent.item.quantity,
         deliveryDate: intent.recipient.deliveryDate,
         subtotalAmount: intent.item.subtotal.amount,
+        shippingAmount: product.previewOffer?.shippingAmount ?? PREVIEW_SHIPPING_AMOUNT,
         formattedTotal: formatMoney(intent.item.subtotal),
       },
     };

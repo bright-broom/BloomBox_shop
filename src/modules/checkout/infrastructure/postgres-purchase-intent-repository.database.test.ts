@@ -55,8 +55,8 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       ORDER BY version
     `;
 
-    expect(rows).toHaveLength(4);
-    expect(rows.map((row) => row.version)).toEqual(["0001", "0002", "0003", "0004"]);
+    expect(rows).toHaveLength(18);
+    expect(rows.map((row) => row.version)).toEqual(["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018"]);
     expect(rows.every((row) => /^[0-9a-f]{64}$/.test(row.checksum))).toBe(true);
   });
 
@@ -229,6 +229,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
         fulfillments.status AS fulfillment_status,
         order_item.catalog_product_id,
         order_item.external_product_id,
+        order_item.included_tax_minor AS item_included_tax_minor,
         gift.address_ciphertext,
         (SELECT COUNT(*)::integer FROM bloombox.orders WHERE purchase_intent_id = ${intentId}) AS order_count,
         (SELECT COUNT(*)::integer FROM bloombox.financial_transactions WHERE payment_id = payments.id) AS ledger_transaction_count
@@ -246,6 +247,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       order_status: "CONFIRMED",
       total_minor: "7100",
       included_tax_minor: "600",
+      item_included_tax_minor: null,
       payment_status: "CAPTURED",
       fulfillment_status: "UNFULFILLED",
       catalog_product_id: "prod_haru_01",

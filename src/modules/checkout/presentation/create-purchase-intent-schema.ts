@@ -30,11 +30,13 @@ export type CreatePurchaseIntentFormState = Readonly<{
   error?: string;
   fieldErrors?: Readonly<Record<string, readonly string[]>>;
   draft?: Readonly<{
+    requestId: string;
     displayId: string;
     productName: string;
     quantity: number;
     deliveryDate: string;
     subtotalAmount: number;
+    shippingAmount: number;
     formattedTotal: string;
   }>;
   checkout?: Readonly<{

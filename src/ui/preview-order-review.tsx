@@ -2,7 +2,6 @@
 
 import {
   acceptPreviewReview,
-  PREVIEW_SHIPPING_AMOUNT,
   readCart,
   readPreviewBuyer,
   readPreviewDraft,
@@ -39,7 +38,7 @@ export function PreviewOrderReview({ enabled }: { enabled: boolean }) {
   }
 
   const subtotal = money(draft.subtotalAmount);
-  const total = money(subtotal.amount + PREVIEW_SHIPPING_AMOUNT);
+  const total = money(subtotal.amount + draft.shippingAmount);
 
   function continueToPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -87,7 +86,7 @@ export function PreviewOrderReview({ enabled }: { enabled: boolean }) {
         <h2>お支払い内容</h2>
         <dl>
           <div><dt>商品小計</dt><dd>{formatMoney(subtotal)}</dd></div>
-          <div><dt>テスト送料</dt><dd>{formatMoney(money(PREVIEW_SHIPPING_AMOUNT))}</dd></div>
+          <div><dt>テスト送料</dt><dd>{formatMoney(money(draft.shippingAmount))}</dd></div>
           <div className="checkout-total-row"><dt>お支払い合計</dt><dd>{formatMoney(total)}</dd></div>
         </dl>
         <form onSubmit={continueToPayment}>

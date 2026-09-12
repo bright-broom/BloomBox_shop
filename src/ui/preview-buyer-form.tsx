@@ -180,6 +180,8 @@ function BuyerDetailsForm({ initialBuyer }: { initialBuyer: PreviewBuyer | null 
     const parsed = previewBuyerSchema.safeParse(Object.fromEntries(new FormData(event.currentTarget)));
     if (!parsed.success) {
       setFieldErrors(parsed.error.flatten().fieldErrors);
+      const firstField = event.currentTarget.elements.namedItem(String(parsed.error.issues[0]?.path[0] ?? ""));
+      if (firstField instanceof HTMLElement) firstField.focus();
       return;
     }
     storePreviewBuyer(window.sessionStorage, parsed.data);
@@ -198,13 +200,13 @@ function BuyerDetailsForm({ initialBuyer }: { initialBuyer: PreviewBuyer | null 
             <span><i aria-hidden="true">*</i> 必須項目</span>
           </div>
           <CheckoutField label="ご注文者のお名前" name="buyerName" error={fieldErrors.buyerName}>
-            <input name="buyerName" id="buyerName" autoComplete="name" aria-describedby="buyerName-error" defaultValue={initialBuyer?.buyerName} required />
+            <input name="buyerName" id="buyerName" aria-invalid={Boolean(fieldErrors.buyerName?.length)} autoComplete="name" aria-describedby="buyerName-error" defaultValue={initialBuyer?.buyerName} required />
           </CheckoutField>
           <CheckoutField label="メールアドレス" name="email" error={fieldErrors.email}>
-            <input name="email" id="email" type="email" inputMode="email" autoComplete="email" aria-describedby="email-error" defaultValue={initialBuyer?.email} required />
+            <input name="email" id="email" aria-invalid={Boolean(fieldErrors.email?.length)} type="email" inputMode="email" autoComplete="email" aria-describedby="email-error" defaultValue={initialBuyer?.email} required />
           </CheckoutField>
           <CheckoutField label="電話番号" name="phone" error={fieldErrors.phone}>
-            <input name="phone" id="phone" type="tel" inputMode="tel" autoComplete="tel" aria-describedby="phone-error" placeholder="例：090-1234-5678" defaultValue={initialBuyer?.phone} required />
+            <input name="phone" id="phone" aria-invalid={Boolean(fieldErrors.phone?.length)} type="tel" inputMode="tel" autoComplete="tel" aria-describedby="phone-error" placeholder="例：090-1234-5678" defaultValue={initialBuyer?.phone} required />
           </CheckoutField>
         </section>
         <section className="checkout-form-section">
@@ -218,6 +220,7 @@ function BuyerDetailsForm({ initialBuyer }: { initialBuyer: PreviewBuyer | null 
                 id="postalCode"
                 inputMode="numeric"
                 autoComplete="postal-code"
+                aria-invalid={Boolean(fieldErrors.postalCode?.length)}
                 aria-describedby="postalCode-note postalCode-lookup-status postalCode-error"
                 placeholder="例：100-0001"
                 value={postalCode}
@@ -260,19 +263,19 @@ function BuyerDetailsForm({ initialBuyer }: { initialBuyer: PreviewBuyer | null 
             </CheckoutField>
           ) : null}
           <CheckoutField label="都道府県" name="prefecture" error={fieldErrors.prefecture}>
-            <select name="prefecture" id="prefecture" autoComplete="address-level1" aria-describedby="prefecture-error" value={prefecture} onChange={(event) => setPrefecture(event.target.value)} required>
+            <select name="prefecture" id="prefecture" aria-invalid={Boolean(fieldErrors.prefecture?.length)} autoComplete="address-level1" aria-describedby="prefecture-error" value={prefecture} onChange={(event) => setPrefecture(event.target.value)} required>
               <option value="" disabled>選択してください</option>
               {JAPAN_PREFECTURES.map((item) => <option key={item}>{item}</option>)}
             </select>
           </CheckoutField>
           <CheckoutField label="市区町村" name="city" error={fieldErrors.city}>
-            <input name="city" id="city" autoComplete="address-level2" aria-describedby="city-error" value={city} onChange={(event) => setCity(event.target.value)} required />
+            <input name="city" id="city" aria-invalid={Boolean(fieldErrors.city?.length)} autoComplete="address-level2" aria-describedby="city-error" value={city} onChange={(event) => setCity(event.target.value)} required />
           </CheckoutField>
           <CheckoutField label="町名・番地" name="addressLine1" error={fieldErrors.addressLine1}>
-            <input name="addressLine1" id="addressLine1" autoComplete="address-line1" aria-describedby="addressLine1-error" value={addressLine1} onChange={(event) => setAddressLine1(event.target.value)} required />
+            <input name="addressLine1" id="addressLine1" aria-invalid={Boolean(fieldErrors.addressLine1?.length)} autoComplete="address-line1" aria-describedby="addressLine1-error" value={addressLine1} onChange={(event) => setAddressLine1(event.target.value)} required />
           </CheckoutField>
           <CheckoutField label="建物名・部屋番号（任意）" name="addressLine2" error={fieldErrors.addressLine2} required={false}>
-            <input name="addressLine2" id="addressLine2" autoComplete="address-line2" aria-describedby="addressLine2-error" defaultValue={initialBuyer?.addressLine2} />
+            <input name="addressLine2" id="addressLine2" aria-invalid={Boolean(fieldErrors.addressLine2?.length)} autoComplete="address-line2" aria-describedby="addressLine2-error" defaultValue={initialBuyer?.addressLine2} />
           </CheckoutField>
         </section>
         <button className="primary-button form-submit" type="submit">

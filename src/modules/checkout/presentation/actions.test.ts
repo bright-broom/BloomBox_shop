@@ -7,6 +7,7 @@ const { execute } = vi.hoisted(() => ({ execute: vi.fn() }));
 vi.mock("@/shared/infrastructure/composition-root", () => ({
   application: {
     preparePurchase: { execute },
+    getProduct: { byId: async () => ({ available: true }) },
   },
 }));
 
@@ -41,11 +42,13 @@ describe("createPurchaseIntentAction", () => {
 
     expect(state).toEqual({
       draft: {
+        requestId: "12345678-abcd-4000-8000-123456789012",
         displayId: "BBI-20990101-1234",
         productName: "春のひかり",
         quantity: 1,
         deliveryDate: "2026-08-28",
         subtotalAmount: 6600,
+        shippingAmount: 1100,
         formattedTotal: "￥6,600",
       },
     });

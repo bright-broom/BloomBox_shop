@@ -1,3 +1,5 @@
+import { SizeComparison } from "@/ui/size-comparison";
+import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { application } from "@/shared/infrastructure/composition-root";
 import { formatMoney } from "@/shared/domain/money";
 import type { Metadata } from "next";
@@ -21,6 +23,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
   const product = await getProductBySlug(slug);
   return product ? {
     title: product.name,
+    robots: product.previewOffer ? { index: false, follow: false } : undefined,
     description: product.description,
     alternates: { canonical: `/flowers/${product.slug}` },
     openGraph: {
@@ -44,11 +47,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   return (
     <article>
-      <script
+      {!product.previewOffer ? <script
         type="application/ld+json"
       >
         {serializeStructuredData(jsonLd)}
-      </script>
+      </script> : null}
       <div className="detail-page">
         <div className="detail-image">
         <Image
@@ -75,17 +78,17 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <h1>{product.name}</h1>
         <p className="detail-subtitle">{product.subtitle}</p>
         <p className="detail-description">{product.description}</p>
-        <div className="detail-price">{formatMoney(product.price)} <small>税込・送料別</small></div>
+        <div className="detail-price">{formatMoney(product.price)} <small>{product.previewOffer ? giftExperienceContent.launch.taxNote : "税込・送料別"}</small></div>
         {product.available ? (
           <>
             <Link className="primary-button" href={`/gift/${product.id}`}>
               この花を贈る <span aria-hidden="true">→</span>
             </Link>
-            <ul className="purchase-notes" aria-label="お届けについて">
+            {!product.previewOffer ? <ul className="purchase-notes" aria-label="お届けについて">
               <li>最短3日後からお届け</li>
               <li>メッセージカード無料</li>
               <li>安全な外部決済</li>
-            </ul>
+            </ul> : <p className="field-note">{giftExperienceContent.launch.details}</p>}
             <p className="purchase-policy-links">
               <Link href="/guide">ご利用ガイド</Link>
               <Link href="/shipping-returns">配送・返品について</Link>
@@ -94,6 +97,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         ) : (
           <p className="unavailable-note">次回の入荷まで、いましばらくお待ちください。</p>
         )}
+        {product.previewOffer ? <SizeComparison products={[product, ...relatedProducts]} selectedId={product.id} /> : null}
         <dl className="detail-list">
           <div><dt>花材</dt><dd>{product.flowers.join("、")}</dd></div>
           <div><dt>つくり手</dt><dd>{product.grower}</dd></div>
@@ -110,8 +114,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
             </div>
           </div>
           <div className="product-grid">
-            {relatedProducts.map((candidate, index) => (
-              <ProductCard key={candidate.id} product={candidate} index={index} />
+            {relatedProducts.map((candidate) => (
+              <ProductCard key={candidate.id} product={candidate} />
             ))}
           </div>
         </section>

@@ -5,6 +5,10 @@ import {
   JAPAN_PREFECTURES,
 } from "@/modules/fulfillment/public";
 import { createPurchaseIntentSchema } from "./create-purchase-intent-schema";
+import type { PreviewReferralQuote } from "./preview-referral-actions";
+import { recordPreviewMetric } from "@/shared/infrastructure/preview-metrics";
+import { PREVIEW_SHIPPING_AMOUNT, previewTotals } from "../domain/preview-pricing";
+export { PREVIEW_SHIPPING_AMOUNT } from "../domain/preview-pricing";
 
 const CART_STORAGE_KEY = "bloombox.checkout.cart.v1";
 const BUYER_STORAGE_KEY = "bloombox.checkout.buyer.v1";
@@ -13,13 +17,18 @@ const REVIEW_STORAGE_KEY = "bloombox.checkout.preview-review.v1";
 const RECEIPT_STORAGE_KEY = "bloombox.checkout.preview-receipt.v1";
 
 export const CHECKOUT_SESSION_CHANGED_EVENT = "bloombox:checkout-session-changed";
-export const PREVIEW_SHIPPING_AMOUNT = 1_100;
 export const PREVIEW_PAYMENT_LAST_FOUR = "4242";
 
-const cartItemSchema = createPurchaseIntentSchema.extend({
+// A valid stored draft may need a new delivery date. Reading must not hide it.
+const recoverableCartItemSchema = createPurchaseIntentSchema.extend({
+  deliveryDate: z.iso.date(),
   version: z.literal(1),
   productName: z.string().trim().min(1).max(80),
   unitAmount: z.number().int().nonnegative(),
+});
+
+const cartItemSchema = recoverableCartItemSchema.extend({
+  deliveryDate: createPurchaseIntentSchema.shape.deliveryDate,
 });
 
 export const previewBuyerSchema = z.object({
@@ -42,6 +51,7 @@ const previewDraftSchema = z.object({
   quantity: z.number().int().positive(),
   deliveryDate: z.iso.date(),
   subtotalAmount: z.number().int().nonnegative(),
+  shippingAmount: z.number().int().nonnegative().default(PREVIEW_SHIPPING_AMOUNT),
 });
 
 const previewReviewSchema = z.object({
@@ -59,6 +69,9 @@ const previewReceiptSchema = z.object({
   subtotalAmount: z.number().int().nonnegative(),
   shippingAmount: z.number().int().nonnegative(),
   totalAmount: z.number().int().nonnegative(),
+  discountAmount: z.number().int().nonnegative().default(0),
+  requestId: z.uuid().optional(),
+  referralTracked: z.boolean().default(false),
 });
 
 export type BrowserCartItem = z.infer<typeof cartItemSchema>;
@@ -73,12 +86,36 @@ export function readCart(storage: CheckoutStorage): BrowserCartItem | null {
   return readStored(storage, CART_STORAGE_KEY, cartItemSchema);
 }
 
-export function storeCart(storage: CheckoutStorage, cart: BrowserCartItem): void {
-  writeStored(storage, CART_STORAGE_KEY, cartItemSchema.parse(cart));
-  storage.removeItem(BUYER_STORAGE_KEY);
+export function readRecoverableCart(storage: CheckoutStorage): BrowserCartItem | null {
+  return readStored(storage, CART_STORAGE_KEY, recoverableCartItemSchema);
+}
+
+export class CartChangedError extends Error {
+  constructor() {
+    super("カートが変更されています。カートへ戻り、最新の内容から編集してください。");
+    this.name = "CartChangedError";
+  }
+}
+
+export function storeCart(
+  storage: CheckoutStorage,
+  cart: BrowserCartItem,
+  expectedRequestId?: string | null,
+): void {
+  const validated = cartItemSchema.parse(cart);
+  const previous = readRecoverableCart(storage);
+  if (expectedRequestId !== undefined && (previous?.requestId ?? null) !== expectedRequestId) {
+    throw new CartChangedError();
+  }
+  // A different recipient/product must not inherit the previous recipient's address.
+  if (!previous || previous.productId !== validated.productId || previous.recipientName !== validated.recipientName) {
+    storage.removeItem(BUYER_STORAGE_KEY);
+  }
   storage.removeItem(DRAFT_STORAGE_KEY);
   storage.removeItem(REVIEW_STORAGE_KEY);
   storage.removeItem(RECEIPT_STORAGE_KEY);
+  // Invalidate approval before changing the cart, even when a storage write fails.
+  writeStored(storage, CART_STORAGE_KEY, validated);
   notifyCheckoutSessionChanged();
 }
 
@@ -95,7 +132,9 @@ export function readPreviewBuyer(storage: CheckoutStorage): PreviewBuyer | null 
 }
 
 export function storePreviewBuyer(storage: CheckoutStorage, buyer: PreviewBuyer): void {
-  writeStored(storage, BUYER_STORAGE_KEY, previewBuyerSchema.parse(buyer));
+  const validated = previewBuyerSchema.parse(buyer);
+  storage.removeItem(REVIEW_STORAGE_KEY);
+  writeStored(storage, BUYER_STORAGE_KEY, validated);
   notifyCheckoutSessionChanged();
 }
 
@@ -103,10 +142,15 @@ export function readPreviewDraft(storage: CheckoutStorage): PreviewDraft | null 
   return readStored(storage, DRAFT_STORAGE_KEY, previewDraftSchema);
 }
 
-export function storePreviewDraft(storage: CheckoutStorage, draft: PreviewDraft): void {
+export function storePreviewDraft(storage: CheckoutStorage, draft: z.input<typeof previewDraftSchema>): void {
   writeStored(storage, DRAFT_STORAGE_KEY, previewDraftSchema.parse(draft));
   storage.removeItem(REVIEW_STORAGE_KEY);
   notifyCheckoutSessionChanged();
+}
+
+export function storePreparedPreviewDraft(storage: CheckoutStorage, requestId: string, draft: z.input<typeof previewDraftSchema>): void {
+  if (readRecoverableCart(storage)?.requestId !== requestId) throw new CartChangedError();
+  storePreviewDraft(storage, draft);
 }
 
 export function readPreviewReview(storage: CheckoutStorage): PreviewReview | null {
@@ -144,12 +188,22 @@ export function readPreviewReceipt(storage: CheckoutStorage): PreviewReceipt | n
 export function completePreviewCheckout(
   storage: CheckoutStorage,
   completedAt = new Date(),
+  settlement?: PreviewReferralQuote,
 ): PreviewReceipt | null {
   const cart = readCart(storage);
   const buyer = readPreviewBuyer(storage);
   const draft = readPreviewDraft(storage);
   const review = readPreviewReview(storage);
   if (!cart || !buyer || !draft || !review) return null;
+  if (settlement && (
+    settlement.requestId !== cart.requestId || settlement.productId !== cart.productId
+    || settlement.quantity !== cart.quantity || settlement.quantity !== draft.quantity
+    || settlement.subtotalAmount !== draft.subtotalAmount
+    || settlement.shippingAmount !== draft.shippingAmount
+    || settlement.totalAmount !== draft.subtotalAmount + draft.shippingAmount - settlement.discountAmount
+    || !Number.isSafeInteger(settlement.discountAmount) || settlement.discountAmount < 0
+    || settlement.discountAmount > settlement.subtotalAmount
+  )) return null;
 
   const receipt = previewReceiptSchema.parse({
     version: 1,
@@ -159,11 +213,15 @@ export function completePreviewCheckout(
     quantity: draft.quantity,
     deliveryDate: draft.deliveryDate,
     subtotalAmount: draft.subtotalAmount,
-    shippingAmount: PREVIEW_SHIPPING_AMOUNT,
-    totalAmount: draft.subtotalAmount + PREVIEW_SHIPPING_AMOUNT,
+    shippingAmount: settlement?.shippingAmount ?? draft.shippingAmount,
+    discountAmount: settlement?.discountAmount ?? 0,
+    requestId: cart.requestId,
+    referralTracked: settlement?.tracked ?? false,
+    totalAmount: previewTotals(draft.subtotalAmount, draft.shippingAmount, settlement?.discountAmount ?? 0).totalAmount,
   });
 
   writeStored(storage, RECEIPT_STORAGE_KEY, receipt);
+  recordPreviewMetric({ name: "preview_purchase", requestId: cart.requestId, referralUsed: receipt.discountAmount > 0 }, storage);
   storage.removeItem(CART_STORAGE_KEY);
   storage.removeItem(BUYER_STORAGE_KEY);
   storage.removeItem(DRAFT_STORAGE_KEY);

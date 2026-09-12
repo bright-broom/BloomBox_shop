@@ -2,7 +2,7 @@
 
 import {
   CHECKOUT_SESSION_CHANGED_EVENT,
-  readCart,
+  readRecoverableCart,
 } from "@/modules/checkout/presentation/browser-checkout-session";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -11,7 +11,7 @@ export function HeaderCartLink() {
   const [quantity, setQuantity] = useState(0);
 
   useEffect(() => {
-    const refresh = () => setQuantity(readCart(window.sessionStorage)?.quantity ?? 0);
+    const refresh = () => setQuantity(readRecoverableCart(window.sessionStorage)?.quantity ?? 0);
     refresh();
     window.addEventListener(CHECKOUT_SESSION_CHANGED_EVENT, refresh);
     window.addEventListener("storage", refresh);

@@ -43,9 +43,11 @@ export class StartCheckout {
 
   async execute(rawId: string): Promise<CheckoutSession> {
     if (!this.acceptsNewCheckout()) throw new CheckoutPausedError();
+    if (this.provider.provider !== "STRIPE") throw new CheckoutProviderMismatchError();
     const id = purchaseIntentId(rawId);
     const intent = await this.intents.findById(id);
     if (!intent) throw new PurchaseIntentNotFoundError();
+    if (intent.commerceProvider && intent.commerceProvider !== this.provider.provider) throw new CheckoutProviderMismatchError();
 
     if (
       intent.status === "CHECKOUT_CREATED"
@@ -62,6 +64,8 @@ export class StartCheckout {
     const minimumExpiry = occurredAt.getTime() + MINIMUM_CHECKOUT_WINDOW_MINUTES * 60 * 1000;
     if (intent.expiresAt.getTime() < minimumExpiry) throw new CheckoutWindowExpiredError();
 
+    if (!this.acceptsNewCheckout()) throw new CheckoutPausedError();
+    await this.intents.claimCommerceProvider(id, this.provider.provider);
     if (!this.acceptsNewCheckout()) throw new CheckoutPausedError();
     const checkoutSession = await this.provider.create(
       intent,

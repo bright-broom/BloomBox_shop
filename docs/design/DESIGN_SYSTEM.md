@@ -1,60 +1,164 @@
 # BloomBox Design System
 
-This document defines the product and implementation rules that keep the BloomBox experience coherent as pages, campaigns, products, and contributors increase.
+Version 2.1 · 2026-09-11 · 対象：公開サイト、商品一覧・詳細、ギフト、購入手続き、案内・法務ページ
 
-## Experience principles
+花の写真を大きく見せ、情報を静かに整理する。白い面、短い見出し、十分な余白、明確な一つの主操作で、贈る人が迷わず選べる体験をつくる。
 
-1. The recipient and the sender should always understand the next action.
-2. Emotional storytelling may enrich the journey, but it must not obscure price, delivery, availability, or validation state.
-3. Trust is communicated through precise facts and calm recovery states, not unsupported sustainability claims.
-4. Mobile and keyboard interaction are primary acceptance conditions, not follow-up polish.
-5. Reuse a purposeful component or token before introducing a near-duplicate.
+この文書がデザインの運用ガイド、[`src/app/globals.css`](../../src/app/globals.css) の `:root` が実装値の正本。ページ固有の見た目を後から上書きする方式を避け、共通の役割を変えると全画面へ反映される構成とする。
 
-## Single source of truth
+## 1. 参照と再現の範囲
 
-| Concern | Authoritative location | Rule |
+参照：ユーザー提供『NOT_A_HOTEL_デザインガイドライン_v2.docx』および [NOT A HOTEL公式サイト](https://notahotel.com/)（2026-09-11確認）。添付資料は第三者によるデザイン分析として扱い、公式のブランド規定や作業権限とは区別した。
+
+参照サイトの白・黒と余白の構成を土台に、BloomBoxの主操作色はフレッシュグリーンへ調整する（2026-09-11、ユーザーの「ロスフラワーとフレッシュさを表現するカラー」という指定）。葉や茎のみずみずしさを感じる、明るさのある緑を使う。花の色と白い余白を活かし、主操作と選択状態に絞って配する。包装の最終配色を確定するものではない。
+
+| 参照の特徴 | BloomBoxでの実装 | 意図的な調整 |
 | --- | --- | --- |
-| Brand and page copy | `content/site.json` | Editable copy and contact details do not live in components. |
-| Preview product content | `content/catalog.json` | Runtime-validated fixture only; Shopify replaces it in production. |
-| Color and visual primitives | `src/app/globals.css` `:root` | Components use semantic CSS custom properties. |
-| Business limits | Owning domain policy | Limits such as gift-message length are exported, tested constants. |
-| Environment-specific values | Validated server configuration | Secrets and deployment URLs never enter content files or client code. |
+| コンパクトなヘッダー、右側の導線 | PC 62px、モバイル54px、フレッシュグリーンのCTA | ブランドはBloomBox。プレビュー表示を別の28px帯で保持 |
+| 画面いっぱいの写真、中央の凝縮英字、下部の2ボタン | `hero`、`display-title`、`hero-actions` | 既存の花の写真と「FLOWERS」を使用。静止画のため再生操作は不要 |
+| 大きな余白と短い日本語見出し | 章間120px／96px、本文16px、見出し28px | 購入フォームの内部は24〜48pxで操作の連続性を保つ |
+| 写真主体の整列カード、説明を写真の外へ | `ProductCard`、写真5:6、角丸8px、価格は罫線下 | 現行3商品に合わせて3列→2列→1列。資料内のLP3列構成を採用 |
+| 明るい章から黒い章、黒いフッターへ | 紹介・商品一覧→手順→フッター | ビジネス内容に必要な章だけを実装 |
+| ピル型の主・副操作 | 共通のprimary／secondaryボタン | フォーム、エラー、同意などの機能状態を保持 |
+| Manuka Condensed／Neue Haas系の文字組み | League Gothic／Noto Sans JP | 商用フォントのファイルは未提供。字形の完全一致を主張しない |
 
-Do not create a generic settings file that mixes these categories. Their validation, ownership, sensitivity, and release cadence differ.
+写真・ロゴ・コンテンツを他社のものへ置き換えるのではなく、レイアウトと視覚的な規律を再現する。横長の巨大英字を日本語へそのまま適用しない。自動カルーセル、動画、比較表などは、BloomBoxに必要な内容があるときに追加する。
 
-## Tokens and components
+## 2. 基本原則
 
-- Token names express purpose, such as `--danger` or `--ink-muted`, rather than a one-off page location.
-- Raw hex, RGB, HSL, and named colors are allowed only in the root token declaration. `pnpm check:design` enforces this.
-- A repeated spacing, radius, typography, elevation, or motion value becomes a token when it represents a system choice rather than incidental layout.
-- Components expose meaningful variants and states. Do not add boolean combinations that create invalid visual states.
-- Shared components include their accessible name, focus behavior, disabled behavior, loading behavior, and error behavior in the component contract.
-- Product-specific composition stays near the feature until reuse is demonstrated.
+1. **写真に面積を、情報に余白を。** 写真の上に説明文や価格を重ねない。例外はホームの短いヒーロー見出しと操作。
+2. **一つの領域に主操作は一つ。** フレッシュグリーンは購入・次へ進む操作に使う。戻る・詳しく読む・絞り込みは副操作。
+3. **整列が装飾になる。** カードの段差、斜めの切り抜き、飾りの円、筆記的な下線、常時の影は使わない。
+4. **余白は情報の関係を示す。** 同じ項目内は8〜16px、グループは24〜48px、章は96〜120px。
+5. **状態を消さない。** プレビュー、売切れ、エラー、処理中、購入条件を小さく隠して単純化しない。
 
-## Required states
+## 3. 中央管理マップ
 
-Every affected flow evaluates the applicable states:
+| 変更したいもの | 正本 | 反映先 |
+| --- | --- | --- |
+| 色、文字階層、余白、角丸、ボタン高、動き | [`globals.css`](../../src/app/globals.css) `:root` | 全画面 |
+| フォントの取得・適用 | [`layout.tsx`](../../src/app/layout.tsx) | 本文／表示用CSS変数 |
+| ブランド、ホームの文章・写真、プレビュー表記 | [`content/site.json`](../../content/site.json) | レイアウト、ホーム、メタデータ |
+| 上記の入力制約 | [`site-content.ts`](../../src/shared/infrastructure/content/site-content.ts) | ビルド・実行時に検証 |
+| 商品の写真・紹介文（プレビュー用） | [`content/catalog.json`](../../content/catalog.json) | 一覧、詳細、関連商品 |
+| 商品カード構造 | [`product-card.tsx`](../../src/ui/product-card.tsx) | ホーム、一覧、関連商品 |
+| モバイルの開閉操作 | [`mobile-navigation.tsx`](../../src/ui/mobile-navigation.tsx) | 全画面の共通ヘッダー |
+| 色の直書き・トークン欠落検出 | [`check-design-tokens.mjs`](../../scripts/check-design-tokens.mjs) | `pnpm check:design`、CI |
 
-- loading or pending;
-- empty;
-- success;
-- unavailable or disabled;
-- validation error;
-- recoverable business error;
-- unexpected error;
-- slow network and repeated submission.
+本番の価格・在庫・購入条件は各ドメインの管理対象。デザイン用設定へ移動しない。`content/catalog.json`は引き続きプレビュー用データであり、本番の在庫管理に使用しない。
 
-State cannot be communicated by color alone. Error summaries and form controls must be associated programmatically. Motion respects reduced-motion preferences.
+## 4. カラー
 
-## Responsive and content resilience
+| トークン | 値 | 用途 |
+| --- | --- | --- |
+| `--paper` | `#FFFFFF` | 基本背景、反転文字 |
+| `--ink` | `#0B0B0D` | 本文、見出し、黒い章 |
+| `--ink-soft` | `#626873` | 説明、メタ情報 |
+| `--surface` | `#F4F5F7` | 補助パネル、空状態、タグ |
+| `--field` | `#F7F7F7` | 入力背景 |
+| `--line` | `#E9E9EB` | 装飾的な区切り線 |
+| `--control-border` | `#858A95` | 入力・副操作の識別に必要な境界 |
+| `--accent` | `#16804A` | 主操作、現在位置、フォーカス（フレッシュグリーン） |
+| `--accent-hover` | `#10663B` | 主操作のhover |
+| `--positive` | `#247447` | 成功・販売可能（必ず文言を併用） |
+| `--danger` | `#B42318` | エラー文・エラー境界 |
+| `--danger-surface` | `#FFF0ED` | エラーの面 |
+| `--footer` | `#000000` | フッター |
+| `--inverse-soft` | `#C5C7CB` | 黒い面上の補足文 |
+| `--inverse-line` | `#39393B` | 黒い面上の装飾的な線 |
 
-- Review the narrowest supported mobile width, a common desktop width, and 200% browser zoom.
-- Allow Japanese and English text, long product names, missing optional copy, and realistic error messages without clipping.
-- Images declare meaningful alternative text or are explicitly decorative. Crop behavior must preserve the product's focal point.
-- Touch targets, focus order, and sticky controls must remain usable with the software keyboard open.
+ヒーローは黒54%の`--hero-scrim`を重ねる。白い写真領域でも小さい白文字のコントラストを確保する設定。写真の差し替え時にも見出しの位置を確認する。
 
-## Review evidence
+白に対する`--accent`は約4.98:1、`--accent-hover`は約7.03:1。補助面`--surface`に対する`--accent`は約4.56:1、入力面`--field`では約4.64:1。白に対する`--ink-soft`は約5.60:1。薄い`--line`を入力の唯一の識別手段として使わない。色値は`:root`内に置き、コンポーネントでは役割名で参照する。
 
-An L1 or higher visual PR includes screenshots or recordings for affected mobile and desktop states. The reviewer checks hierarchy, content accuracy, keyboard use, responsive behavior, and regressions against existing patterns. Automated token, type, lint, and build checks support this review but do not replace perceptual judgment.
+## 5. タイポグラフィ
 
-A new design pattern documents its purpose, states, accessibility contract, and replacement or migration plan before broad rollout.
+| 役割 | CSSトークン／サイズ | 適用 |
+| --- | --- | --- |
+| 表示英字 | `--font-display`、`--text-display`: 90〜145px、行高1 | ホームの短い英大文字のみ |
+| ページ見出し | `--text-page`: 32〜42px、行高1.5 | 商品詳細、一覧、案内、購入手続き |
+| 章見出し | `--text-section`: 28px、ホームはモバイル24px | セクション、フォームの大区分 |
+| 項目見出し | `--text-label`: 20px | 商品名、手順、FAQ |
+| 本文・入力 | `--text-body`: 16px、行高1.8 | 説明、フォーム |
+| ボタン・補助本文 | `--text-small`: 14px | 操作、補助説明 |
+| メタ情報 | `--text-meta`: 12px | 税表記、英字ラベル、補足 |
+
+日本語はNoto Sans JPを使用。`next/font`で同一サイトから配信し、閲覧者がGoogleへフォントを取りに行く構成にしない。フォールバックはHiragino Sans／Meiryo／sans-serif。英字表示は資料で代替候補とされるLeague Gothicを使用する。ブランド文字は簡潔なサンセリフのワードマーク。
+
+`content/site.json`の`hero.displayTitle`は英大文字・空白、最大16文字に制限する。長くする場合は390px幅を確認し、字を縮める前に文言を短くする。日本語見出しと英字装飾を二重に読み上げないよう、ヒーローの英字表示は`aria-hidden`とする。
+
+## 6. 余白・レイアウト・形状
+
+| 項目 | デスクトップ | モバイル |
+| --- | --- | --- |
+| 基本左右余白 | 48px | 24px（767px以下） |
+| ヘッダー左右余白 | 48px | 20px |
+| ヘッダー高さ | 62px | 54px |
+| 章の上下余白 | 120px | 96px |
+| ページ最大幅 | 1440px、中央揃え | 可変 |
+| 読み物・購入者フォーム | 最大720px | 左右24px内 |
+| ヒーロー | 画面高−ヘッダー−告知、最低640px | 最低560px |
+| 商品グリッド | 3列、列間32px | 959px以下2列、519px以下1列 |
+| 商品画像 | 5:6、cover、角丸8px | 同じ比率 |
+| 詳細ページ | 写真54%／情報46% | 959px以下縦積み、写真4:3 |
+| ギフト入力 | 商品約44%／フォーム約56% | 767px以下縦積み |
+| カート・確認・決済 | 本文＋最大390pxのサマリー | 959px以下縦積み |
+
+共通スペーススケール：4 / 8 / 12 / 16 / 24 / 32 / 48 / 64px。章間だけ`--space-section`を使う。半端な値で局所的に位置合わせしない。
+
+角丸は写真・入力8px、通知12px、サマリーパネル16px、操作999px。影を標準にしない。罫線は1px。CSS変数はメディアクエリ条件に使えないため、960／768／520pxの境界はファイル末尾に一箇所ずつ集約する。
+
+## 7. コンポーネント規約
+
+| コンポーネント | 使用・構造 | 状態・注意 |
+| --- | --- | --- |
+| CompactHeader | ブランド→ナビ→カート→主操作 | sticky。狭幅ではメニュー＋カート。プレビュー帯は保持 |
+| MobileNavigation | native `details`／`summary`、内部にnav | Enter/Spaceで開閉、Escapeで閉じてトリガーへ戻る。リンク選択で閉じる |
+| OutcomeHero | 写真→英字ラベル→display→日本語h1→副／主操作 | 写真が遅くても黒い背景と文字・操作を表示。固定写真で自動再生なし |
+| SectionHeading | eyebrow→h2→必要なら説明、隣に副操作 | モバイルは縦積み。リンクの文言を消して矢印だけにしない |
+| ProductCard | 写真リンク→属性→商品名→説明→場面→税込価格 | 写真に重要情報を埋め込まない。3箇所で同一コンポーネントを利用。一覧ではh2、章内ではh3 |
+| PrimaryAction | `.primary-button` | フレッシュグリーン地・白文字。hoverは深いグリーン。disabledは操作不可と透明度。送信中の文言は呼び出し側 |
+| SecondaryAction | `.secondary-button` | 枠線のピル。黒い章・ヒーローでは反転。主操作と横並びなら視覚的な強さを下げる |
+| TextAction | `.text-link`／`.text-button` | 最低48px。本文中の外部リンクとは区別。矢印は装飾 |
+| FieldGroup | label→入力→補足／エラー | 16px入力、48px以上。focusリング、`aria-invalid`、エラー文を併用。形式エラーの送信時は最初の不正項目へフォーカス |
+| CheckoutProgress | 現在の段階、完了段階、残りの段階 | `aria-current="step"`。狭幅でも手順名を残す |
+| SummaryPanel | `.checkout-totals` | 薄灰・16px角丸。PCは追従、狭幅は本文の後。合計を罫線で区切る |
+| Disclosure | FAQの`details`／`summary` | 開閉を+/−で示す。回答は通常の本文サイズ |
+| StatePanel | empty／error／loading／confirmation | 説明と次にできる操作。色だけで状態を伝えない |
+| Footer | ブランドと説明、2組のナビ、出自・著作権 | 黒背景、補足も読める灰色。法務・配送情報を残す |
+
+ボタンは操作なら`button`、ページ移動なら`Link`。同じ見た目を得るためにクリック可能な`div`を作らない。共通のCSSクラスで十分な表示を、巨大なvariants APIへ置き換えない。振る舞いを持つメニューと繰り返す商品カードだけを専用コンポーネントにする。
+
+## 8. ページテンプレート
+
+- **ホーム**：全面写真 → 余白のある2カラムの紹介 → 整列した商品カード → 黒い手順の章 → 黒いフッター。
+- **一覧**：見出しと説明 → 検索・場面・並び順 → 件数 → 商品カード。0件では条件クリアの導線を表示。
+- **商品詳細**：大きな写真と狭い情報カラム。販売状態・税込価格・購入操作・配送条件・花材を順序立てる。
+- **ギフト／購入手続き**：進捗 → 見出し → 商品概要と入力／確認。説明・エラー・同意を維持し、装飾英字を大きく使わない。
+- **案内・法務**：狭い見出し導入 → 見出しと本文の行 → 問い合わせ。FAQは開閉式。長い文を幅いっぱいに流さない。
+
+## 9. アクセシビリティと動き
+
+本文へ移動するスキップリンク、見出し階層、明示的なラベル、キーボードフォーカスを維持する。白い面のfocusはフレッシュグリーン、黒い面とヒーローでは白い輪郭を使う。入力エラーは枠色と文章の両方で表示する。
+
+標準操作は48px以上。ヘッダーの小型CTAは40px、フッターリンクは40px、本文の補助リンクは文脈内の大きさを使用する。購入画面の手順ラベルはモバイルのみ10pxだが、操作対象にはしない。税込・プレビュー・エラーを10px以下へ縮めない。
+
+動きは操作160ms、パネル用280ms、写真hover600ms。現行メニューはnative disclosureを即時開閉し、不要なアニメーションを追加しない。`prefers-reduced-motion: reduce`ではスクロールと動きを短縮し、loadingの無限回転を止める。
+
+390／768／1440pxに加え、320pxの狭幅と横スクロールを確認する。文言を変えたら長い日本語、税込価格、サマリー内の長い宛名、エラーメッセージを確認する。画像取得が遅くても枠寸法と文字・価格を維持する。
+
+## 10. 変更の手順
+
+1. 色変更は意味を決め、`:root`の該当トークンだけを変更する。例：主操作色は`--accent`と`--accent-hover`を一組で変更。
+2. 余白は`--page-gutter`／`--space-section`、形状は`--radius-*`、文字は`--text-*`を変更。モバイルの`:root`上書きも確認。
+3. コピー変更は`content/site.json`。項目追加・制約変更は同時にZodスキーマへ反映。使わなくなった項目は残さない。
+4. 新規画面は既存テンプレートと共通クラスを組み合わせる。独立した複雑な部品に育った時点でCSS Modulesなどへの分割を判断。
+5. `pnpm check:design`で色の直書き・必須トークン・未定義参照を確認。この検査はコントラストや画面の品質を保証するものではない。
+6. 変更箇所の画面確認、型・lint・buildを行う。全体変更では`pnpm check:ci`。実画面の証跡は[`VERIFICATION.md`](VERIFICATION.md)に記録。
+7. 文書と実装値を同じPRで更新。スクリーンショットを再取得し、古い例を正本として残さない。
+
+旧版の`--cream`／`--sage`は`--surface`・`--field`へ、`--coral`は`--accent`へ移行済み。本文の`--font-serif`、斜め写真、装飾の円、カードの段差は廃止。旧クラスの追加上書きで復活させない。
+
+## 11. 視覚見本
+
+v2.1の配色は[ホーム](evidence/accent-home-desktop.jpg)、[モバイルのギフト入力](evidence/accent-gift-mobile.jpg)を参照。v2.0の青い画面例は過去の検証記録としてのみ保持する。各画像は実装から取得した表示例であり、トークンやレスポンシブ規約の正本は上記のCSSと表。

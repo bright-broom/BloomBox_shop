@@ -23,14 +23,23 @@ for (const match of componentStyles.matchAll(/(?:color|background(?:-color)?)\s*
 const requiredTokens = [
   "--ink",
   "--paper",
-  "--coral",
+  "--accent",
+  "--page-gutter",
+  "--space-section",
+  "--control-height",
+  "--radius-pill",
   "--positive",
   "--danger",
   "--font-sans",
-  "--font-serif",
+  "--font-display",
 ];
 for (const token of requiredTokens) {
   if (!rootMatch[0].includes(`${token}:`)) violations.push(`${stylePath}: missing required token ${token}`);
+}
+
+const declaredTokens = new Set([...source.matchAll(/(--[\w-]+)\s*:/g)].map((match) => match[1]));
+for (const match of source.matchAll(/var\((--[\w-]+)/g)) {
+  if (!declaredTokens.has(match[1])) violations.push(`${stylePath}: undefined token ${match[1]}`);
 }
 
 if (violations.length) {

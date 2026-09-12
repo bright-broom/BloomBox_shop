@@ -3,6 +3,7 @@ import { assertAvailableDeliveryDate } from "@/modules/fulfillment/public";
 import { multiplyMoney } from "@/shared/domain/money";
 import { BUSINESS_TIME_ZONE } from "@/shared/domain/time";
 import { CheckoutPausedError } from "./checkout-paused-error";
+import { assertPreviewQuantity } from "../domain/preview-pricing";
 import {
   catalogProductReference,
   commerceProductReference,
@@ -60,6 +61,7 @@ export class CreatePurchaseIntent {
     if (!product?.available) {
       throw new ProductUnavailableError();
     }
+    assertPreviewQuantity(normalizedQuantity, Boolean(product.previewOffer));
 
     const createdAt = this.now();
     assertAvailableDeliveryDate(input.deliveryDate, createdAt);
