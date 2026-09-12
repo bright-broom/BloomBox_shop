@@ -31,7 +31,7 @@ BloomBox is a gift-experience platform. Optimize in this order: correct orders, 
 - A module never mutates another module's tables directly.
 - Keep these concepts distinct: Order/Payment/Fulfillment, Buyer/Recipient, Product/Flower/FlowerLot, Customer/User, Gift/Order.
 - Business logic and authoritative state transitions do not live in React components.
-- Shopify is the production commerce system of record. Keep its SDK and transport models behind infrastructure adapters as defined by ADR 0001.
+- ADR 0009 selects BloomBox-owned PostgreSQL commerce and direct Google customer authentication. During migration, Shopify adapters remain legacy integrations; never treat their presence as native-commerce readiness. Payment SDKs and transport models stay behind infrastructure adapters.
 - Checked-in catalog JSON and in-memory repositories are preview fixtures; they must never pass the production-readiness gate.
 - Cross-module code imports only the owning module's `public.ts` entry point.
 

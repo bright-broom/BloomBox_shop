@@ -2,6 +2,8 @@
 
 Read this document only when a change affects module ownership, dependencies, state, persistence, transactions, providers, or the commerce critical path.
 
+> Current direction: [ADR 0009](adr/0009-native-commerce-and-google-customers.md) selects native PostgreSQL commerce and direct Google customer login. Legacy Shopify commerce adapters remain during migration; production is blocked.
+
 ## System shape
 
 BloomBox is a Modular Monolith. This keeps domain evolution, transactions, deployment, testing, and operations simple while the product is still being validated. A service split requires measured need and an approved ADR.
@@ -53,7 +55,7 @@ Each module exposes cross-module contracts through `src/modules/<module>/public.
 
 Order, Payment, and Fulfillment have independent explicit state machines with validated transition tables. Provider facts cause commands or events; they do not synchronize boolean flags across models.
 
-- Shopify is the production source of truth for sellable catalog, price, availability, inventory, checkout, payment, orders, and refunds. See ADR 0001.
+- BloomBox owns the native commerce records under ADR 0009. Verified payment-provider facts remain authoritative for captures/refunds. Shopify adapters are legacy migration code, not the selected production core.
 - Checked-in catalog JSON and in-memory purchase-intent storage are deterministic preview adapters, not a production data path.
 - A verified Shopify fact is authoritative for checkout and payment state. A browser redirect is not.
 - Inventory changes are traceable movements such as received, reserved, released, consumed, or adjusted.

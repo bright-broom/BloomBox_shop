@@ -1,5 +1,7 @@
 # ADR 0001: Shopify-first commerce boundary
 
+> Superseded direction on 2026-09-13 by [ADR 0009](0009-native-commerce-and-google-customers.md). Historical implementation and evidence below are retained; live activation is not authorized by this record.
+
 - Status: Accepted
 - Date: 2026-08-20
 - Owners: Product and Architecture

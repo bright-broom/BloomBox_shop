@@ -21,3 +21,5 @@ export {
   type ShopifyOrderAcceptanceResult, type ShopifyOrderAcceptor,
   ShopifyOrderAcceptanceConflictError, ShopifyOrderAcceptancePersistenceError,
 } from "./application/accept-shopify-order";
+
+export { type CustomerOrderSummary, type CustomerOrderHistoryQuery, CustomerOrderHistoryUnavailableError } from "./application/customer-order-history";

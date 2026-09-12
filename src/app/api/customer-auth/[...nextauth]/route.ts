@@ -10,8 +10,8 @@ async function handle(request: NextRequest) {
     if (!service) return new Response(null, { status: 503, headers: privateHeaders });
     if (!isCustomerOrigin(request, service.config)) return new Response(null, { status: 403, headers: privateHeaders });
     const path = request.nextUrl.pathname;
-    const allowed = request.method === "GET" ? ["/csrf", "/providers", "/session", "/signin", "/signin/shopify-customer", "/callback/shopify-customer", "/error"]
-      : ["/signin/shopify-customer", "/signout"];
+    const allowed = request.method === "GET" ? ["/csrf", "/providers", "/session", "/signin", "/signin/google", "/callback/google", "/error"]
+      : ["/signin/google", "/signout"];
     if (!allowed.some((action) => path === `/api/customer-auth${action}`)) return new Response(null, { status: 404, headers: privateHeaders });
     let bounded = request;
     if (request.method === "POST") {
