@@ -36,6 +36,8 @@ READYのフォームに、日本時間の確認期限を表示します。期限
 
 画像：[期限内・320px](evidence/approval-expiry-ready-320.png)／[期限後・320px](evidence/approval-expiry-expired-320.png)／[期限後・1440px](evidence/approval-expiry-expired-1440.png)。
 
+2026-09-12のPR #69統合時に、`main`との追加ファイル競合を解消して期限処理を維持しました。`main`側のStripe API互換修正・依存バージョン・手動デプロイ設定も維持しています。統合後の `pnpm check:ci` は通常745件・静的検査・型・Lint・本番ビルドが成功し、隔離PostgreSQLも138件成功しました。DB移行の追加・変更はありません。上記画像は既存の表示検証の証跡であり、今回実Google・実注文・Vercel上のE2Eを再実施した証跡ではありません。
+
 ## 本番有効化の残件
 
 実 Google の接続とログイン E2E、担当者別の監査を伴う権限管理、事業条件の承認、実店舗での承認済み条件下のブラウザー／プロバイダー E2E が必要です。[操作頻度の制限](OPERATOR_APPROVAL_RATE_LIMIT.md)は後続実装済みです。移行0015と専用権限の適用が必要です。セッション個別失効の制約は [Google ログイン](GOOGLE_OPERATOR_LOGIN.md) を参照してください。承認時の照合は保存済み根拠に対するもので、Shopify と DB の同時点を保証しません。発送コマンド・Inbox 完了・本番 Gate は別の実装／有効化対象です。

@@ -96,15 +96,15 @@ export class StripeSdkCheckoutApi implements StripeCheckoutApi {
     sessions?: StripeCheckoutSessionsClient,
   ) {
     const stripe = new Stripe(config.checkoutSecretKey, {
-      apiVersion: config.apiVersion,
       appInfo: { name: "BloomBox", version: "0.1.0" },
       maxNetworkRetries: 2,
       timeout: 10_000,
       telemetry: false,
     });
     this.sessions = sessions ?? {
-      create: (request, options) => stripe.checkout.sessions.create(request, options),
-      retrieve: (sessionId) => stripe.checkout.sessions.retrieve(sessionId),
+      // Pin the wire API independently of the SDK's latest-only constructor type.
+      create: (request, options) => stripe.checkout.sessions.create(request, { ...options, apiVersion: config.apiVersion }),
+      retrieve: (sessionId) => stripe.checkout.sessions.retrieve(sessionId, {}, { apiVersion: config.apiVersion }),
     };
   }
 
