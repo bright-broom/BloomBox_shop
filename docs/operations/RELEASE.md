@@ -11,10 +11,29 @@ Do not disable or bypass that check. ADR 0003 selects Shopify Checkout + Shopify
 | Environment | Purpose | Data and integrations | Deployment |
 | --- | --- | --- | --- |
 | Local | Development and focused verification | Fixtures and test credentials only | `pnpm dev` |
-| Preview | PR review, accessibility, responsive and stakeholder validation | Fixtures or isolated provider test store | Hosting-provider PR integration |
+| Preview | PR review, accessibility, responsive and stakeholder validation | Fixtures or isolated provider test store | Manual deployment of a reviewed PR commit |
 | Production | Real customer traffic and commerce | Approved production Shopify connection | Protected GitHub workflow |
 
 Preview must be clearly distinguishable and must not send real notifications, charge money, or mutate production inventory.
+
+## On-demand Vercel previews
+
+Root `vercel.json` sets `git.deploymentEnabled` to `false`. Pushes and PR updates containing this configuration do not automatically deploy to Vercel, including pushes to `main`. GitHub CI, security scanning, dependency auditing, and PR governance continue to run as configured. Production continues to require the protected release path below; merging code is not authorization to deploy it.
+
+Use the existing Vercel dashboard for manual previews; no additional CI credential or deployment workflow is required:
+
+1. Finish the local checks and push the focused PR. Wait for the latest commit's quality/tests, dependency audit, security scan, and applicable governance checks to succeed. Do not interpret an absent Vercel check as proof of a successful deployment.
+2. Record the PR's full head commit SHA. In the `bloom-box-shop` Vercel project, open **Deployments → Create Deployment** and enter that SHA. Select the PR branch configuration and **Preview**, never Production. Stop if the target environment or source cannot be confirmed. Review unfamiliar or forked code before exposing any preview credentials to its build.
+3. Create one deployment. If the request times out, inspect Deployments for that SHA before retrying. If Vercel reports the daily quota, stop and wait for the allowance to recover; a manual deployment uses the same allowance. Do not create empty commits or repeatedly redeploy to clear a failed status.
+4. Confirm the deployment is **Ready**, its environment is Preview, and its source SHA still matches the PR head. Check the affected flow on its preview URL. Record the SHA, URL, and result in the PR's verification evidence. If the PR changes, previous preview evidence no longer verifies the new head; deploy again when the next review is ready.
+
+Rollout is branch-scoped: this setting takes effect only for commits containing `vercel.json`. Merge the configuration PR through normal review, then incorporate it into every existing branch before further development pushes. For a stack, merge the updated base in dependency order. Until a branch receives the file, its old automatic-deployment behavior remains. Existing deployments and historical failed statuses are not removed or marked successful by this change. A PR requiring visual or deployment verification remains pending until its manual preview succeeds.
+
+Do not substitute an **Ignored Build Step**: canceled builds still consume deployment quota. Do not remove required checks or relax production activation to accommodate the manual preview policy. Before production activation, verify the protected release hook against this configuration; this change does not provide production deployment evidence.
+
+To roll back the policy, revert the configuration commit in the affected branches. Subsequent pushes will resume automatic deployments and consume the normal allowance. Keep existing preview URLs and production deployment history intact.
+
+Provider references: [Git deployment control](https://vercel.com/docs/project-configuration/git-configuration), [manual deployment from a Git SHA](https://vercel.com/docs/git#creating-a-deployment-from-a-git-reference), [ignored-build quota accounting](https://vercel.com/docs/project-configuration/project-settings), and [deployment limits](https://vercel.com/docs/limits).
 
 ## Automated release path
 
