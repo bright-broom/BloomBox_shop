@@ -139,11 +139,16 @@ export function storeCart(
 }
 
 export function removeCart(storage: CheckoutStorage): void {
-  storage.removeItem(CART_STORAGE_KEY);
-  storage.removeItem(BUYER_STORAGE_KEY);
-  storage.removeItem(DRAFT_STORAGE_KEY);
-  storage.removeItem(REVIEW_STORAGE_KEY);
-  notifyCheckoutSessionChanged();
+  try {
+    // Invalidate approval first; retain the cart until dependent cleanup succeeds.
+    storage.removeItem(REVIEW_STORAGE_KEY);
+    storage.removeItem(BUYER_STORAGE_KEY);
+    storage.removeItem(DRAFT_STORAGE_KEY);
+    storage.removeItem(CART_STORAGE_KEY);
+  } finally {
+    // Storage has no multi-key transaction. Subscribers must see partial cleanup too.
+    notifyCheckoutSessionChanged();
+  }
 }
 
 export function readPreviewBuyer(storage: CheckoutStorage): PreviewBuyer | null {
