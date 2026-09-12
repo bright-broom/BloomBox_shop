@@ -1,5 +1,7 @@
 # ADR 0008: Native BloomBox customer account
 
+> Superseded direction on 2026-09-13 by [ADR 0009](0009-native-commerce-and-google-customers.md). Historical implementation and evidence below are retained; live activation is not authorized by this record.
+
 Status: Implementation selection, 2026-09-13. Live authentication remains disabled until the Shopify client and isolated-store evidence are configured.
 
 ## Decision

@@ -1,5 +1,7 @@
 # ADR 0003: Shopify Checkout with Shopify Payments and KOMOJU
 
+> Superseded direction on 2026-09-13 by [ADR 0009](0009-native-commerce-and-google-customers.md). Historical implementation and evidence below are retained; live activation is not authorized by this record.
+
 - Status: Accepted for implementation; production activation remains blocked
 - Date: 2026-09-11
 - Owners: Product / Architecture / Engineering

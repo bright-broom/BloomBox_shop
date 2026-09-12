@@ -11,7 +11,7 @@ async function serviceForMutation() {
 }
 export async function startCustomerLogin() {
   const service = await serviceForMutation();
-  try { await service.auth.signIn("shopify-customer", { redirectTo: "/account" }); }
+  try { await service.auth.signIn("google", { redirectTo: "/account" }); }
   catch (error) { if (error instanceof AuthError) redirect("/account?error=signin"); throw error; }
 }
 export async function endCustomerLogin() {

@@ -2,6 +2,8 @@
 
 ## Current status
 
+The selected target is native PostgreSQL commerce with direct Google customers ([ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md)). The Google/customer-account slice replaces Shopify login. Production catalog, buyer binding, payment and fulfillment migration evidence remain incomplete; the existing release gate must continue failing until replaced with verified native-adapter criteria.
+
 Preview builds and a public product-preview deployment are supported. The production composition now has a Shopify Storefront catalog adapter, durable PurchaseIntent storage, a disabled Stripe connector, storefront search, order-status projection, and validated customer-information pages. Production commerce activation remains intentionally blocked until account-backed contract, E2E, tax, privacy, legal, support, recovery, and activation-decision evidence is recorded in `config/production-commerce-activation.json`. Preview では、ギフト設定からカート、配送先、注文確認、ダミー決済、完了までを Test Mode として再現します。Preview の Purchase Intent と個人情報は永続化しません。`pnpm check:production` is the executable source of truth for commerce blockers.
 
 Do not disable or bypass that check. ADR 0003 selects Shopify Checkout + Shopify Payments + KOMOJU for implementation. The new Shopify cart client is disconnected from the purchase flow; complete the integration and per-method evidence in [PAYMENTS.md](PAYMENTS.md) before activation. The current executable activation gate and activation JSON still describe the older Stripe candidate and remain blocked; replacing those requirements with the completed Shopify flow is required work, not a reason to mark Stripe evidence complete.

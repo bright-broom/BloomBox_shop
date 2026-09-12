@@ -1,66 +1,55 @@
-# Native customer account
+# Native customer account with Google login
 
-2026-09-13. `/account` is a native BloomBox screen for the authenticated customer's order summaries and name/email. It uses Shopify Customer Account API 2026-07, not the Admin API, operator authentication or test checkout storage. See [ADR 0008](../architecture/adr/0008-native-customer-account.md).
+2026-09-13. The user selected Shopify-independent commerce under [ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md). `/account` now uses Google OIDC directly and native PostgreSQL customer/order records. Shopify Customer Account credentials and operator Google credentials are not accepted for this route.
 
 ## Implemented
 
-- Shopify OIDC sign-in and local BloomBox logout with separate cookies and secret.
-- Read-only order history, newest first, 10 per page; payment/fulfillment status remain distinct. Cancellation has its own label.
-- Current total in JPY, reflecting Shopify's current `totalPrice` (not an immutable purchase-time receipt).
-- Native name/email display, empty history, expired login, unavailable provider and unavailable configuration states.
-- Desktop/mobile/footer entry links; private/no-store, noindex, restricted referrers.
-- `/preview/account` offers orders/empty/signed-out/expired/unavailable sample states. Preview-only; never grants authentication.
+- Google login returns to BloomBox `/account`; local logout ends only the BloomBox session.
+- Verified issuer/subject maps to one durable customer ID, including concurrent first logins. Email is not an identity key and never claims existing orders. No recipient enrollment or marketing consent is inferred.
+- Existing customer_accounts/customer_identities tables from migration 0001; no new migration. Registration and a redacted audit record commit atomically. Disabled/anonymized customers cannot log in; account version changes invalidate sessions.
+- Name/email are verified-login snapshots stored only in an encrypted HttpOnly cookie for an absolute maximum of 15 minutes. No Google access, refresh or ID tokens are retained; session JSON returns only the internal customer ID and expiry.
+- Native order summaries are read through Order's public contract, with an explicit buyer.customer_id ownership filter, newest first, 10 per page. Only native/Stripe-cohort orders appear. Unlinked, recipient-only and historical Shopify orders never become visible through email matching.
+- Amount is the original order total; payment and fulfillment remain separate. Mixed/missing statuses show an unknown state. Profile editing, refund detail, order claiming and address books are not implemented.
 
-## Required external setup (not yet verified)
+## External setup
 
-Use the development store's Headless storefront → Customer Account API settings. Enable new customer accounts, choose a confidential client, and register an exact stable HTTPS callback:
+Create a customer-only Google Cloud project and Web OAuth client branded BLOOM BOX. Do not publish or repurpose the operator project's consent screen. The earlier draft Google client with Shopify callback URLs was never created and is obsolete.
 
-`https://<review-origin>/api/customer-auth/callback/shopify-customer`
+Register exactly `https://<bloom-box-origin>/api/customer-auth/callback/google` in Google. For local development only, an exact `http://localhost:<port>/api/customer-auth/callback/google` is supported. Do not register Shopify callbacks. Keep the consent screen/testing audience isolated until privacy/support content and real-provider verification are complete.
 
-Shopify does not allow HTTP/localhost callbacks. A stable review hostname avoids registering a new origin for every immutable Preview URL. Do not enable this globally for unrelated Vercel preview branches.
+Set server-side only in the isolated deployment:
 
-Set privately in the appropriate server environment (never public JSON, browser storage or chat):
-
-| Setting | Value |
+| Setting | Requirement |
 | --- | --- |
-| CUSTOMER_ACCOUNT_ENABLED | `true` only after setup and isolated testing; absent/false by default |
-| AUTH_URL | Same exact HTTPS application origin; mandatory so Auth.js server actions never derive callbacks from forwarded headers |
-| CUSTOMER_ACCOUNT_ORIGIN | Exact HTTPS BloomBox origin, without path/query/credentials |
-| CUSTOMER_ACCOUNT_SECRET | Independent random secret, at least 32 characters; rotate to invalidate all BloomBox customer cookies |
-| CUSTOMER_ACCOUNT_CLIENT_ID | Customer Account API client ID; not the Storefront API token |
-| CUSTOMER_ACCOUNT_CLIENT_SECRET | Confidential Customer Account client secret |
-| CUSTOMER_ACCOUNT_SHOP_ID | Numeric shop ID verified against storefront discovery |
-| SHOPIFY_STORE_DOMAIN | Same store's canonical myshopify.com domain |
+| CUSTOMER_ACCOUNT_ENABLED | true to enable controlled validation; absent/false otherwise |
+| AUTH_URL | Fixed BloomBox origin; must match CUSTOMER_ACCOUNT_ORIGIN |
+| CUSTOMER_ACCOUNT_ORIGIN | HTTPS origin, or HTTP localhost/127.0.0.1 outside production runtime |
+| CUSTOMER_ACCOUNT_SECRET | Independent random secret, 32+ characters; cannot equal operator AUTH_SECRET |
+| CUSTOMER_GOOGLE_CLIENT_ID | Customer Web OAuth client ID; cannot equal operator AUTH_GOOGLE_ID |
+| CUSTOMER_GOOGLE_CLIENT_SECRET | Customer client secret; never stored in content/chat/repository |
+| DATABASE_URL | Private PostgreSQL with existing migrations and application role permissions |
+| DATABASE_SSL_MODE | verify-full for hosted deployments; disable only for isolated local DB |
 
-AUTH_URL is required and must identify the same application origin, including when operator authentication is already configured. AUTH_REDIRECT_PROXY_URL and NEXTAUTH_URL overrides are rejected. The currently supported discovery layout is shopify.com scoped to that shop ID; custom account domains require an adapter update and tests.
+NEXTAUTH_URL and AUTH_REDIRECT_PROXY_URL overrides are rejected. Old CUSTOMER_ACCOUNT_CLIENT_ID/CLIENT_SECRET/SHOP_ID values cannot enable Google login. The new cookie namespace rejects historical Shopify sessions. Database connection failure fails closed; it must not display an empty successful history.
 
-The existing development store's public discovery endpoint was read successfully on 2026-09-13, including Customer Account API version 2026-07. This does not verify a configured Customer Account client, callback, authenticated customer or order data. No merchant/user registration or live settings were changed.
+## Real-provider verification still required
 
-## Verification and threat checks
+Two independent customers: first/repeat login, concurrent login, separate order histories, empty account, forged callback, denied Google consent, API/DB failure, account disable/version revocation, expiration, logout and browser back/reload. Inspect no-store headers and confirm client props/network/session JSON contain no tokens. Synthetic fixtures are not evidence of a live Google login.
 
-Automated checks cover the complete synthetic signed OAuth callback through the actual Auth.js handlers; CSRF, nonce, issuer, audience, signature and expiry rejection; encrypted cookie tampering and shop/client separation; local logout; token-free session JSON; bounded requests and responses; tenant-scoped API requests; pagination; unknown states; money; empty-versus-error behavior; sample-route isolation and escaped profile data.
+The main Vercel project's Preview environment was reported empty by the CLI before this change. No customer OAuth credentials, deployment settings, paid subscriptions or live customer data were changed.
 
-Auth.js currently derives discovery from issuer and requires a userinfo endpoint in one discovery branch. The adapter maps only the exact expected issuer discovery request to the canonical storefront discovery, verifies its issuer/endpoints, and specifies the matching token endpoint. Shopify has no userinfo endpoint: verified ID-token claims supply identity. Tests use that actual no-userinfo discovery shape.
+## Remaining commerce work
 
-Before enabling outside controlled tests, verify with two isolated Shopify customers: correct login/callback, the corresponding order lists only, pagination, cancellation/refund labels, empty account, API refusal, session expiry, local logout and browser back/reload. Inspect deployed private/no-store headers and ensure network/client props/session JSON do not expose tokens. Do not send login emails or modify real customers merely to populate a demo.
+Native catalog/inventory, authenticated buyer binding at checkout, complete Stripe payment/refund/reconciliation tests, native fulfillment and operations remain migration work. Existing preview checkout receipts never populate real account history. See ADR 0009 for the ordered rollout; this account slice does not enable sales.
 
-## Recorded verification — 2026-09-13
+## Verification recorded — 2026-09-13
 
-- `pnpm check:ci`: 859 passed, 138 skipped; repository/architecture/content/design/migration checks, typecheck, lint and production build passed.
-- 54 focused account tests, including complete synthetic OAuth callbacks and code-verifier challenge validation. Existing PostgreSQL tests are skipped locally and remain part of CI's isolated database job.
-- Chrome: desktop order/profile view; 390px order view; 320px empty and provider-failure states. Document width matched viewport at both mobile widths. Footer account navigation was exercised. These are synthetic design states, not authenticated customer/Shopify E2E evidence.
-- Local `/account` returns 200 with private/no-store, same-origin referrer and noindex headers; disabled `/api/customer-auth/session` returns 503 with private/no-store and no-referrer.
-- `pnpm check:production` still rejects unapproved customer-facing content and production commerce activation. No production approval was changed.
-
-## Remaining account work
-
-1. Configure the isolated Shopify client and stable HTTPS review origin, then record real-provider callback and two-customer authorization evidence.
-2. Order details, line items, tracking and refund breakdown with customer-scoped access and correct money semantics.
-3. Address-book and profile editing: input validation, CSRF, double-submit/error handling and a clear distinction between saved addresses and historical order destinations.
-4. Bind production referral rewards to verified customer identity and Shopify discount eligibility. Preview persona/coupon data must not become real customer value.
-5. Longer-lived sessions only with a designed refresh-token rotation/revocation mechanism; global Shopify logout/account switching needs its own evidence.
-6. Privacy/support processes for profile correction, account deletion and retention. Local logout alone does not terminate Shopify SSO.
+- Node 24.21.0 / pnpm 10.23.0: repository, architecture, migration, design, hardcoding, type and lint checks passed; 846 unit/route/presentation tests passed.
+- All 143 PostgreSQL tests passed on a separate local PostgreSQL 14 test instance, including concurrent identity creation, revocation, ownership isolation, microsecond-safe pagination, least-privilege access and transaction rollback. CI separately runs PostgreSQL 16.
+- Production build passed after replacing a worktree node_modules symlink rejected by Turbopack with the frozen-lockfile offline install. Dependencies and lockfile are unchanged.
+- Chrome: direct Google login entry and sign-in error at desktop/320px. At 320px, document width was 320px. Only synthetic local credentials were used; no real Google login was attempted.
+- The production gate remains blocked. No sales or external account settings were enabled.
 
 ## Rollback
 
-Disable CUSTOMER_ACCOUNT_ENABLED or revert the feature commit. No database migrations, customer writes, or payments are performed by this feature. Keep the commerce activation gate blocked independently.
+Disable CUSTOMER_ACCOUNT_ENABLED or revert the application change. Retain all durable customer IDs, audit entries and commerce facts. Rotate CUSTOMER_ACCOUNT_SECRET to invalidate all cookies. Do not automatically migrate native customers into Shopify or vice versa.
