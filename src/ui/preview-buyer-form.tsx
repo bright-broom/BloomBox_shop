@@ -59,6 +59,7 @@ type LookupStatus = Readonly<{
 function BuyerDetailsForm({ initialBuyer }: { initialBuyer: PreviewBuyer | null }) {
   const router = useRouter();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [postalCode, setPostalCode] = useState(initialBuyer?.postalCode ?? "");
   const [prefecture, setPrefecture] = useState(initialBuyer?.prefecture ?? "");
   const [city, setCity] = useState(initialBuyer?.city ?? "");
@@ -167,6 +168,7 @@ function BuyerDetailsForm({ initialBuyer }: { initialBuyer: PreviewBuyer | null 
 
   function submitBuyer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setSaveError(null);
     if (
       isValidPostalCode(postalCode)
       && notFoundPostalCodeRef.current === normalizePostalCode(postalCode)
@@ -184,7 +186,12 @@ function BuyerDetailsForm({ initialBuyer }: { initialBuyer: PreviewBuyer | null 
       if (firstField instanceof HTMLElement) firstField.focus();
       return;
     }
-    storePreviewBuyer(window.sessionStorage, parsed.data);
+    try {
+      storePreviewBuyer(window.sessionStorage, parsed.data);
+    } catch {
+      setSaveError("入力内容を保存できませんでした。この画面の入力は残っています。ブラウザーの保存設定や空き容量をご確認のうえ、もう一度お試しください。");
+      return;
+    }
     router.push("/checkout/test/review");
   }
 
@@ -278,6 +285,7 @@ function BuyerDetailsForm({ initialBuyer }: { initialBuyer: PreviewBuyer | null 
             <input name="addressLine2" id="addressLine2" aria-invalid={Boolean(fieldErrors.addressLine2?.length)} autoComplete="address-line2" aria-describedby="addressLine2-error" defaultValue={initialBuyer?.addressLine2} />
           </CheckoutField>
         </section>
+        {saveError ? <p className="form-error" role="alert">{saveError}</p> : null}
         <button className="primary-button form-submit" type="submit">
           注文内容を確認する <span aria-hidden="true">→</span>
         </button>

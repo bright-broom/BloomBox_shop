@@ -12,7 +12,7 @@ import {
 import { formatMoney, money } from "@/shared/domain/money";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import {
   MissingCheckoutState,
   PreviewCheckoutUnavailable,
@@ -22,6 +22,7 @@ import { useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
 
 export function PreviewOrderReview({ enabled }: { enabled: boolean }) {
   const router = useRouter();
+  const [saveError, setSaveError] = useState<string | null>(null);
   const revision = useCheckoutSessionRevision();
   const cart: BrowserCartItem | null | undefined = revision === null ? undefined : readCart(window.sessionStorage);
   const buyer: PreviewBuyer | null | undefined = revision === null ? undefined : readPreviewBuyer(window.sessionStorage);
@@ -42,7 +43,13 @@ export function PreviewOrderReview({ enabled }: { enabled: boolean }) {
 
   function continueToPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    acceptPreviewReview(window.sessionStorage);
+    setSaveError(null);
+    try {
+      acceptPreviewReview(window.sessionStorage);
+    } catch {
+      setSaveError("確認内容を保存できませんでした。ブラウザーの保存設定や空き容量をご確認のうえ、もう一度お試しください。決済は行われていません。");
+      return;
+    }
     router.push("/checkout/test/payment");
   }
 
@@ -97,6 +104,7 @@ export function PreviewOrderReview({ enabled }: { enabled: boolean }) {
               <Link href="/shipping-returns">配送・返品条件</Link>を確認しました。
             </span>
           </label>
+          {saveError ? <p className="form-error" role="alert">{saveError}</p> : null}
           <button className="primary-button form-submit" type="submit">
             テスト決済へ <span aria-hidden="true">→</span>
           </button>
