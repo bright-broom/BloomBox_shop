@@ -115,7 +115,9 @@ export class ShopifyProductRepository implements ProductRepository {
           { first: SHOPIFY_CATALOG_PAGE_SIZE, after, query: `tag:${this.catalogTag}` },
         ),
       );
-      products.push(...response.products.nodes.map((node) => this.mapProduct(node)));
+      products.push(...response.products.nodes
+        .filter((node) => node.tags.includes(this.catalogTag))
+        .map((node) => this.mapProduct(node)));
       if (!response.products.pageInfo.hasNextPage) return uniqueProducts(products)
         .filter((product) => product.available);
       after = response.products.pageInfo.endCursor;
