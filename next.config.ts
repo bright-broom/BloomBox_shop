@@ -41,7 +41,9 @@ const nextConfig: NextConfig = {
       ...["/operations/:path*", "/api/operator-auth/:path*"].map((source) => ({ source, headers: [
         { key: "Content-Security-Policy", value: "base-uri 'self'; form-action 'self' https://accounts.google.com; frame-ancestors 'none'; object-src 'none'" },
         { key: "Cache-Control", value: "private, no-store, max-age=0" },
-        { key: "Referrer-Policy", value: "no-referrer" },
+        // Native form POSTs need an Origin; no-referrer would turn it into null.
+        // same-origin still suppresses Referer on navigation to Google or other sites.
+        { key: "Referrer-Policy", value: source === "/operations/:path*" ? "same-origin" : "no-referrer" },
         { key: "X-Robots-Tag", value: "noindex, nofollow" },
       ] })),
     ];
