@@ -202,7 +202,10 @@ describe("Shopify authenticated order lookup", () => {
     expect(link).toHaveBeenCalledTimes(1); expect(record).toHaveBeenCalledTimes(1);
   });
   it("checks authoritative pricing after settlement persistence and holds stale source pricing", async () => {
-    const { reader, fetcher } = client(); fetcher.mockImplementation(async () => response(pricedOrder()));
+    const { reader, fetcher } = client();
+    fetcher.mockImplementation(async (_url, init) => response(
+      JSON.parse(String(init?.body)).query.includes("BloomBoxDeliveryDestination") ? destinationOrder() : pricedOrder(),
+    ));
     const event = { provider: "SHOPIFY" as const, providerAccountId: config.storeDomain, eventType: "shopify.order.changed", externalEventId: "verified-digest", externalObjectId: orderId,
       apiVersion: config.apiVersion, occurredAt: new Date(), payload: { id: orderId, objectType: "shopify_order_reference", total: 1 } };
     const link = vi.fn().mockResolvedValue({ purchaseIntentId: "intent", attemptId: "attempt", orderId });
@@ -245,7 +248,10 @@ describe("Shopify authenticated order lookup", () => {
     expect(result.order.pricing).toMatchObject({ tax: 727, total: 8000, duties: 0, additionalFees: 0 });
   });
   it("rechecks persisted delivery timing on retries and never trusts the notification's date", async () => {
-    const { reader, fetcher } = client(); fetcher.mockImplementation(async () => response(pricedOrder()));
+    const { reader, fetcher } = client();
+    fetcher.mockImplementation(async (_url, init) => response(
+      JSON.parse(String(init?.body)).query.includes("BloomBoxDeliveryDestination") ? destinationOrder() : pricedOrder(),
+    ));
     const event = { provider: "SHOPIFY" as const, providerAccountId: config.storeDomain, eventType: "shopify.order.changed", externalEventId: "verified-digest", externalObjectId: orderId,
       apiVersion: config.apiVersion, occurredAt: new Date("2026-09-10T00:00:00Z"), payload: { id: orderId, objectType: "shopify_order_reference", deliveryDate: "2026-12-01" } };
     const linked = { purchaseIntentId: "intent", attemptId: "attempt", orderId };
@@ -306,12 +312,20 @@ describe("Shopify authenticated order lookup", () => {
     expect(record).toHaveBeenCalledTimes(6); expect(find).not.toHaveBeenCalled();
   });
   it("does not fetch protected addresses until coverage is approved", async () => {
-    const { reader, fetcher } = client();
+    const { fetcher } = client();
+    const reader = new ShopifyAdminOrderReader(config, fetcher, { approval: "PENDING" });
     expect(await reader.assessDestination(destinationReference)).toEqual({ status: "HELD", reason: "COVERAGE_NOT_APPROVED" });
     expect(fetcher).not.toHaveBeenCalled();
     const invalid = new ShopifyAdminOrderReader(config, fetcher, { approval: "APPROVED", prefectures: [], excludedPostalPrefixes: [] });
     expect(await invalid.assessDestination(destinationReference)).toEqual({ status: "HELD", reason: "COVERAGE_INVALID" });
     expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("applies the confirmed nationwide policy through the default reader without exposing addresses", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => response({ ...destinationOrder(),
+      shippingAddress: { ...destinationOrder().shippingAddress, provinceCode: "JP-47", zip: "9071544" } }));
+    const reader = new ShopifyAdminOrderReader(config, fetcher);
+    expect(await reader.assessDestination(destinationReference)).toEqual({ status: "STRUCTURALLY_VALID_AND_COVERED" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
   it("uses province codes and discards every protected address field at the provider boundary", async () => {
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => response(destinationOrder()));
