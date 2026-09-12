@@ -204,6 +204,41 @@ export function readPreviewReceipt(storage: CheckoutStorage): PreviewReceipt | n
   return readStored(storage, RECEIPT_STORAGE_KEY, previewReceiptSchema);
 }
 
+export class PreviewCheckoutCleanupError extends Error {
+  constructor() {
+    super("Preview receipt saved; checkout input cleanup is incomplete.");
+    this.name = "PreviewCheckoutCleanupError";
+  }
+}
+
+export type PreviewCheckoutCleanupStatus = "complete" | "pending" | "changed";
+
+export function readPreviewCheckoutCleanupStatus(
+  storage: CheckoutStorage,
+  requestId: string | undefined,
+): PreviewCheckoutCleanupStatus {
+  const keys = [CART_STORAGE_KEY, BUYER_STORAGE_KEY, DRAFT_STORAGE_KEY, REVIEW_STORAGE_KEY];
+  if (keys.every((key) => storage.getItem(key) === null)) return "complete";
+  // Never delete input belonging to a new cart, an invalid cart, or a replaced receipt.
+  if (!requestId || readPreviewReceipt(storage)?.requestId !== requestId) return "changed";
+  if (storage.getItem(CART_STORAGE_KEY) !== null && readRecoverableCart(storage)?.requestId !== requestId) return "changed";
+  return "pending";
+}
+
+export function cleanupPreviewCheckout(storage: CheckoutStorage, requestId: string): void {
+  const status = readPreviewCheckoutCleanupStatus(storage, requestId);
+  if (status === "changed") throw new CartChangedError();
+  if (status === "complete") return;
+  try {
+    storage.removeItem(REVIEW_STORAGE_KEY);
+    storage.removeItem(BUYER_STORAGE_KEY);
+    storage.removeItem(DRAFT_STORAGE_KEY);
+    storage.removeItem(CART_STORAGE_KEY);
+  } finally {
+    notifyCheckoutSessionChanged();
+  }
+}
+
 export function completePreviewCheckout(
   storage: CheckoutStorage,
   completedAt = new Date(),
@@ -241,11 +276,12 @@ export function completePreviewCheckout(
 
   writeStored(storage, RECEIPT_STORAGE_KEY, receipt);
   recordPreviewMetric({ name: "preview_purchase", requestId: cart.requestId, referralUsed: receipt.discountAmount > 0 }, storage);
-  storage.removeItem(CART_STORAGE_KEY);
-  storage.removeItem(BUYER_STORAGE_KEY);
-  storage.removeItem(DRAFT_STORAGE_KEY);
-  storage.removeItem(REVIEW_STORAGE_KEY);
-  notifyCheckoutSessionChanged();
+  try {
+    cleanupPreviewCheckout(storage, cart.requestId);
+  } catch {
+    // The receipt is already durable. Retry cleanup without settling another test order.
+    throw new PreviewCheckoutCleanupError();
+  }
   return receipt;
 }
 
