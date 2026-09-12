@@ -520,7 +520,7 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
 .account-content { min-width: 0; }
 .account-content > section { border-top: 1px solid var(--line); padding-block: var(--space-6) var(--space-8); }
 .account-content h2 { margin: 0 0 var(--space-4); font-size: var(--text-label); }
-.account-content h3 { margin: 0; font-size: var(--text-body); }
+.account-content h3 { margin: 0; font-size: var(--text-body); min-width: 0; overflow-wrap: anywhere; }
 .account-welcome, .account-empty { background: var(--surface); padding: var(--space-7); }
 .account-welcome form, .account-profile form { margin-top: var(--space-5); }
 .account-welcome .text-link { margin-top: var(--space-5); }
