@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  completePreviewCheckout,
+  completePreparedPreviewCheckout,
   PREVIEW_PAYMENT_LAST_FOUR,
   readCart,
   readPreviewBuyer,
@@ -88,7 +88,7 @@ export function PreviewPayment({ enabled }: { enabled: boolean }) {
       }
       const settlement = result.quote;
       setCompleted(true);
-      const receipt = completePreviewCheckout(window.sessionStorage, new Date(), settlement);
+      const receipt = completePreparedPreviewCheckout(window.sessionStorage, cart.requestId, new Date(), settlement);
       if (!receipt) {
         setCompleted(false);
         setPaymentError("テスト決済を完了できませんでした。注文内容をもう一度ご確認ください。"); return;
