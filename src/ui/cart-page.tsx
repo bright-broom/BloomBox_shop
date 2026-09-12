@@ -13,7 +13,7 @@ import { formatMoney, money, multiplyMoney } from "@/shared/domain/money";
 import Link from "next/link";
 import { CheckoutStorageUnavailable } from "@/ui/checkout-storage-unavailable";
 import { useRouter } from "next/navigation";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { CHECKOUT_SESSION_UNAVAILABLE, useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
 import { FlowerLoading } from "@/ui/flower-loading";
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
@@ -31,6 +31,7 @@ export function CartPage({
   previewPrices: readonly { productId: string; unitAmount: number; shippingAmount: number }[];
 }) {
   const router = useRouter();
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const revision = useCheckoutSessionRevision();
   const cart: BrowserCartItem | null | undefined = (revision === null || revision === CHECKOUT_SESSION_UNAVAILABLE)
     ? undefined
@@ -51,7 +52,13 @@ export function CartPage({
   }, {});
 
   function clearCart() {
-    removeCart(window.sessionStorage);
+    if (pending) return;
+    setRemoveError(null);
+    try {
+      removeCart(window.sessionStorage);
+    } catch {
+      setRemoveError(giftExperienceContent.cart.removeError);
+    }
   }
 
   if (revision === CHECKOUT_SESSION_UNAVAILABLE) return <CheckoutStorageUnavailable />;
@@ -113,8 +120,9 @@ export function CartPage({
           </dl>
           <div className="cart-item-actions">
             <Link className="text-link" href={`/gift/${encodeURIComponent(cart.productId)}`}>内容を変更する</Link>
-            <button className="text-button" type="button" onClick={clearCart}>カートから削除</button>
+            <button className="text-button" type="button" onClick={clearCart} disabled={pending}>カートから削除</button>
           </div>
+          {removeError ? <p className="form-error" role="alert">{removeError}</p> : null}
         </article>
       </div>
       <aside className="checkout-totals">
