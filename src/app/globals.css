@@ -508,3 +508,43 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
 .permission-revocation-form .fulfillment-approval-acknowledgement { margin-bottom: 0; }
 .permission-revoke-button { justify-self: start; color: var(--danger); border-color: var(--danger); }
 .permission-revoke-button:hover { background: var(--danger); color: var(--paper); }
+
+/* Customer account: use the shared typography, green action and spacing tokens. */
+.account-page { padding-block: var(--space-8) var(--space-section); }
+.account-heading { margin-bottom: var(--space-8); }
+.account-heading h1 { font-size: var(--text-page); margin: var(--space-3) 0 var(--space-4); }
+.account-heading > p:last-child, .account-content header p, .account-profile > p, .account-support > p { color: var(--ink-soft); }
+.account-layout { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(0, 3fr); gap: var(--space-8); }
+.account-navigation { display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start; }
+.account-navigation a { min-height: var(--control-height); display: flex; align-items: center; }
+.account-content { min-width: 0; }
+.account-content > section { border-top: 1px solid var(--line); padding-block: var(--space-6) var(--space-8); }
+.account-content h2 { margin: 0 0 var(--space-4); font-size: var(--text-label); }
+.account-content h3 { margin: 0; font-size: var(--text-body); }
+.account-welcome, .account-empty { background: var(--surface); padding: var(--space-7); }
+.account-welcome form, .account-profile form { margin-top: var(--space-5); }
+.account-welcome .text-link { margin-top: var(--space-5); }
+.account-order-list { list-style: none; margin: var(--space-6) 0; padding: 0; }
+.account-order-list li { padding-block: var(--space-5); border-bottom: 1px solid var(--line); }
+.account-order-heading { display: flex; flex-wrap: wrap; gap: var(--space-4); justify-content: space-between; align-items: baseline; }
+.account-order-heading time { color: var(--ink-soft); font-size: var(--text-small); }
+.account-order-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-5); }
+.account-content dt { color: var(--ink-soft); font-size: var(--text-small); }
+.account-content dd { margin: var(--space-2) 0 0; overflow-wrap: anywhere; }
+.account-profile dl { display: grid; gap: var(--space-5); }
+.account-pagination, .account-scenarios { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-5); }
+.account-pagination { justify-content: space-between; }
+.account-scenarios { padding-top: var(--space-6); }
+.account-scenarios [aria-current="page"] { color: var(--accent); text-decoration: underline; }
+.account-notice { padding: var(--space-5); background: var(--surface); margin-bottom: var(--space-7); }
+.account-notice p { margin-bottom: 0; }
+.account-status { color: var(--ink-soft); }
+@media (max-width: 760px) {
+  .account-page { padding-block: var(--space-7) var(--space-8); }
+  .account-heading { margin-bottom: var(--space-7); }
+  .account-layout { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
+  .account-navigation { flex-direction: row; flex-wrap: wrap; gap: var(--space-4); }
+  .account-order-facts { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+  .account-welcome, .account-empty { padding: var(--space-5); }
+  .account-content .primary-button, .account-content .secondary-button { max-width: 100%; }
+}
