@@ -21,7 +21,10 @@ vi.mock("react", async (original) => ({
   useRef: (value: unknown) => ({ current: value }),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: harness.push }) }));
-vi.mock("@/ui/use-checkout-session-revision", () => ({ useCheckoutSessionRevision: () => "test" }));
+vi.mock("@/ui/use-checkout-session-revision", async (original) => ({
+  ...await original<typeof import("@/ui/use-checkout-session-revision")>(),
+  useCheckoutSessionRevision: () => "test",
+}));
 vi.mock("@/modules/checkout/presentation/browser-checkout-session", async (original) => ({
   ...await original<typeof import("@/modules/checkout/presentation/browser-checkout-session")>(),
   readCart: () => ({ productId: "test-product", recipientName: "テスト", deliveryDate: "2026-10-01", giftMessage: "テスト" }),

@@ -11,6 +11,7 @@ import {
 } from "@/modules/checkout/presentation/browser-checkout-session";
 import { formatMoney, money } from "@/shared/domain/money";
 import Link from "next/link";
+import { CheckoutStorageUnavailable } from "@/ui/checkout-storage-unavailable";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import {
@@ -18,19 +19,20 @@ import {
   PreviewCheckoutUnavailable,
   TestModeBanner,
 } from "@/ui/preview-checkout-shared";
-import { useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
+import { CHECKOUT_SESSION_UNAVAILABLE, useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
 
 export function PreviewOrderReview({ enabled }: { enabled: boolean }) {
   const router = useRouter();
   const [saveError, setSaveError] = useState<string | null>(null);
   const revision = useCheckoutSessionRevision();
-  const cart: BrowserCartItem | null | undefined = revision === null ? undefined : readCart(window.sessionStorage);
-  const buyer: PreviewBuyer | null | undefined = revision === null ? undefined : readPreviewBuyer(window.sessionStorage);
-  const draft: PreviewDraft | null | undefined = revision === null
+  const cart: BrowserCartItem | null | undefined = (revision === null || revision === CHECKOUT_SESSION_UNAVAILABLE) ? undefined : readCart(window.sessionStorage);
+  const buyer: PreviewBuyer | null | undefined = (revision === null || revision === CHECKOUT_SESSION_UNAVAILABLE) ? undefined : readPreviewBuyer(window.sessionStorage);
+  const draft: PreviewDraft | null | undefined = (revision === null || revision === CHECKOUT_SESSION_UNAVAILABLE)
     ? undefined
     : readPreviewDraft(window.sessionStorage);
 
   if (!enabled) return <PreviewCheckoutUnavailable />;
+  if (revision === CHECKOUT_SESSION_UNAVAILABLE) return <CheckoutStorageUnavailable />;
   if (cart === undefined || buyer === undefined || draft === undefined) {
     return <p className="checkout-loading" role="status">注文内容を確認しています…</p>;
   }

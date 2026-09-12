@@ -21,7 +21,8 @@ import {
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
+import { CheckoutStorageUnavailable } from "@/ui/checkout-storage-unavailable";
+import { CHECKOUT_SESSION_UNAVAILABLE, useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
 import { formatMoney, multiplyMoney, type Money } from "@/shared/domain/money";
 
 type SizeOption = { id: string; name: string; size: "M" | "L"; price: Money; shippingAmount: number };
@@ -37,6 +38,7 @@ type GiftFormProps = {
 
 export function GiftForm(props: GiftFormProps) {
   const revision = useCheckoutSessionRevision();
+  if (revision === CHECKOUT_SESSION_UNAVAILABLE) return <CheckoutStorageUnavailable />;
   if (revision === null) return <p className="checkout-loading" role="status">ギフトの設定を確認しています…</p>;
   return <GiftConfigurationForm key={props.productId} {...props} initialCart={readRecoverableCart(window.sessionStorage)} />;
 }

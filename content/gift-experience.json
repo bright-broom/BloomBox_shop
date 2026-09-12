@@ -60,5 +60,11 @@
       "preview_purchase": "テスト購入完了",
       "recipient_page_view": "受取人向け案内の閲覧"
     }
+  },
+  "storageUnavailable": {
+    "title": "カートの保存情報を確認できません",
+    "message": "このブラウザーでは購入に必要な保存情報を読み取れません。サイトの保存設定を確認してから再読み込みしてください。",
+    "retry": "再読み込みする",
+    "browse": "花の一覧を見る"
   }
 }

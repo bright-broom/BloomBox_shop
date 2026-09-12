@@ -11,9 +11,10 @@ import {
 import { isAvailableDeliveryDate } from "@/modules/fulfillment/public";
 import { formatMoney, money, multiplyMoney } from "@/shared/domain/money";
 import Link from "next/link";
+import { CheckoutStorageUnavailable } from "@/ui/checkout-storage-unavailable";
 import { useRouter } from "next/navigation";
 import { useActionState } from "react";
-import { useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
+import { CHECKOUT_SESSION_UNAVAILABLE, useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
 import { FlowerLoading } from "@/ui/flower-loading";
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { recordPreviewMetric } from "@/shared/infrastructure/preview-metrics";
@@ -31,7 +32,7 @@ export function CartPage({
 }) {
   const router = useRouter();
   const revision = useCheckoutSessionRevision();
-  const cart: BrowserCartItem | null | undefined = revision === null
+  const cart: BrowserCartItem | null | undefined = (revision === null || revision === CHECKOUT_SESSION_UNAVAILABLE)
     ? undefined
     : readRecoverableCart(window.sessionStorage);
   const [state, formAction, pending] = useActionState(async (previous: Parameters<typeof createPurchaseIntentAction>[0], formData: FormData) => {
@@ -53,6 +54,7 @@ export function CartPage({
     removeCart(window.sessionStorage);
   }
 
+  if (revision === CHECKOUT_SESSION_UNAVAILABLE) return <CheckoutStorageUnavailable />;
   if (cart === undefined) {
     return <p className="checkout-loading" role="status">カートを確認しています…</p>;
   }
