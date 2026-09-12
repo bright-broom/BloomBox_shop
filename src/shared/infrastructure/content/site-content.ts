@@ -28,7 +28,7 @@ const siteContentSchema = z.object({
     lead: z.array(z.string().trim().min(1).max(120)).min(1).max(3),
     imageUrl: z.url(),
     imageAlt: z.string().trim().min(1).max(160),
-    displayTitle: z.string().trim().regex(/^[A-Z ]+$/).max(16),
+    displayTitle: z.string().trim().regex(/^[A-Za-z ]+$/).max(16),
     primaryAction: shortCopy,
     secondaryAction: shortCopy,
   }),
