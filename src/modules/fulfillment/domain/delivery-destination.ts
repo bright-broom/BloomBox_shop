@@ -6,8 +6,11 @@ export const DELIVERY_POSTAL_INPUT_MAX_LENGTH = 32;
 export type DeliveryCoveragePolicy = Readonly<{ approval: "PENDING" }> | Readonly<{
   approval: "APPROVED"; prefectures: readonly JapanPrefecture[]; excludedPostalPrefixes: readonly string[];
 }>;
-// Regional terms remain a merchant decision. Never infer nationwide coverage from a valid address.
-export const DELIVERY_COVERAGE_POLICY: DeliveryCoveragePolicy = { approval: "PENDING" };
+// User-confirmed on 2026-09-12: all Japanese prefectures, with no regional exclusions.
+// Coverage approval alone does not authorize order acceptance, carrier SLAs or dispatch.
+export const DELIVERY_COVERAGE_POLICY: DeliveryCoveragePolicy = {
+  approval: "APPROVED", prefectures: JAPAN_PREFECTURES, excludedPostalPrefixes: [],
+};
 export type DeliveryAddress = Readonly<{
   countryCode: string | null; prefecture: string | null; postalCode: string | null;
   recipientName: string | null; city: string | null; addressLine: string | null;

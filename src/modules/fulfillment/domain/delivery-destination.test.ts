@@ -1,11 +1,27 @@
 import { describe, expect, it } from "vitest";
+import { JAPAN_PREFECTURES } from "./postal-address";
 import { assessDeliveryDestination, DELIVERY_COVERAGE_POLICY, type DeliveryAddress, type DeliveryCoveragePolicy } from "./delivery-destination";
 
 const policy: DeliveryCoveragePolicy = { approval: "APPROVED", prefectures: ["東京都", "神奈川県"], excludedPostalPrefixes: ["10021"] };
 const address: DeliveryAddress = { countryCode: "JP", prefecture: "東京都", postalCode: "100-0001", recipientName: "テスト受取人", city: "千代田区", addressLine: "テスト町1-2-3" };
 describe("delivery destination and approved coverage", () => {
   it("holds every destination while regional terms are unapproved", () => {
-    expect(assessDeliveryDestination(address, DELIVERY_COVERAGE_POLICY)).toEqual({ status: "HELD", reason: "COVERAGE_NOT_APPROVED" });
+    expect(assessDeliveryDestination(address, { approval: "PENDING" })).toEqual({ status: "HELD", reason: "COVERAGE_NOT_APPROVED" });
+  });
+  it("covers all 47 user-approved prefectures without excluding remote postal prefixes", () => {
+    expect(JAPAN_PREFECTURES).toHaveLength(47);
+    for (const prefecture of JAPAN_PREFECTURES) {
+      expect(assessDeliveryDestination({ ...address, prefecture }, DELIVERY_COVERAGE_POLICY))
+        .toEqual({ status: "STRUCTURALLY_VALID_AND_COVERED" });
+    }
+    for (const postalCode of ["100-2101", "907-1544"]) {
+      expect(assessDeliveryDestination({ ...address, postalCode }, DELIVERY_COVERAGE_POLICY))
+        .toEqual({ status: "STRUCTURALLY_VALID_AND_COVERED" });
+    }
+    expect(assessDeliveryDestination({ ...address, countryCode: "US" }, DELIVERY_COVERAGE_POLICY))
+      .toEqual({ status: "HELD", reason: "COUNTRY_UNSUPPORTED" });
+    expect(assessDeliveryDestination({ ...address, postalCode: "invalid" }, DELIVERY_COVERAGE_POLICY))
+      .toEqual({ status: "HELD", reason: "POSTAL_CODE_INVALID" });
   });
   it("returns only a structural/coverage result, never recipient data", () => {
     expect(assessDeliveryDestination(address, policy)).toEqual({ status: "STRUCTURALLY_VALID_AND_COVERED" });
