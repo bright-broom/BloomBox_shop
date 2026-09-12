@@ -1,3 +1,4 @@
+import { ShopifyCommerceIncompleteError } from "../application/shopify-commerce-hold";
 import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -62,6 +63,46 @@ describeDatabase("metadata-only Shopify Inbox diagnostics", () => {
     expect(await sql`SELECT * FROM bloombox.webhook_inbox ORDER BY id`).toEqual(before);
     expect(await sql`SELECT id FROM bloombox.audit_logs`).toHaveLength(0);
     expect(await sql`SELECT id FROM bloombox.outbox_events`).toHaveLength(0);
+  });
+  it("aggregates only allowlisted last-failure categories through the restricted view", async () => {
+    const categories = ["CONFIGURATION", "TERMS", "PAYMENT", "PRICING", "DELIVERY", "ORDER", "INCOMPLETE"] as const;
+    for (const category of categories) {
+      const id = await seed();
+      await sql`UPDATE bloombox.webhook_inbox SET attempts = 1, last_error_code = ${new ShopifyCommerceIncompleteError(category).name} WHERE id = ${id}`;
+    }
+    const none = await seed();
+    await sql`UPDATE bloombox.webhook_inbox SET last_error_code = NULL WHERE id = ${none}`;
+    for (const value of ["private-customer@example.test", "ShopifyCommerceTermsHoldError private-details", "shopifycommercetermsholderror"]) {
+      const id = await seed("FAILED");
+      await sql`UPDATE bloombox.webhook_inbox SET last_error_code = ${value} WHERE id = ${id}`;
+    }
+    // The projection excludes processed/Stripe rows and the diagnostic still filters its store.
+    for (const [status, provider, shop] of [["PROCESSED", "SHOPIFY", request.shop], ["FAILED", "STRIPE", request.shop], ["FAILED", "SHOPIFY", "other.myshopify.com"]]) {
+      const id = await seed(status, 30, provider, shop);
+      await sql`UPDATE bloombox.webhook_inbox SET last_error_code = 'ShopifyCommerceTermsHoldError' WHERE id = ${id}`;
+    }
+    const before = await sql`SELECT * FROM bloombox.webhook_inbox ORDER BY id`;
+    const result = await inspectShopifyInbox(monitor, request);
+    expect(result.lastFailureCategories).toEqual({ configuration: 1, terms: 1, payment: 1, pricing: 1, delivery: 1, order: 1,
+      incomplete: 1, unknown: 3, none: 1 });
+    expect(result.reasons).toContain("COMMERCE_REVIEW_REQUIRED");
+    expect(JSON.stringify(result)).not.toMatch(/private-|@|HoldError/);
+    const projected = await monitor`SELECT * FROM bloombox.shopify_inbox_diagnostic_metadata`;
+    expect(projected.every((row) => Object.keys(row).every((key) => ["id", "provider_account_id", "status", "received_at", "available_at", "locked_at", "attempts", "payload_expires_at", "payload_purged_at", "category"].includes(key)))).toBe(true);
+    expect(JSON.stringify(projected)).not.toContain("private-");
+    expect(await sql`SELECT * FROM bloombox.webhook_inbox ORDER BY id`).toEqual(before);
+    await expect(monitor`UPDATE bloombox.shopify_inbox_diagnostic_metadata SET id = ${randomUUID()}`).rejects.toMatchObject({ code: "42501" });
+    await expect(monitor`DELETE FROM bloombox.shopify_inbox_diagnostic_metadata`).rejects.toMatchObject({ code: "42501" });
+  });
+  it("does not require immediate merchant review solely for ordinary pending payment", async () => {
+    const id = await seed();
+    await sql`UPDATE bloombox.webhook_inbox SET attempts = 1, last_error_code = 'ShopifyCommercePaymentHoldError' WHERE id = ${id}`;
+    expect(await inspectShopifyInbox(monitor, request)).toMatchObject({ status: "WITHIN_LIMITS", reasons: [], lastFailureCategories: { payment: 1 } });
+  });
+  it("fails closed if the category view grant is missing", async () => {
+    await seed(); await sql`REVOKE SELECT ON bloombox.shopify_inbox_diagnostic_metadata FROM bloombox_inbox_monitor`;
+    try { await expect(inspectShopifyInbox(monitor, request)).rejects.toEqual(new ShopifyInboxDiagnosticError("UNAVAILABLE")); }
+    finally { await sql`GRANT SELECT ON bloombox.shopify_inbox_diagnostic_metadata TO bloombox_inbox_monitor`; }
   });
   it("uses the database clock and inclusive age threshold, even for scheduled retries", async () => {
     const id = await seed("PENDING", 900);
