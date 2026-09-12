@@ -52,4 +52,15 @@ Buyer information and review confirmation forms now catch storage failures durin
 
 Verification: six submit-handler regression tests cover quota/security exceptions, successful retries, cleared error state and save-before-navigation ordering. Four failure cases reproduced uncaught exceptions before the change. `pnpm check:ci` passed (759 tests, 138 external/DB-dependent tests skipped). Local Chrome confirmed M gift → cart (JPY 5,000) → buyer form → review → dummy payment screen, with no horizontal overflow on the 320px review page. Fault injection is a unit-level check; browser storage settings were not changed. No real payment or Shopify checkout E2E was run.
 
-Scope: this change covers writes during these two submit operations. Storage access failures while initially loading a page and other cart/storage operations are separate remaining work. Revert the form changes to roll back; there is no migration or environment change.
+Scope: this change covers writes during these two submit operations. Initial page-load storage denial is handled by the recovery state below; other cart/storage write operations remain separate work. Revert the form changes to roll back; there is no migration or environment change.
+
+
+## Unreadable browser storage — 2026-09-12
+
+The client revision reader catches both access-denied sessionStorage getters and getItem failures, returning a stable unavailable marker rather than an empty-cart snapshot. Gift, cart, buyer, review, dummy payment and receipt screens stop before reading their stored details and show one shared recovery message. The header shows an unknown count (—), not zero, when cart reading fails. Reload after correcting browser storage settings rechecks access; no storage clearing or writes are part of recovery.
+
+Copy is centrally validated in content/gift-experience.json. No raw exception, token, address or gift message is included in recovery feedback. Existing storage v1 formats, price validation, payment decisions and provider behavior are unchanged. A later recovery screen can replace an in-progress form; this does not promise persistence of unsaved input. Mid-operation storage policy changes after a successful snapshot and other write failures are not covered by this initial-read guard.
+
+Verification: 16 new tests cover property/getItem denial, all six recovery screens, stable snapshots, recovery on a subsequent read, no writes and unknown header count. Reverting only the UI guards reproduced 13 failing cases. Previous six submit-retry tests also pass. Full pnpm check:ci passed. A temporary static rendering of the real recovery component and shared CSS was inspected in Chrome at 320px: document width 320px, retry button height 48px. This visual fixture does not simulate browser storage denial or hydrate the retry button; behavioral coverage comes from unit tests. No actual browser privacy settings were changed and no real payment/Shopify E2E was performed.
+
+Rollback: revert the recovery change. No migration or environment changes are required, and no customer data is rewritten.

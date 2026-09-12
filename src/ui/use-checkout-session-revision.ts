@@ -2,14 +2,15 @@
 
 import {
   CHECKOUT_SESSION_CHANGED_EVENT,
-  readCheckoutSessionSnapshot,
+  readBrowserCheckoutSessionSnapshot,
 } from "@/modules/checkout/presentation/browser-checkout-session";
 import { useSyncExternalStore } from "react";
+export { CHECKOUT_SESSION_UNAVAILABLE } from "@/modules/checkout/presentation/browser-checkout-session";
 
 export function useCheckoutSessionRevision(): string | null {
   return useSyncExternalStore(
     subscribe,
-    () => readCheckoutSessionSnapshot(window.sessionStorage),
+    readBrowserCheckoutSessionSnapshot,
     () => null,
   );
 }

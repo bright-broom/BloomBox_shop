@@ -3,18 +3,20 @@
 import { readPreviewReceipt, type PreviewReceipt } from "@/modules/checkout/presentation/browser-checkout-session";
 import { formatMoney, money } from "@/shared/domain/money";
 import Link from "next/link";
-import { useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
+import { CheckoutStorageUnavailable } from "@/ui/checkout-storage-unavailable";
+import { CHECKOUT_SESSION_UNAVAILABLE, useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
 import { PreviewCheckoutUnavailable, TestModeBanner } from "@/ui/preview-checkout-shared";
 import { PreviewReferralOrder } from "@/ui/preview-referral-order";
 import { referralContent } from "@/shared/infrastructure/content/referral-content";
 
 export function PreviewCheckoutComplete({ enabled }: { enabled: boolean }) {
   const revision = useCheckoutSessionRevision();
-  const receipt: PreviewReceipt | null | undefined = revision === null
+  const receipt: PreviewReceipt | null | undefined = (revision === null || revision === CHECKOUT_SESSION_UNAVAILABLE)
     ? undefined
     : readPreviewReceipt(window.sessionStorage);
 
   if (!enabled) return <PreviewCheckoutUnavailable />;
+  if (revision === CHECKOUT_SESSION_UNAVAILABLE) return <CheckoutStorageUnavailable />;
   if (receipt === undefined) {
     return <p className="checkout-loading" role="status">テスト注文を確認しています…</p>;
   }

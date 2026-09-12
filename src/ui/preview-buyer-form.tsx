@@ -1,5 +1,7 @@
 "use client";
 
+import { CheckoutStorageUnavailable } from "@/ui/checkout-storage-unavailable";
+
 import {
   previewBuyerSchema,
   readCart,
@@ -32,15 +34,16 @@ import {
   PreviewCheckoutUnavailable,
   TestModeBanner,
 } from "@/ui/preview-checkout-shared";
-import { useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
+import { CHECKOUT_SESSION_UNAVAILABLE, useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
 
 export function PreviewBuyerForm({ enabled }: { enabled: boolean }) {
   const revision = useCheckoutSessionRevision();
-  const cart: BrowserCartItem | null | undefined = revision === null ? undefined : readCart(window.sessionStorage);
-  const buyer: PreviewBuyer | null | undefined = revision === null ? undefined : readPreviewBuyer(window.sessionStorage);
-  const hasDraft = revision === null ? undefined : Boolean(readPreviewDraft(window.sessionStorage));
+  const cart: BrowserCartItem | null | undefined = (revision === null || revision === CHECKOUT_SESSION_UNAVAILABLE) ? undefined : readCart(window.sessionStorage);
+  const buyer: PreviewBuyer | null | undefined = (revision === null || revision === CHECKOUT_SESSION_UNAVAILABLE) ? undefined : readPreviewBuyer(window.sessionStorage);
+  const hasDraft = (revision === null || revision === CHECKOUT_SESSION_UNAVAILABLE) ? undefined : Boolean(readPreviewDraft(window.sessionStorage));
 
   if (!enabled) return <PreviewCheckoutUnavailable />;
+  if (revision === CHECKOUT_SESSION_UNAVAILABLE) return <CheckoutStorageUnavailable />;
   if (cart === undefined || buyer === undefined || hasDraft === undefined) {
     return <p className="checkout-loading" role="status">購入手続きを確認しています…</p>;
   }

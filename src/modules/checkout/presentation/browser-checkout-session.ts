@@ -17,6 +17,7 @@ const REVIEW_STORAGE_KEY = "bloombox.checkout.preview-review.v1";
 const RECEIPT_STORAGE_KEY = "bloombox.checkout.preview-receipt.v1";
 
 export const CHECKOUT_SESSION_CHANGED_EVENT = "bloombox:checkout-session-changed";
+export const CHECKOUT_SESSION_UNAVAILABLE = "unavailable";
 export const PREVIEW_PAYMENT_LAST_FOUR = "4242";
 
 // A valid stored draft may need a new delivery date. Reading must not hide it.
@@ -81,6 +82,24 @@ export type PreviewReview = z.infer<typeof previewReviewSchema>;
 export type PreviewReceipt = z.infer<typeof previewReceiptSchema>;
 
 type CheckoutStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+/** Catch access to the browser property as well as failures reading individual keys. */
+export function readBrowserCheckoutSessionSnapshot(): string {
+  try {
+    return readCheckoutSessionSnapshot(window.sessionStorage);
+  } catch {
+    return CHECKOUT_SESSION_UNAVAILABLE;
+  }
+}
+
+/** Null means unreadable; zero is reserved for a readable, empty cart. */
+export function readBrowserCartQuantity(): number | null {
+  try {
+    return readRecoverableCart(window.sessionStorage)?.quantity ?? 0;
+  } catch {
+    return null;
+  }
+}
 
 export function readCart(storage: CheckoutStorage): BrowserCartItem | null {
   return readStored(storage, CART_STORAGE_KEY, cartItemSchema);
