@@ -109,8 +109,8 @@ export class StripeWebhookVerifier implements ProviderWebhookVerifier {
   private readonly stripe: Stripe;
 
   constructor(private readonly config: StripeConfig) {
+    // Signature verification performs no API requests. The signed event version is checked below.
     this.stripe = new Stripe(config.checkoutSecretKey, {
-      apiVersion: config.apiVersion,
       maxNetworkRetries: 0,
       telemetry: false,
     });
