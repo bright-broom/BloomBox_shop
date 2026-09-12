@@ -3,6 +3,8 @@ import type { VerifiedProviderEvent, WebhookInbox } from "../application/receive
 import type {
   FailedEventDisposition,
   ProviderEventQueue,
+  ClaimedProviderEvent,
+  ProviderEventReference,
 } from "../application/process-provider-inbox";
 import type { DatabaseClient } from "@/shared/infrastructure/database/postgres-client";
 import type { AesGcmDataProtector } from "@/shared/infrastructure/security/aes-gcm-data-protector";
@@ -12,8 +14,13 @@ export const WEBHOOK_PAYLOAD_RETENTION_DAYS = 30;
 export const WEBHOOK_MAX_PROCESSING_ATTEMPTS = 12;
 export const WEBHOOK_MAX_RETRY_DELAY_SECONDS = 3_600;
 
-const claimedEventSchema = z.object({
+// These NOT NULL identity columns are sufficient to record a failed restore under the same lease.
+const eventReferenceSchema = z.object({
   commerce_provider: z.enum(["STRIPE", "SHOPIFY"]),
+  provider_account_id: z.string(),
+  external_event_id: z.string(),
+});
+const claimedEventSchema = eventReferenceSchema.extend({
   provider_account_id: z.string().min(1),
   external_event_id: z.string().min(1),
   event_type: z.string().min(1),
@@ -21,7 +28,7 @@ const claimedEventSchema = z.object({
   api_version: z.string().min(1),
   payload_key_id: z.string().min(1),
   payload_ciphertext: z.instanceof(Buffer),
-  provider_occurred_at: z.union([z.string(), z.date()]),
+  provider_occurred_at: z.union([z.string(), z.date()]).pipe(z.coerce.date()),
 });
 
 const providerPayloadSchema = z.record(z.string(), z.unknown());
@@ -82,7 +89,7 @@ export class PostgresWebhookInbox implements WebhookInbox, ProviderEventQueue {
     workerId: string;
     now: Date;
     lockTimeoutMinutes: number;
-  }>): Promise<readonly VerifiedProviderEvent[]> {
+  }>): Promise<readonly ClaimedProviderEvent[]> {
     if (
       !Number.isSafeInteger(input.limit)
       || input.limit < 1
@@ -126,7 +133,7 @@ export class PostgresWebhookInbox implements WebhookInbox, ProviderEventQueue {
             inbox.payload_ciphertext,
             inbox.provider_occurred_at
         `;
-        return rows.map((untrustedRow) => this.restoreEvent(untrustedRow));
+        return rows.map((untrustedRow) => this.restoreClaim(untrustedRow));
       });
     } catch (error) {
       if (error instanceof WebhookInboxPersistenceError) throw error;
@@ -158,7 +165,7 @@ export class PostgresWebhookInbox implements WebhookInbox, ProviderEventQueue {
   }
 
   async markFailed(
-    event: VerifiedProviderEvent,
+    event: ProviderEventReference,
     errorCode: string,
     failedAt: Date,
     workerId: string,
@@ -196,6 +203,23 @@ export class PostgresWebhookInbox implements WebhookInbox, ProviderEventQueue {
     }
   }
 
+  private restoreClaim(untrustedRow: unknown): ClaimedProviderEvent {
+    const parsed = eventReferenceSchema.safeParse(untrustedRow);
+    if (!parsed.success) throw new WebhookInboxPersistenceError();
+    const reference: ProviderEventReference = {
+      provider: parsed.data.commerce_provider, providerAccountId: parsed.data.provider_account_id,
+      externalEventId: parsed.data.external_event_id,
+    };
+    this.assertScope(reference);
+    try {
+      return { kind: "READABLE", event: this.restoreEvent(untrustedRow) };
+    } catch (error) {
+      if (!(error instanceof WebhookInboxPersistenceError)) throw error;
+      // Commit this record's lease alongside its neighbors. The worker applies the ordinary bounded retry policy.
+      return { kind: "UNREADABLE", reference };
+    }
+  }
+
   private restoreEvent(untrustedRow: unknown): VerifiedProviderEvent {
     const row = claimedEventSchema.safeParse(untrustedRow);
     if (!row.success) throw new WebhookInboxPersistenceError();
@@ -221,7 +245,7 @@ export class PostgresWebhookInbox implements WebhookInbox, ProviderEventQueue {
       eventType: row.data.event_type,
       externalObjectId: row.data.external_object_id ?? undefined,
       apiVersion: row.data.api_version,
-      occurredAt: new Date(row.data.provider_occurred_at),
+      occurredAt: row.data.provider_occurred_at,
       payload: parsedPayload.data,
     };
   }

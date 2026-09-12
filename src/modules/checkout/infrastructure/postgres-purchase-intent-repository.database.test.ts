@@ -55,8 +55,8 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       ORDER BY version
     `;
 
-    expect(rows).toHaveLength(18);
-    expect(rows.map((row) => row.version)).toEqual(["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018"]);
+    expect(rows).toHaveLength(20);
+    expect(rows.map((row) => row.version)).toEqual(["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020"]);
     expect(rows.every((row) => /^[0-9a-f]{64}$/.test(row.checksum))).toBe(true);
   });
 
@@ -513,7 +513,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       now: new Date("2026-08-21T00:11:00.000Z"),
       lockTimeoutMinutes: 5,
     });
-    expect(claimed).toEqual([event]);
+    expect(claimed).toEqual([{ kind: "READABLE", event }]);
     await expect(inbox.markFailed(
       event,
       "DependencyUnavailableError",
@@ -532,7 +532,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       now: new Date("2026-08-21T00:11:02.000Z"),
       lockTimeoutMinutes: 5,
     });
-    expect(retried).toEqual([event]);
+    expect(retried).toEqual([{ kind: "READABLE", event }]);
     await inbox.markProcessed(
       event,
       new Date("2026-08-21T00:11:03.000Z"),
