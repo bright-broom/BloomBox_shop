@@ -41,12 +41,17 @@ export class ProcessProviderInbox {
     private readonly processor: ProviderEventProcessor,
     private readonly now: () => Date = () => new Date(),
     private readonly createWorkerId: () => string = randomUUID,
-  ) {}
+    private readonly batchSize: number = PROVIDER_INBOX_BATCH_SIZE,
+  ) {
+    if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > PROVIDER_INBOX_BATCH_SIZE) {
+      throw new RangeError("Invalid provider inbox batch size");
+    }
+  }
 
   async execute(): Promise<ProviderInboxProcessingResult> {
     const workerId = this.createWorkerId();
     const events = await this.queue.claim({
-      limit: PROVIDER_INBOX_BATCH_SIZE,
+      limit: this.batchSize,
       workerId,
       now: this.now(),
       lockTimeoutMinutes: PROVIDER_INBOX_LOCK_TIMEOUT_MINUTES,

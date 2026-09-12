@@ -1,6 +1,6 @@
 # Shopify注文確定後の決済反映・購入状態更新
 
-2026-09-11時点。内部の`ReconcileShopifyPayment`へ任意注入の完了処理を追加しました。新規注文はこれまでの販売条件・入金・金額・配送検証とOrder保存を通り、その後にPaymentの反映、CheckoutのCONVERTED遷移を実行します。公開経路・Inbox worker・本番決済Gateは無効のままです。
+2026-09-11時点。内部の`ReconcileShopifyPayment`へ任意注入の完了処理を追加しました。新規注文はこれまでの販売条件・入金・金額・配送検証とOrder保存を通り、その後にPaymentの反映、CheckoutのCONVERTED遷移を実行します。公開購入経路・本番決済Gateは無効のままです。2026-09-12に[テスト注文限定のInbox worker](SHOPIFY_INBOX_WORKER.md)を初期停止で接続しました。
 
 ## 確定済み注文の再開
 
@@ -28,7 +28,7 @@ PaymentはShopify注文全体の決済集計です。`external_payment_id`には
 
 Order保存、Payment反映、Checkout更新は別々のトランザクションです。前段が確定して後段だけ失敗しても、前段を取り消しません。呼出元へ固定の安全な例外を返し、同じ通知の再実行でOrderの不変証跡から再開します。これにより住所を再取得せず、配送期限を過ぎていても残りの更新ができます。
 
-返却値は決済観測の`outcome`、注文受け入れの`acceptance`、今回の`completion`を分けます。`completion: COMPLETED`はPayment反映とCheckout更新の完了で、発送・通知・Inbox全体の完了ではありません。追加の任意依存を注入した場合、`completion.fulfillment`に[発送受付・保留・取消](SHOPIFY_FULFILLMENT_INTAKE.md)の結果を返します。HELDを発送許可として扱いません。依存を未注入ならNOT_CONFIGURED、未受け入れならORDER_NOT_ACCEPTEDで保留します。未実装の後続処理を飛ばしてInboxを処理済みにする接続はありません。
+返却値は決済観測の`outcome`、注文受け入れの`acceptance`、今回の`completion`を分けます。`completion: COMPLETED`はPayment反映とCheckout更新の完了で、発送・通知・Inbox全体の完了ではありません。追加の任意依存を注入した場合、`completion.fulfillment`に[発送受付・保留・取消](SHOPIFY_FULFILLMENT_INTAKE.md)の結果を返します。HELDを発送許可として扱いません。依存を未注入ならNOT_CONFIGURED、未受け入れならORDER_NOT_ACCEPTEDで保留します。テストInbox workerは注文・決済・購入状態・発送受付の記録が揃った場合のみ処理済みにします。顧客通知や実発送を完了した意味ではありません。
 
 CONVERTEDになった購入準備は既存の保持期限処理の対象になります。確定注文側の暗号化スナップショットは別途保持し、その削除運用・本人確認・閲覧権限は未完了です。
 

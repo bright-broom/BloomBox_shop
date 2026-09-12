@@ -14,6 +14,15 @@ const event: VerifiedProviderEvent = {
 };
 
 describe("ProcessProviderInbox", () => {
+  it("uses a bounded configured batch for slow provider reads", async () => {
+    const queue = { claim: vi.fn().mockResolvedValue([]), markProcessed: vi.fn(), markFailed: vi.fn() };
+    await new ProcessProviderInbox(queue, { process: vi.fn() }, undefined, undefined, 1).execute();
+    expect(queue.claim).toHaveBeenCalledWith(expect.objectContaining({ limit: 1 }));
+    for (const size of [0, -1, 101, 1.5, NaN]) {
+      expect(() => new ProcessProviderInbox(queue, { process: vi.fn() }, undefined, undefined, size)).toThrow(RangeError);
+    }
+  });
+
   it("claims and marks successfully processed events", async () => {
     const queue = {
       claim: vi.fn().mockResolvedValue([{ kind: "READABLE", event }]),
