@@ -271,6 +271,45 @@ describe("browser checkout session", () => {
     expect(completePreviewCheckout(storage)).toBeNull();
   });
 
+  it.each(["preview-review", "buyer", "preview-draft", "cart"])(
+    "keeps the cart recoverable when removing %s fails, then permits repeated cleanup",
+    (failedPart) => {
+      storeCart(storage, cart);
+      storePreviewBuyer(storage, buyer);
+      storePreviewDraft(storage, previewDraft("BB-TEST-1234"));
+      acceptPreviewReview(storage);
+      const receipt = "previous-receipt";
+      storage.setItem("bloombox.checkout.preview-receipt.v1", receipt);
+      const originalRemove = storage.removeItem.bind(storage);
+      const remove = vi.spyOn(storage, "removeItem").mockImplementation((key) => {
+        if (key === `bloombox.checkout.${failedPart}.v1`) throw new DOMException("private detail", "SecurityError");
+        originalRemove(key);
+      });
+      const dispatchEvent = vi.fn();
+      vi.stubGlobal("window", { dispatchEvent });
+      try {
+        expect(() => removeCart(storage)).toThrow("private detail");
+        expect(readRecoverableCart(storage)).toEqual(cart);
+        expect(dispatchEvent).toHaveBeenCalledTimes(1);
+        // Approval is invalidated before any buyer/draft data is removed.
+        if (failedPart !== "preview-review") expect(readPreviewReview(storage)).toBeNull();
+        if (failedPart !== "preview-review") expect(completePreviewCheckout(storage)).toBeNull();
+        remove.mockImplementation(originalRemove);
+        removeCart(storage);
+        removeCart(storage);
+        expect(readCart(storage)).toBeNull();
+        expect(readPreviewBuyer(storage)).toBeNull();
+        expect(readPreviewDraft(storage)).toBeNull();
+        expect(readPreviewReview(storage)).toBeNull();
+        expect(storage.getItem("bloombox.checkout.preview-receipt.v1")).toBe(receipt);
+        expect(dispatchEvent).toHaveBeenCalledTimes(3);
+      } finally {
+        remove.mockRestore();
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
   it("removes the cart and its dependent preview state together", () => {
     storeCart(storage, cart);
     storePreviewBuyer(storage, buyer);
