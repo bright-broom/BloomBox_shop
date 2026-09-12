@@ -172,6 +172,17 @@ export function storePreparedPreviewDraft(storage: CheckoutStorage, requestId: s
   storePreviewDraft(storage, draft);
 }
 
+/** Bind a delayed payment response to the cart that started that operation, even without a quote. */
+export function completePreparedPreviewCheckout(
+  storage: CheckoutStorage,
+  requestId: string,
+  completedAt = new Date(),
+  settlement?: PreviewReferralQuote,
+): PreviewReceipt | null {
+  if (readCart(storage)?.requestId !== requestId) return null;
+  return completePreviewCheckout(storage, completedAt, settlement);
+}
+
 export function readPreviewReview(storage: CheckoutStorage): PreviewReview | null {
   return readStored(storage, REVIEW_STORAGE_KEY, previewReviewSchema);
 }
