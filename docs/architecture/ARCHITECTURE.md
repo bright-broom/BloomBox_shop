@@ -108,6 +108,8 @@ Decision records:
 - [ADR 0004: Referral rewards preview](adr/0004-referral-rewards-preview.md) — proposed; production activation excluded
 - [ADR 0005: Fulfillment operator approval](adr/0005-fulfillment-operator-approval.md) — proposed for production; disconnected internal capability
 
+- [ADR 0008: Native customer account](adr/0008-native-customer-account.md) — implementation selection; isolated Shopify client and real-provider verification required.
+
 ## Architecture decision test
 
 Before a material change, answer:
