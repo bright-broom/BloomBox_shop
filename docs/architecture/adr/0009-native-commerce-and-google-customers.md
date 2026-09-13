@@ -31,7 +31,7 @@ PKCE/S256, state, nonce, RS256 signature, issuer, audience, verified email and e
 5. Connect native fulfillment operations and test stock release, partial fulfillment and refund behavior; replace Shopify-specific operator workflows as each native equivalent is verified.
 6. Review tax/shipping, merchant identity, privacy/support, data retention, backups, restore and incident ownership before production activation. Update the release gate to require native catalog evidence when that adapter exists; do not remove the current failing gate merely to deploy.
 
-The checked-in production composition still contains Shopify catalog/fulfillment adapters during migration. They are not the chosen end state and are not proof of a completed migration. No Shopify data, merchant accounts, OAuth credentials or accepted orders are deleted by this change.
+The production catalog reader now uses PostgreSQL (migration 0019); Shopify fulfillment adapters remain during migration. New production purchase intake is paused in code pending native inventory reservations and buyer binding. See [native catalog](../../operations/NATIVE_CATALOG.md) for implemented behavior and remaining work. They are not the chosen end state and are not proof of a completed migration. No Shopify data, merchant accounts, OAuth credentials or accepted orders are deleted by this change.
 
 ## Alternatives and trade-offs
 

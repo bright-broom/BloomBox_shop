@@ -57,7 +57,7 @@ Order, Payment, and Fulfillment have independent explicit state machines with va
 
 - BloomBox owns the native commerce records under ADR 0009. Verified payment-provider facts remain authoritative for captures/refunds. Shopify adapters are legacy migration code, not the selected production core.
 - Checked-in catalog JSON and in-memory purchase-intent storage are deterministic preview adapters, not a production data path.
-- A verified Shopify fact is authoritative for checkout and payment state. A browser redirect is not.
+- Verified provider facts are authoritative for payment state within the transaction's assigned provider. A browser redirect is not.
 - Inventory changes are traceable movements such as received, reserved, released, consumed, or adjusted.
 - Public identifiers are opaque; database sequences are not exposed.
 - An eGift claim URL is a capability: store only a token hash and enforce expiry, single use, rate limiting, and auditability.
@@ -71,7 +71,7 @@ Configuration is split by meaning rather than collected into an untyped global o
 | Kind | Location | Validation and ownership |
 | --- | --- | --- |
 | Editable site copy | `content/site.json` | Zod schema at the infrastructure boundary |
-| Preview catalog | `content/catalog.json` | Catalog adapter schema; production replaces it with Shopify |
+| Preview catalog | `content/catalog.json` | Catalog adapter schema; production uses PostgreSQL catalog_products |
 | Business policy | Owning module's domain | Typed constants and domain tests |
 | Visual primitives | CSS root semantic tokens | Design-token check and visual review |
 | Secrets and deploy values | Server environment | Central runtime validation; never client-exposed |
@@ -94,7 +94,7 @@ Browse → Gift configuration → Checkout → Payment → Order → Fulfillment
 
 AI, analytics, recommendation, marketing, CMS, and story enrichment are noncritical. Their outage must not prevent checkout or corrupt commerce state. AI output is validated, receives only the minimum necessary data, and never decides price, payment, refund, inventory, shipment, or legal facts. Customer-facing prompts are centralized and versioned.
 
-Production commerce currently stops at the preview boundary. Public experience previews may deploy, but the commerce release gate remains red until Shopify adapters, provider verification, observability, privacy review, and critical-flow E2E evidence satisfy [`../operations/RELEASE.md`](../operations/RELEASE.md).
+Production commerce currently stops at the preview boundary. Public experience previews may deploy, but the commerce release gate remains red until native catalog/inventory, buyer binding, provider verification, observability, privacy review, and critical-flow E2E evidence satisfy [`../operations/RELEASE.md`](../operations/RELEASE.md).
 
 ## ADR threshold
 
@@ -110,7 +110,10 @@ Decision records:
 - [ADR 0004: Referral rewards preview](adr/0004-referral-rewards-preview.md) — proposed; production activation excluded
 - [ADR 0005: Fulfillment operator approval](adr/0005-fulfillment-operator-approval.md) — proposed for production; disconnected internal capability
 
-- [ADR 0008: Native customer account](adr/0008-native-customer-account.md) — implementation selection; isolated Shopify client and real-provider verification required.
+- [ADR 0008: Native customer account](adr/0008-native-customer-account.md) — superseded by ADR 0009.
+- [ADR 0009: Native commerce and Google customers](adr/0009-native-commerce-and-google-customers.md) — current direction; activation blocked.
+
+The production catalog reader uses PostgreSQL; see [native catalog](../operations/NATIVE_CATALOG.md). Publication and manual availability are not inventory reservation. New production checkout remains paused in code until inventory and buyer binding are complete.
 
 ## Architecture decision test
 

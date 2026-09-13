@@ -1,6 +1,6 @@
 # BloomBox database operations
 
-PostgreSQL stores BloomBox-owned purchase intents, encrypted personal data, provider mappings, operational commerce projections, inbox and outbox records, idempotency state, reconciliation results, and audit history. Shopify remains authoritative for production commerce under ADR 0001.
+PostgreSQL stores BloomBox-owned catalog products, customer identities, purchase intents, encrypted personal data, provider mappings, orders, inbox and outbox records, idempotency state, reconciliation results, and audit history. ADR 0009 selects native commerce; legacy Shopify records remain during migration and production activation is blocked.
 
 ## Required configuration
 
@@ -9,9 +9,9 @@ PostgreSQL stores BloomBox-owned purchase intents, encrypted personal data, prov
 - `DATABASE_SSL_MODE`: `verify-full` in hosted environments; `disable` is allowed only for an isolated local database.
 - `DATABASE_MAX_CONNECTIONS`: per-process connection limit from 1 to 20.
 - `BLOOMBOX_PII_KEYRING`: JSON containing the active AES-256-GCM key ID and all retained decryption keys.
-- `BLOOMBOX_RUNTIME_MODE`: defaults to `preview`; `production` selects the PostgreSQL purchase-intent adapter and fails closed if database or encryption configuration is missing.
+- `BLOOMBOX_RUNTIME_MODE`: defaults to `preview`; `production` selects the PostgreSQL catalog and purchase-intent adapters and fails closed if database or encryption configuration is missing.
 - Stripe connector configuration and account-side setup are documented in `docs/operations/STRIPE.md`.
-- Shopify Storefront catalog configuration and content contract are documented in `docs/operations/SHOPIFY.md`.
+- Native catalog setup and migration boundaries are documented in [NATIVE_CATALOG.md](../docs/operations/NATIVE_CATALOG.md). Shopify configuration is needed only for retained legacy integrations.
 
 Example names only; use secret management rather than a checked-in environment file:
 
@@ -58,3 +58,5 @@ Migration 0016 adds scoped permission-manager grants, immutable revocation recei
 Migration 0017 adds scoped permission-list and latest-revocation lookup indexes. Reapply `database/roles.sql` so the dedicated manager role shares the existing submission allowance with approval operations. Configure `DATABASE_PERMISSION_MANAGER_URL` against the same database with a separate least-privilege login; there is no fallback to application/worker/approver URLs. See [management screen rollout](../docs/operations/OPERATOR_PERMISSION_MANAGEMENT.md).
 
 Migration 0018 restricts operator provisioning audit receipts to schema-owner inserts and protects them from update/delete. It preserves unrelated audit operations and adds no role grants. Apply it before using the offline owner-only plan/apply tool with `DATABASE_OPERATOR_ADMIN_URL`; never expose this credential to runtime roles or previews. The tool refuses missing/disabled protection, uses reviewed versions and confirmation digests, and atomically records before/after SYSTEM audit. Retain this migration and receipts on rollback. See [operator and manager provisioning](../docs/operations/OPERATOR_ACCESS_PROVISIONING.md).
+
+Migration 0019 adds the Catalog-owned `catalog_products` table, initially empty with DRAFT/unavailable defaults. Reapply `database/roles.sql` for application/worker SELECT-only access. Existing commerce tables, identifiers and prices are not migrated or overwritten. Native inventory reservations and operator catalog editing remain incomplete; new production checkout stays paused in code. Retain catalog data and migration history on rollback. See [native catalog operations](../docs/operations/NATIVE_CATALOG.md).

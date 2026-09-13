@@ -4,7 +4,7 @@
   "checkoutProvider": "STRIPE",
   "evidence": {
     "activationDecisionAdr": { "complete": false, "reference": null },
-    "shopifyCatalogContract": { "complete": false, "reference": null },
+    "nativeCatalogContract": { "complete": false, "reference": null },
     "stripeTestModeE2e": { "complete": false, "reference": null },
     "inventoryReservationStrategy": { "complete": false, "reference": null },
     "taxShippingReview": { "complete": false, "reference": null },

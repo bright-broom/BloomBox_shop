@@ -3,10 +3,13 @@ import catalog from "./content/catalog.json";
 import site from "./content/site.json";
 import { SHOPIFY_PRODUCT_IMAGE_HOST } from "./src/shared/infrastructure/config/shopify-storefront-config";
 
+import { NATIVE_CATALOG_IMAGE_HOSTS } from "./src/shared/infrastructure/config/native-catalog-image-config";
+
 const remoteImageUrls = [site.hero.imageUrl, ...catalog.map((product) => product.imageUrl)];
 const remoteImageHosts = new Set([
   ...remoteImageUrls.map((value) => new URL(value).hostname),
   SHOPIFY_PRODUCT_IMAGE_HOST,
+  ...NATIVE_CATALOG_IMAGE_HOSTS,
 ]);
 const remotePatterns = [...remoteImageHosts].map(
   (hostname) => ({ protocol: "https" as const, hostname }),

@@ -15,6 +15,8 @@
 
 ## 2026-09-13 の追記
 
+- 商品の参照元をPostgreSQLへ移行。空の専用商品テーブル、公開状態、整数のJPY価格、閲覧専用権限を追加。実商品登録・在庫予約・運営者の商品編集は未完了のため、本番の新規購入はコードでも停止。[NATIVE_CATALOG.md](NATIVE_CATALOG.md)参照。PR本文・コメントは今後日本語で記載する。
+
 - Shopifyの月額費用を踏まえ、ユーザーが完全自作の方向を選択。[ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md)を現行方針とする。Google直接認証・独自顧客ID・本人のDB注文履歴へ移行。顧客用Google設定、独自商品/在庫、購入時の顧客紐付け、決済・発送の実接続が販売前の移行項目。以下のShopify前提の項目は過去の台帳であり、現行方針の採用根拠ではない。
 
 - 顧客マイページは、ユーザー指定によりBloomBox内の独自画面を優先して実装。注文履歴・プロフィール参照・顧客認証・ローカルログアウトの初期実装と、実接続に必要な作業は [CUSTOMER_ACCOUNT.md](CUSTOMER_ACCOUNT.md) に記録。
