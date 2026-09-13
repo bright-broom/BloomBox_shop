@@ -34,6 +34,8 @@ export function CustomerAccountPanel({ state, controls, loginError = false, prev
               <dl className="account-order-facts"><div><dt>{copy.total}</dt><dd>{formatMoney(money(order.totalYen))}</dd></div>
                 <div><dt>{copy.payment}</dt><dd>{Object.hasOwn(copy.payments, order.payment) ? copy.payments[order.payment] : copy.payments.UNKNOWN}</dd></div>
                 <div><dt>{copy.fulfillment}</dt><dd>{Object.hasOwn(copy.fulfillments, order.fulfillment) ? copy.fulfillments[order.fulfillment] : copy.fulfillments.UNKNOWN}</dd></div></dl>
+              <Link className="text-link" prefetch={false} aria-label={`${copy.detail.open} ${order.name}`}
+                href={preview ? `/preview/account/order?sample=${encodeURIComponent(order.id)}` : `/account/orders/${encodeURIComponent(order.id)}`}>{copy.detail.open}<span aria-hidden="true">↗</span></Link>
             </li>)}</ol><p className="form-hint">{copy.totalNote}</p></>}
           {!preview ? <nav className="account-pagination" aria-label={copy.ordersTitle}>
             <Link className="text-link" href="/account" prefetch={false}>{copy.first}</Link>

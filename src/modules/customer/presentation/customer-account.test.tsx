@@ -12,7 +12,7 @@ describe("native customer account presentation", () => {
   it("renders order and profile data, Japan dates, and a cursor-only pagination link", () => {
     const html = renderToStaticMarkup(<CustomerAccountPanel state={{ status: "ready", account }} />);
     for (const expected of ["#100", "5,000", "2026/09/11", "sample@example.test", "お支払い済み", "未発送", "/account?after=next%2Fpage%3D"]) expect(html).toContain(expected);
-    expect(html).not.toContain("customerId=");
+    expect(html).not.toContain("customerId="); expect(html).toContain('href="/account/orders/sample"');
   });
   it("escapes customer text and handles unknown/inherited status names without inventing paid state", () => {
     const html = renderToStaticMarkup(<CustomerAccountPanel state={{ status: "ready", account: { ...account, name: "<script>private</script>",
@@ -33,6 +33,7 @@ describe("native customer account presentation", () => {
     const html = renderToStaticMarkup(await AccountPreview({ searchParams: Promise.resolve({ state: "orders" }) }));
     expect(html).toContain(copy.previewNote); expect(html).toContain("#SAMPLE-1002");
     expect(html).toContain("disabled"); expect(html).not.toContain("after=");
+    expect(html).toContain("/preview/account/order?sample=sample-1"); expect(html).not.toContain("/account/orders/");
     vi.stubEnv("BLOOMBOX_RUNTIME_MODE", "production");
     await expect(AccountPreview({ searchParams: Promise.resolve({ state: "orders" }) })).rejects.toThrow("NOT_FOUND");
   });

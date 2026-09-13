@@ -57,3 +57,19 @@ Disable CUSTOMER_ACCOUNT_ENABLED or revert the application change. Retain all du
 ## Purchase ownership
 
 [Purchase customer binding](PURCHASE_CUSTOMER_BINDING.md) adds migration 0020. New intents retain only the customer ID/version verified by the server; the payment acceptance transaction carries that owner into the buyer and order. Guest/historical purchases stay unlinked, and email or provider-customer metadata never claim orders. New production intake remains paused pending inventory reservations.
+
+## 注文詳細 — 2026-09-13
+
+注文履歴の「注文詳細を見る」から `/account/orders/<order-id>` を開けます。Orderの公開契約を通し、再検証した顧客IDと注文の購入者が一致する場合だけ、注文時の商品名・数量・単価・商品合計・送料・値引き・別途加算税・注文合計を取得します。現行カタログではなく購入時の保存値を表示し、返金後の差引金額とは区別します。支払・発送・キャンセルも別々の状態として表示します。
+
+注文IDは所有権の証明ではありません。他人・受取人としてのみ関係する注文・未紐付け・旧Shopify・存在しない注文は、同じ非表示結果です。停止済み顧客の注文も返しません。明細がない場合やDB障害は、空の成功画面へ変換せず再試行可能なエラーにします。住所・受取人・ギフトメッセージ・事業者側識別子は取得しません。変更は読み取りのみで、新規マイグレーション、権限追加、環境変数追加はありません。
+
+検証：`pnpm check:ci` の静的検査・882テスト・ビルドが成功。隔離したPostgreSQLで顧客所有権関連8テストが成功（今回追加3ケース）。通常テストでスキップされるDB専用190テストはCIの専用ジョブで検証します。実ブラウザーではM/Lのサンプル履歴→詳細→履歴の遷移、明細・金額・発送表示、未接続時の非表示を確認しました。実測幅840pxと320pxで横あふれなし。詳細URLの応答は `private, no-store` と `noindex, nofollow` を保持しています。
+
+[サンプル詳細](/preview/account/order)はPreview限定で、実認証・実注文の接続証跡ではありません。顧客専用Google OAuthが未設定のため、実Googleログインから実注文を表示するE2Eは未検証です。配送追跡・返金内訳・住所編集は今回に含めません。戻す場合は詳細へのリンクと追加画面・読取処理を戻し、保存済み顧客・注文は保持します。
+
+画面記録（架空サンプルのみ、ページ上部のスクリーンショット）：
+
+![通常幅の注文詳細](evidence/customer-order-detail/default.png)
+
+![幅320pxの注文詳細](evidence/customer-order-detail/mobile.png)
