@@ -1,5 +1,6 @@
 "use server";
 
+import { InsufficientInventoryError, InventoryUnavailableError } from "@/modules/inventory/public";
 import { DeliveryDateUnavailableError } from "@/modules/fulfillment/public";
 import { productId } from "@/modules/catalog/public";
 import { PREVIEW_SHIPPING_AMOUNT } from "../domain/preview-pricing";
@@ -54,7 +55,9 @@ export async function createPurchaseIntentAction(
     };
   } catch (error) {
     if (
-      error instanceof ProductUnavailableError
+      error instanceof InsufficientInventoryError
+      || error instanceof InventoryUnavailableError
+      || error instanceof ProductUnavailableError
       || error instanceof PurchaseCustomerMismatchError
       || error instanceof CheckoutPausedError
       || error instanceof DeliveryDateUnavailableError
