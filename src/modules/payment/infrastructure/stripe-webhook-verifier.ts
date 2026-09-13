@@ -97,6 +97,14 @@ const CHECKOUT_EVENTS = new Set([
   "checkout.session.async_payment_failed",
   "checkout.session.expired",
 ]);
+// Only our unpaid, expired test probe is non-commerce. A normal purchase UUID, a paid
+// Session, or any live-mode event must still follow the regular validation path.
+const expiredReadinessProbeSchema = z.object({
+  id: z.string().startsWith("cs_test_"), livemode: z.literal(false),
+  client_reference_id: z.string().regex(/^readiness_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
+  metadata: z.object({ readiness_probe: z.literal("bloombox-shipping-v1") }),
+  status: z.literal("expired"), payment_status: z.literal("unpaid"), payment_intent: z.null(),
+});
 const PAYMENT_INTENT_EVENTS = new Set([
   "payment_intent.succeeded",
   "payment_intent.payment_failed",
@@ -144,6 +152,9 @@ export class StripeWebhookVerifier implements ProviderWebhookVerifier {
     ) {
       throw new InvalidProviderWebhookError();
     }
+
+    if (this.config.mode === "test" && event.data.type === "checkout.session.expired"
+      && expiredReadinessProbeSchema.safeParse(event.data.data.object).success) return null;
 
     const mapped = mapEventPayload(event.data.type, event.data.data.object);
     if (!mapped) return null;
