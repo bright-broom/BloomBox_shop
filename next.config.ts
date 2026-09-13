@@ -7,7 +7,7 @@ import { NATIVE_CATALOG_IMAGE_HOSTS } from "./src/shared/infrastructure/config/n
 
 const remoteImageUrls = [site.hero.imageUrl, ...catalog.map((product) => product.imageUrl)];
 const remoteImageHosts = new Set([
-  ...remoteImageUrls.map((value) => new URL(value).hostname),
+  ...remoteImageUrls.filter((value) => !value.startsWith("/")).map((value) => new URL(value).hostname),
   SHOPIFY_PRODUCT_IMAGE_HOST,
   ...NATIVE_CATALOG_IMAGE_HOSTS,
 ]);
