@@ -1,6 +1,8 @@
+import { InventoryUnavailableError, InsufficientInventoryError, type InventoryReservations } from "@/modules/inventory/public";
+import { PurchaseCancellationUnavailableError } from "../application/cancel-purchase-intent";
 import { randomUUID } from "node:crypto";
 import { money } from "@/shared/domain/money";
-import type { DatabaseClient } from "@/shared/infrastructure/database/postgres-client";
+import type { DatabaseClient, DatabaseTransaction } from "@/shared/infrastructure/database/postgres-client";
 import type { AesGcmDataProtector } from "@/shared/infrastructure/security/aes-gcm-data-protector";
 import { z } from "zod";
 import {
@@ -61,6 +63,7 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
     private readonly sql: DatabaseClient,
     private readonly protector: AesGcmDataProtector,
     private readonly createId: () => string = randomUUID,
+    private readonly inventory?: (tx: DatabaseTransaction) => InventoryReservations,
   ) {}
 
   async save(intent: PurchaseIntent): Promise<void> {
@@ -105,6 +108,10 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
             ${intent.item.subtotal.amount}, ${intent.item.subtotal.currency}, 0
           )
         `;
+        if (intent.item.productId.startsWith("native_")) {
+          if (!this.inventory) throw new InventoryUnavailableError();
+          await this.inventory(transaction).reserve(intent.id);
+        }
         await transaction`
           INSERT INTO bloombox.outbox_events (
             id, aggregate_type, aggregate_id, event_type, event_version,
@@ -118,6 +125,7 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
         `;
       });
     } catch (error) {
+      if (error instanceof InsufficientInventoryError || error instanceof InventoryUnavailableError) throw error;
       if (isUniqueViolation(error)) throw new PurchaseIntentAlreadyExistsError();
       throw new PurchaseIntentPersistenceError();
     }
@@ -206,6 +214,26 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
       checkoutCreatedAt: row.data.checkout_created_at
         ? new Date(row.data.checkout_created_at)
         : undefined,
+    });
+  }
+
+  async cancelBeforeCheckout(id: PurchaseIntentId): Promise<void> {
+    await this.sql.begin(async (tx) => {
+      const rows = await tx`SELECT intent.status, intent.commerce_provider, item.catalog_product_id
+        FROM bloombox.purchase_intents intent JOIN bloombox.purchase_intent_items item ON item.purchase_intent_id = intent.id AND item.position = 0
+        WHERE intent.id = ${id} FOR UPDATE OF intent`;
+      const row = rows[0];
+      if (!row || row.commerce_provider !== null) throw new PurchaseCancellationUnavailableError();
+      if (row.status === "ABANDONED" || row.status === "EXPIRED") return;
+      if (row.status !== "READY_FOR_CHECKOUT" && row.status !== "DRAFT") throw new PurchaseCancellationUnavailableError();
+      const occurredAt = new Date();
+      if (String(row.catalog_product_id).startsWith("native_")) {
+        if (!this.inventory) throw new InventoryUnavailableError();
+        await this.inventory(tx).release(id, "BEFORE_CHECKOUT_CANCELLED", occurredAt);
+      }
+      await tx`UPDATE bloombox.purchase_intents SET status = 'ABANDONED', version = version + 1, updated_at = ${occurredAt} WHERE id = ${id}`;
+      await tx`INSERT INTO bloombox.audit_logs (id, actor_type, action, resource_type, resource_id, safe_metadata, occurred_at)
+        VALUES (${this.createId()}, 'SYSTEM', 'checkout.purchase_intent.cancelled', 'PurchaseIntent', ${id}, '{}', ${occurredAt})`;
     });
   }
 
