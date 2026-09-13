@@ -1,5 +1,15 @@
 # Design system — verification
 
+## スマホのページ端の動きを抑制 — 2026-09-13
+
+ルートの `html, body` に `overflow-x: clip` と `overscroll-behavior: none` を指定し、ページ全体の横移動と端の跳ね返り・引っ張り更新を抑えます。高さ固定やタッチイベントの遮断を追加せず、通常の縦スクロールと拡大操作を保ちます。
+
+- 独立したローカル本番ビルドをPlaywrightのChromium / WebKitで確認。ホーム・商品一覧・M詳細・Lギフト・カート・未ログインのマイページを320／390／768／1440pxで検証し、48条件すべてで文書幅と画面幅が一致。ルートとbodyのCSS適用、横位置0、縦スクロール、追従ヘッダーを確認。[計測記録](evidence/mobile-scroll/measurements.json)。
+- 320pxではメニュー開閉とEscapeでの復帰、ギフト入力欄へのフォーカスと画面内への収まりを確認。Chromiumのタッチ入力で縦に510px移動し、ピンチ操作後の表示倍率は約1.5倍。WebKitでは拡大禁止がないviewportとタッチ設定を確認したものの、実機Safariのゴムのような跳ね返りやOSのジェスチャーは未検証です。
+- 画面記録：[Chromiumホーム](evidence/mobile-scroll/chromium-home-390.png)、[WebKitホーム](evidence/mobile-scroll/webkit-home-390.png)、[Chromiumギフト](evidence/mobile-scroll/chromium-gift-320.png)、[WebKitギフト](evidence/mobile-scroll/webkit-gift-320.png)。宛名などの個人情報は入力していません。
+- `pnpm check:ci` 成功：通常テスト948件、DB専用198件skip、型・Lint・静的検査・本番ビルド。検証開始時にmainの送料エラー文言がスキーマから欠落して型エラーとなっていたため、既存JSONと利用箇所に対応する `cart.shippingUnavailable` の検証定義を復元しました。送料計算・注文処理は変更していません。
+- 依存関係・DB・環境設定の変更なし。戻す場合はスクロール用CSSと対応するガイド・証跡をrevertし、ビルド修復用の文言定義は維持できます。本番へのマージ・デプロイは行っていません。
+
 ## ギフト入力の初期値 — 2026-09-13
 
 新しいギフトでは、お届け希望日にサーバーが日本時間で計算した最短日（今日から3日後）、贈ることばに「いつもありがとう」を入れます。数量の既定値1点と選択したサイズを維持し、宛名を入力すれば初期値のままカートへ進めます。メッセージには現在の文字数と180文字の上限、自由に変更できる説明を追加しました。
