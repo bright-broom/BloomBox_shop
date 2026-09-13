@@ -62,6 +62,61 @@ describeDatabase("native customer identity and order ownership", () => {
     await sql`INSERT INTO bloombox.buyers (id, customer_id) VALUES (${id}, ${customerId})`;
     return id;
   }
+  async function item(orderId: string, position = 0, name = "購入時の商品名") {
+    await sql`INSERT INTO bloombox.order_items (id, order_id, external_product_id, catalog_product_id, product_name_snapshot,
+      quantity, unit_amount_minor, tax_minor, discount_minor, line_total_minor, currency, position)
+      VALUES (${randomUUID()}, ${orderId}, 'native-snapshot-product', 'native-snapshot-product', ${name}, 1, 4000, 0, 0, 4000, 'JPY', ${position})`;
+  }
+  it("returns purchase snapshots only for the active buyer, excluding foreign, recipient-only, unlinked and legacy orders", async () => {
+    const a = await identities.registerGoogleSubject(randomUUID()), b = await identities.registerGoogleSubject(randomUUID());
+    const buyerA = await buyer(a.customerId), own = await order(buyerA), foreign = await order(await buyer(b.customerId));
+    await item(own); await item(foreign, 0, "OTHER CUSTOMER PRODUCT");
+    const recipient = randomUUID();
+    await sql`INSERT INTO bloombox.recipients (id, customer_id) VALUES (${recipient}, ${a.customerId})`;
+    await sql`INSERT INTO bloombox.order_gift_snapshots (order_id, recipient_id, delivery_date, pii_key_id, recipient_ciphertext, gift_message_ciphertext)
+      VALUES (${foreign}, ${recipient}, '2026-09-20', 'synthetic', ${Buffer.from("PRIVATE RECIPIENT")}, ${Buffer.from("PRIVATE MESSAGE")})`;
+    const detail = await history.readDetail(a.customerId, own);
+    expect(detail).toMatchObject({ id: own, subtotalYen: 4000, shippingYen: 1000, taxYen: 0, discountYen: 0, totalYen: 5000,
+      items: [{ name: "購入時の商品名", quantity: 1, unitYen: 4000, totalYen: 4000 }] });
+    // No live catalog row is needed; deleted/renamed products do not replace the snapshot.
+    for (const inaccessible of [foreign, await order(null), await order(buyerA, "SHOPIFY"), randomUUID(), "invalid-id"]) {
+      expect(await history.readDetail(a.customerId, inaccessible)).toBeNull();
+    }
+    expect(await history.readDetail(b.customerId, own)).toBeNull();
+    expect(JSON.stringify(detail)).not.toMatch(/PRIVATE|OTHER CUSTOMER|recipient|ciphertext|external_product|customerId|buyer/);
+    await sql`UPDATE bloombox.customer_accounts SET status = 'DISABLED' WHERE id = ${a.customerId}`;
+    expect(await history.readDetail(a.customerId, own)).toBeNull();
+  });
+  it("orders immutable lines by position, keeps mixed statuses unknown and fails closed on missing or invalid snapshots", async () => {
+    const a = await identities.registerGoogleSubject(randomUUID()), id = await order(await buyer(a.customerId));
+    await expect(history.readDetail(a.customerId, id)).rejects.toThrow("Customer order history unavailable");
+    await item(id, 1, "Second"); await item(id, 0, "First");
+    await sql`UPDATE bloombox.orders SET subtotal_minor = 8000, total_minor = 9000, status = 'CANCELLED' WHERE id = ${id}`;
+    for (const status of ["CAPTURED", "FAILED"]) await sql`INSERT INTO bloombox.payments
+      (id, order_id, commerce_provider, external_payment_id, status, amount_requested_minor, currency, created_at, updated_at)
+      VALUES (${randomUUID()}, ${id}, 'STRIPE', ${randomUUID()}, ${status}, 9000, 'JPY', now(), now())`;
+    const detail = await history.readDetail(a.customerId, id);
+    expect(detail?.items.map((row) => row.name)).toEqual(["First", "Second"]);
+    expect(detail).toMatchObject({ cancelled: true, payment: "UNKNOWN", fulfillment: "UNKNOWN", totalYen: 9000 });
+    await sql`UPDATE bloombox.order_items SET currency = 'USD' WHERE order_id = ${id}`;
+    await expect(history.readDetail(a.customerId, id)).rejects.toThrow("Customer order history unavailable");
+  });
+  it("reads detail using the application role and distinguishes a database failure from not found", async () => {
+    const a = await identities.registerGoogleSubject(randomUUID()), id = await order(await buyer(a.customerId)); await item(id);
+    const connection = postgres(safeDatabase(), { max: 1, ssl: false });
+    try {
+      await connection`SET ROLE bloombox_application`;
+      expect(await new PostgresCustomerOrderHistory(connection).readDetail(a.customerId, id)).toMatchObject({ id, totalYen: 5000 });
+      await connection`RESET ROLE`;
+      await connection`REVOKE SELECT ON bloombox.order_items FROM bloombox_application`;
+      await connection`SET ROLE bloombox_application`;
+      await expect(new PostgresCustomerOrderHistory(connection).readDetail(a.customerId, id)).rejects.toThrow("Customer order history unavailable");
+    } finally {
+      await connection`RESET ROLE`;
+      await connection`GRANT SELECT ON bloombox.order_items TO bloombox_application`;
+      await connection.end({ timeout: 5 });
+    }
+  });
   it("filters by the authenticated buyer, excludes legacy/unlinked/recipient orders and paginates without duplicates", async () => {
     const a = await identities.registerGoogleSubject(randomUUID()), b = await identities.registerGoogleSubject(randomUUID());
     const buyerA = await buyer(a.customerId), buyerB = await buyer(b.customerId);

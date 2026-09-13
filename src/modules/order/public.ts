@@ -23,3 +23,4 @@ export {
 } from "./application/accept-shopify-order";
 
 export { type CustomerOrderSummary, type CustomerOrderHistoryQuery, CustomerOrderHistoryUnavailableError } from "./application/customer-order-history";
+export type { CustomerOrderDetail, CustomerOrderDetailQuery } from "./application/customer-order-detail";

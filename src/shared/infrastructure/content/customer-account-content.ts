@@ -2,6 +2,7 @@ import { z } from "zod";
 import source from "../../../../content/customer-account.json";
 const text = z.string().trim().min(1).max(600);
 export const customerAccountContent = z.object({
+  detail: z.object({ open: text, title: text, lead: text, items: text, quantity: text, unitPrice: text, lineTotal: text, subtotal: text, tax: text, shipping: text, discount: text, back: text, unavailableTitle: text, unavailableNote: text, error: text, previewTitle: text, sampleProduct: text, sampleLargeProduct: text }).strict(),
   title: text, eyebrow: text, lead: text, loading: text, signIn: text, signOut: text, loginTitle: text, loginNote: text,
   disabledTitle: text, disabledNote: text, error: text, expired: text, loginError: text, retry: text,
   ordersTitle: text, ordersNote: text, emptyTitle: text, emptyNote: text, profileTitle: text, name: text, email: text,

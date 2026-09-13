@@ -84,5 +84,25 @@
   },
   "sampleName": "サンプルのお客様",
   "sampleEmail": "sample@example.test",
-  "loading": "マイページを読み込んでいます…"
+  "loading": "マイページを読み込んでいます…",
+  "detail": {
+    "open": "注文詳細を見る",
+    "title": "ご注文の詳細",
+    "lead": "ご注文時の商品と金額をご確認いただけます。",
+    "items": "ご注文の商品",
+    "quantity": "数量",
+    "unitPrice": "単価",
+    "lineTotal": "商品合計",
+    "subtotal": "商品小計",
+    "tax": "税（別途加算分）",
+    "shipping": "送料",
+    "discount": "お値引き",
+    "back": "ご注文履歴へ戻る",
+    "unavailableTitle": "ご注文を表示できません",
+    "unavailableNote": "マイページにログインして、ご注文履歴からもう一度お開きください。",
+    "error": "ご注文を読み込めませんでした。少し時間をおいて、もう一度お試しください。",
+    "previewTitle": "注文詳細のデザイン確認",
+    "sampleProduct": "BLOOM BOX M（サンプル）",
+    "sampleLargeProduct": "BLOOM BOX L（サンプル）"
+  }
 }
