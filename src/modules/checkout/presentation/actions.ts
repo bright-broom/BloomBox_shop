@@ -10,7 +10,9 @@ import { reportUnexpectedError } from "@/shared/infrastructure/observability/rep
 import { ProductUnavailableError } from "../application/create-purchase-intent";
 import { PurchaseCustomerMismatchError } from "../domain/purchase-customer";
 import { CheckoutPausedError } from "../application/checkout-paused-error";
+import { CheckoutPreparationUnavailableError } from "../application/checkout-session-provider";
 import { InvalidPurchaseIntentInputError } from "../domain/purchase-intent-policy";
+import { ShippingPriceUnavailableError } from "../domain/purchase-shipping";
 import {
   createPurchaseIntentSchema,
   type CreatePurchaseIntentFormState,
@@ -49,17 +51,19 @@ export async function createPurchaseIntentAction(
         quantity: intent.item.quantity,
         deliveryDate: intent.recipient.deliveryDate,
         subtotalAmount: intent.item.subtotal.amount,
-        shippingAmount: product.previewOffer?.shippingAmount ?? PREVIEW_SHIPPING_AMOUNT,
+        shippingAmount: intent.shippingAmount?.amount ?? PREVIEW_SHIPPING_AMOUNT,
         formattedTotal: formatMoney(intent.item.subtotal),
       },
     };
   } catch (error) {
     if (
       error instanceof InsufficientInventoryError
+      || error instanceof ShippingPriceUnavailableError
       || error instanceof InventoryUnavailableError
       || error instanceof ProductUnavailableError
       || error instanceof PurchaseCustomerMismatchError
       || error instanceof CheckoutPausedError
+      || error instanceof CheckoutPreparationUnavailableError
       || error instanceof DeliveryDateUnavailableError
       || error instanceof InvalidPurchaseIntentInputError
     ) {

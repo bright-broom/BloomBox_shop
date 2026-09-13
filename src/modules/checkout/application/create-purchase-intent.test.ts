@@ -17,6 +17,7 @@ describe("CreatePurchaseIntent", () => {
     const useCase = new CreatePurchaseIntent(new InMemoryProductRepository(), new InMemoryPurchaseIntentRepository(), () => new Date("2026-08-19T00:00:00.000Z"));
     const input = validInput({ productId: "prod_bloombox_l" });
     const intent = await useCase.execute(input);
+    expect(intent.shippingAmount).toEqual({ amount: 0, currency: "JPY" });
     expect(intent.item).toMatchObject({ productName: "BLOOM BOX L", unitPriceSnapshot: { amount: 8000 }, productId: "prod_bloombox_l" });
     await expect(useCase.execute({ ...input, productId: "prod_bloombox_m" })).rejects.toBeInstanceOf(PurchaseIntentIdempotencyConflictError);
     await expect(useCase.execute({ ...input, requestId: "12345678-abcd-4000-8000-123456789013", quantity: 2 })).rejects.toBeInstanceOf(InvalidPurchaseIntentInputError);

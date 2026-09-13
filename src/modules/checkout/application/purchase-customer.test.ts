@@ -66,7 +66,7 @@ describe("purchase customer ownership", () => {
     const owner = first.customer;
     const session: CheckoutSession = { id: "cs_test_owner", provider: "STRIPE", purchaseIntentId: first.id,
       url: "https://checkout.stripe.com/test", apiVersion: "test", expiresAt: new Date("2026-09-13T01:00:00Z") };
-    const provider = { provider: "STRIPE" as const, create: vi.fn(async () => session), retrieve: vi.fn(async () => session) };
+    const provider = { provider: "STRIPE" as const, validateCreate: vi.fn(), create: vi.fn(async () => session), retrieve: vi.fn(async () => session) };
     const start = new StartCheckout(state.repository, provider, now, () => true, state.current);
     state.setCustomer(null);
     await expect(start.execute(first.id)).rejects.toThrow(PurchaseCustomerMismatchError);

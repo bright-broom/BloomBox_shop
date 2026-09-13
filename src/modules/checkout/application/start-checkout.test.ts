@@ -8,7 +8,7 @@ import {
 } from "../domain/purchase-intent";
 import { giftMessage, recipientName } from "../domain/purchase-intent-policy";
 import { InMemoryPurchaseIntentRepository } from "../infrastructure/in-memory-purchase-intent-repository";
-import type { CheckoutSessionProvider } from "./checkout-session-provider";
+import { CheckoutPreparationUnavailableError, type CheckoutSessionProvider } from "./checkout-session-provider";
 import { CheckoutProviderMismatchError, StartCheckout } from "./start-checkout";
 import { CheckoutPausedError } from "./checkout-paused-error";
 
@@ -104,10 +104,45 @@ describe("StartCheckout", () => {
     await repository.saveCheckoutCreated(intent);
     const provider = createProvider(intent.id);
 
+    provider.validateCreate.mockImplementation(() => { throw new CheckoutPreparationUnavailableError(); });
     await new StartCheckout(repository, provider).execute(intent.id);
+    expect(provider.validateCreate).not.toHaveBeenCalled();
 
     expect(provider.retrieve).toHaveBeenCalledWith("cs_test_123");
     expect(provider.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects local preparation before claiming and retries the same purchase after correction", async () => {
+    const repository = new InMemoryPurchaseIntentRepository();
+    const intent = createIntent();
+    await repository.save(intent);
+    const provider = createProvider(intent.id);
+    const claim = vi.spyOn(repository, "claimCommerceProvider");
+    provider.validateCreate.mockImplementationOnce(() => { throw new CheckoutPreparationUnavailableError(); });
+    const start = new StartCheckout(repository, provider, () => new Date("2026-08-21T00:05:00Z"));
+
+    await expect(start.execute(intent.id)).rejects.toBeInstanceOf(CheckoutPreparationUnavailableError);
+    expect(claim).not.toHaveBeenCalled();
+    expect(provider.create).not.toHaveBeenCalled();
+    expect((await repository.findById(intent.id))?.commerceProvider).toBeUndefined();
+    await start.execute(intent.id);
+    expect(provider.create).toHaveBeenCalledExactlyOnceWith(intent, `purchase-intent:${intent.id}:checkout:v1`);
+    expect((await repository.findById(intent.id))?.status).toBe("CHECKOUT_CREATED");
+  });
+
+  it("never clears an earlier provider claim when a later preflight fails", async () => {
+    const repository = new InMemoryPurchaseIntentRepository();
+    const intent = createIntent();
+    await repository.save(intent);
+    const provider = createProvider(intent.id);
+    const start = new StartCheckout(repository, provider, () => new Date("2026-08-21T00:05:00Z"));
+    provider.create.mockRejectedValueOnce(new Error("Simulated response loss"));
+    await expect(start.execute(intent.id)).rejects.toThrow("Simulated response loss");
+    provider.validateCreate.mockImplementation(() => { throw new CheckoutPreparationUnavailableError(); });
+    await expect(start.execute(intent.id)).rejects.toBeInstanceOf(CheckoutPreparationUnavailableError);
+    expect(provider.create).toHaveBeenCalledOnce();
+    expect((await repository.findById(intent.id))?.commerceProvider).toBe("STRIPE");
+    await expect(repository.cancelBeforeCheckout(intent.id)).rejects.toThrow();
   });
 
   it("rejects a provider response for a different intent", async () => {
@@ -150,6 +185,7 @@ function createIntent(): PurchaseIntent {
 }
 
 function createProvider(purchaseIntentIdValue: string): CheckoutSessionProvider & {
+  validateCreate: ReturnType<typeof vi.fn<CheckoutSessionProvider["validateCreate"]>>;
   create: ReturnType<typeof vi.fn>;
   retrieve: ReturnType<typeof vi.fn>;
 } {
@@ -163,6 +199,7 @@ function createProvider(purchaseIntentIdValue: string): CheckoutSessionProvider 
   };
   return {
     provider: "STRIPE",
+    validateCreate: vi.fn<CheckoutSessionProvider["validateCreate"]>(),
     create: vi.fn().mockResolvedValue(session),
     retrieve: vi.fn().mockResolvedValue(session),
   };

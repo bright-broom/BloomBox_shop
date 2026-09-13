@@ -10,7 +10,7 @@ beforeEach(()=>{hook.status="IDLE";hook.pending=false;});
 describe("native management forms",()=>{
   it("creates only drafts, labels fields and sends no operator authority",()=>{const html=renderToStaticMarkup(<CatalogManagementForm id="product" requestId="request" action={action}/>);
     expect(html).toContain('name="status" value="DRAFT"');expect(html).toContain('name="available" value="false"');expect(html).toContain(copy.draftHint);
-    expect(html).toContain('name="expectedVersion" value="0"');expect(html).not.toContain('name="operatorId"');expect(html.match(/<label /g)?.length).toBe(11);});
+    expect(html).toContain('name="expectedVersion" value="0"');expect(html).not.toContain('name="operatorId"');expect(html).toContain('name="shippingAmount"');expect(html).toContain(copy.shippingHint);expect(html.match(/<label /g)?.length).toBe(12);});
   it("keeps request context visible for uncertain results and disables completed or pending actions",()=>{
     hook.status="UNAVAILABLE";let html=renderToStaticMarkup(<StockManagementForm productId="product" requestId="same-request" action={action}/>);
     expect(html).toContain('value="same-request"');expect(html).toContain('role="alert"');expect(html).toContain(copy.messages.UNAVAILABLE);

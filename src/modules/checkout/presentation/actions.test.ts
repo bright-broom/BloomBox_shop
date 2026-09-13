@@ -2,6 +2,7 @@ import { InsufficientInventoryError } from "@/modules/inventory/public";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { money } from "@/shared/domain/money";
 import { PurchaseCustomerMismatchError } from "../domain/purchase-customer";
+import { CheckoutPreparationUnavailableError } from "../application/checkout-session-provider";
 import { CheckoutPausedError } from "../application/checkout-paused-error";
 
 const { execute } = vi.hoisted(() => ({ execute: vi.fn() }));
@@ -71,6 +72,11 @@ describe("createPurchaseIntentAction", () => {
   it("returns stock shortage guidance without a draft or payment redirect", async () => {
     execute.mockRejectedValue(new InsufficientInventoryError());
     expect(await createPurchaseIntentAction({}, formData())).toEqual({ error: new InsufficientInventoryError().message });
+  });
+
+  it("returns retry guidance for local preparation failure without a draft or redirect", async () => {
+    execute.mockRejectedValue(new CheckoutPreparationUnavailableError());
+    expect(await createPurchaseIntentAction({}, formData())).toEqual({ error: new CheckoutPreparationUnavailableError().message });
   });
 
   it("does not call the application layer when form input is invalid", async () => {

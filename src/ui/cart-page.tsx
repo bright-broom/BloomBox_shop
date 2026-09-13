@@ -18,17 +18,18 @@ import { CHECKOUT_SESSION_UNAVAILABLE, useCheckoutSessionRevision } from "@/ui/u
 import { FlowerLoading } from "@/ui/flower-loading";
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { recordPreviewMetric } from "@/shared/infrastructure/preview-metrics";
+import { SHIPPING_QUOTE_MAX_QUANTITY } from "@/modules/checkout/public";
 
 export function CartPage({
   added,
   checkoutCancelled,
   previewMode,
-  previewPrices,
+  catalogPrices,
 }: {
   added: boolean;
   checkoutCancelled: boolean;
   previewMode: boolean;
-  previewPrices: readonly { productId: string; unitAmount: number; shippingAmount: number }[];
+  catalogPrices: readonly { productId: string; unitAmount: number; shippingAmount: number }[];
 }) {
   const router = useRouter();
   const [removeError, setRemoveError] = useState<string | null>(null);
@@ -80,13 +81,16 @@ export function CartPage({
   }
 
   const deliveryDateAvailable = isAvailableDeliveryDate(cart.deliveryDate);
-  const previewPrice = previewPrices.find((price) => price.productId === cart.productId);
-  const unitPrice = money(previewPrice?.unitAmount ?? cart.unitAmount);
+  const catalogPrice = catalogPrices.find((price) => price.productId === cart.productId);
+  const unitPrice = money(catalogPrice?.unitAmount ?? cart.unitAmount);
   const subtotal = multiplyMoney(unitPrice, cart.quantity);
+  const shippingUnavailable = (cart.productId.startsWith("native_") && !catalogPrice)
+    || (catalogPrice !== undefined && cart.quantity !== SHIPPING_QUOTE_MAX_QUANTITY);
 
   return (
     <div className="cart-layout">
       <div className="cart-main">
+        {shippingUnavailable ? <p className="checkout-notice" role="alert">{giftExperienceContent.cart.shippingUnavailable}</p> : null}
         {!deliveryDateAvailable ? (
           <div className="checkout-notice" role="alert">
             <p>お届け希望日を選び直してください。お名前とメッセージは保存されています。</p>
@@ -130,8 +134,8 @@ export function CartPage({
         <h2>ご注文内容</h2>
         <dl>
           <div><dt>商品小計</dt><dd>{formatMoney(subtotal)}</dd></div>
-          <div><dt>送料</dt><dd>{previewPrice ? formatMoney(money(previewPrice.shippingAmount)) : "決済前に表示"}</dd></div>
-          <div className="checkout-total-row"><dt>お支払い合計</dt><dd>{previewPrice ? formatMoney(money(subtotal.amount + previewPrice.shippingAmount)) : "決済前に確定"}</dd></div>
+          <div><dt>送料</dt><dd>{catalogPrice ? formatMoney(money(catalogPrice.shippingAmount)) : "決済前に表示"}</dd></div>
+          <div className="checkout-total-row"><dt>お支払い合計</dt><dd>{catalogPrice ? formatMoney(money(subtotal.amount + catalogPrice.shippingAmount)) : "決済前に確定"}</dd></div>
         </dl>
         <form action={formAction}>
           <input type="hidden" name="requestId" value={cart.requestId} />
@@ -146,7 +150,7 @@ export function CartPage({
               入力内容の有効期限が切れています。ギフト設定を更新してください。
             </p>
           ) : null}
-          <button className="primary-button form-submit" type="submit" disabled={pending || !deliveryDateAvailable}>
+          <button className="primary-button form-submit" type="submit" disabled={pending || !deliveryDateAvailable || shippingUnavailable}>
             {pending ? "安全に準備しています…" : "購入手続きへ"}
             <span aria-hidden="true">→</span>
           </button>

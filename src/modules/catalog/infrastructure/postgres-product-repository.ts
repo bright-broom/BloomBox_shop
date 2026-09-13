@@ -21,6 +21,7 @@ const rowSchema = z.object({
   description: text(2000),
   currency: z.literal("JPY"),
   price_minor: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().int().nonnegative()),
+  shipping_minor: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)).nullable(),
   image_url: z.string().max(2048).refine(isNativeCatalogImageUrl),
   image_alt: text(200),
   palette: text(100),
@@ -43,7 +44,7 @@ export class PostgresProductRepository implements ProductRepository {
   async findAvailable(): Promise<readonly Product[]> {
     return this.read(async () => {
       const rows = await this.sql`
-        SELECT *, price_minor::text AS price_minor FROM bloombox.catalog_products
+        SELECT *, price_minor::text AS price_minor, shipping_minor::text AS shipping_minor FROM bloombox.catalog_products
         WHERE status = 'PUBLISHED' AND available = true
         ORDER BY slug, id LIMIT ${NATIVE_CATALOG_MAX_PRODUCTS + 1}
       `;
@@ -58,7 +59,7 @@ export class PostgresProductRepository implements ProductRepository {
     if (!match) return null;
     return this.read(async () => {
       const rows = await this.sql`
-        SELECT *, price_minor::text AS price_minor FROM bloombox.catalog_products
+        SELECT *, price_minor::text AS price_minor, shipping_minor::text AS shipping_minor FROM bloombox.catalog_products
         WHERE id = ${match[1]}::uuid AND status = 'PUBLISHED'
       `;
       return rows.length ? (await this.withStock([mapProduct(rows[0])]))[0] : null;
@@ -69,7 +70,7 @@ export class PostgresProductRepository implements ProductRepository {
     if (!slugSchema.safeParse(slug).success) return null;
     return this.read(async () => {
       const rows = await this.sql`
-        SELECT *, price_minor::text AS price_minor FROM bloombox.catalog_products
+        SELECT *, price_minor::text AS price_minor, shipping_minor::text AS shipping_minor FROM bloombox.catalog_products
         WHERE slug = ${slug} AND status = 'PUBLISHED'
       `;
       return rows.length ? (await this.withStock([mapProduct(rows[0])]))[0] : null;
@@ -94,6 +95,7 @@ export class PostgresProductRepository implements ProductRepository {
 function mapProduct(value: unknown): Product {
   const row = rowSchema.parse(value);
   const id = productId(`native_${row.id}`);
+  if (row.shipping_minor !== null) money(row.price_minor + row.shipping_minor);
   return {
     id,
     externalReference: id,
@@ -102,6 +104,7 @@ function mapProduct(value: unknown): Product {
     subtitle: row.subtitle,
     description: row.description,
     price: money(row.price_minor),
+    shippingAmount: row.shipping_minor ?? undefined,
     imageUrl: row.image_url,
     imageAlt: row.image_alt,
     palette: row.palette,

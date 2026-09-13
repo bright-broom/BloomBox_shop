@@ -10,6 +10,8 @@ export type Product = Readonly<{
   subtitle: string;
   description: string;
   price: Money;
+  /** JPY shipping for one box. Undefined is unconfigured, not free. */
+  shippingAmount?: number;
   imageUrl: string;
   imageAlt: string;
   palette: string;

@@ -2,7 +2,7 @@
 
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { recordPreviewMetric } from "@/shared/infrastructure/preview-metrics";
-import { previewTotals, LAUNCH_PREVIEW_QUANTITY } from "@/modules/checkout/public";
+import { previewTotals, LAUNCH_PREVIEW_QUANTITY, SHIPPING_QUOTE_MAX_QUANTITY } from "@/modules/checkout/public";
 import {
   GIFT_MESSAGE_MAX_LENGTH,
   GIFT_QUANTITY_MAX,
@@ -32,6 +32,7 @@ type GiftFormProps = {
   productId: string;
   productName: string;
   unitPrice: Money;
+  shippingAmount?: number;
   minDeliveryDate: string;
   maxDeliveryDate: string;
 };
@@ -44,7 +45,7 @@ export function GiftForm(props: GiftFormProps) {
 }
 
 function GiftConfigurationForm({
-  productId: initialProductId, productName: initialProductName, unitPrice: initialUnitPrice, minDeliveryDate, maxDeliveryDate, initialCart, sizeOptions = [],
+  productId: initialProductId, productName: initialProductName, unitPrice: initialUnitPrice, shippingAmount, minDeliveryDate, maxDeliveryDate, initialCart, sizeOptions = [],
 }: GiftFormProps & { initialCart: BrowserCartItem | null }) {
   // Snapshot the cart once: a background revision must not overwrite in-progress typing.
   const [cartAtOpen] = useState(initialCart);
@@ -146,7 +147,7 @@ function GiftConfigurationForm({
           required
         >
           {Array.from(
-            { length: selection ? 1 : GIFT_QUANTITY_MAX - GIFT_QUANTITY_MIN + 1 },
+            { length: selection || shippingAmount !== undefined ? SHIPPING_QUOTE_MAX_QUANTITY : GIFT_QUANTITY_MAX - GIFT_QUANTITY_MIN + 1 },
             (_, index) => GIFT_QUANTITY_MIN + index,
           ).map((quantity) => <option key={quantity} value={quantity}>{quantity} 点</option>)}
         </select>
