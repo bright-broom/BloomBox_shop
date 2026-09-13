@@ -62,7 +62,6 @@ export default async function GiftPage({ params }: GiftPageProps) {
           productId={product.id}
           productName={product.name}
           unitPrice={product.price}
-          shippingAmount={product.shippingAmount}
           minDeliveryDate={getEarliestDeliveryDate(now)}
           maxDeliveryDate={getLatestDeliveryDate(now)}
         /> : (

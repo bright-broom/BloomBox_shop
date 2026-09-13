@@ -61,7 +61,7 @@ function GiftConfigurationForm({
   const router = useRouter();
   const [state, setState] = useState<CreatePurchaseIntentFormState>({});
   const [pending, setPending] = useState(false);
-  const [quantity, setQuantity] = useState(sizeOptions.length ? LAUNCH_PREVIEW_QUANTITY : shippingAmount !== undefined ? SHIPPING_QUOTE_MAX_QUANTITY : editingCart?.quantity ?? GIFT_QUANTITY_MIN);
+  const [quantity, setQuantity] = useState(sizeOptions.length ? LAUNCH_PREVIEW_QUANTITY : editingCart?.quantity ?? GIFT_QUANTITY_MIN);
   const [giftMessage, setGiftMessage] = useState(editingCart?.giftMessage ?? giftExperienceContent.giftForm.defaultMessage);
 
   function addToCart(event: FormEvent<HTMLFormElement>) {
