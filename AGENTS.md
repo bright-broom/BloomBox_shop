@@ -14,6 +14,8 @@ This is the mandatory, token-efficient policy for the whole repository. An appro
 
 ## 1. Operating model
 
+- At task start, read [`docs/operations/HANDOFF.md`](docs/operations/HANDOFF.md). It is the shared entry point for every AI and developer; no private chat history is required. Use [`docs/operations/BACKLOG.md`](docs/operations/BACKLOG.md) for current task status and acceptance criteria, then load only the relevant detailed guidance.
+- When work changes a backlog item's status, update that item with dated evidence. Distinguish implementation, business decisions, external configuration, and verification; recheck mutable PR/environment state and never treat a historical snapshot as current authorization.
 - Inspect the relevant code and current diff before editing. Extend an existing pattern before creating an abstraction.
 - Keep one change focused. Do not refactor unrelated code unless it blocks a safe implementation.
 - Prefer the smallest explicit, testable, recoverable solution. Do not add speculative infrastructure.
