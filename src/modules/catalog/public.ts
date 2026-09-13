@@ -8,3 +8,5 @@ export {
   type ProductSearchResult,
   type ProductSort,
 } from "./application/search-products";
+export { CatalogManagementError, type CatalogFields, type ManagedProduct, type CatalogSave, type ManagementActor } from "./application/manage-catalog";
+export type { CatalogManagementState } from "./presentation/catalog-management-state";

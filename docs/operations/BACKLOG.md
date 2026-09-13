@@ -101,3 +101,5 @@
 - [PR #18](https://github.com/bright-broom/BloomBox_shop/pull/18)、[Issue #6](https://github.com/bright-broom/BloomBox_shop/issues/6)
 
 公開後のAPI設定は変化するため、実施時に再取得する。ホスティング・Shopify・Stripeのアカウント状態、承認済み法務文書、バックアップ実体は本調査では確認していない。
+
+- 2026-09-13: 自作商品・在庫の運営管理画面、専用権限、期待バージョンと送信番号による競合・再送制御、変更履歴を実装（ADR 0011、DB 0022）。実Google運営者設定・管理接続・権限登録・実商品と実在庫の承認は未実施。注文受付停止を維持。

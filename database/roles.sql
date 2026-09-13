@@ -20,6 +20,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_permission_manager') THEN
     CREATE ROLE bloombox_permission_manager NOLOGIN;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_catalog_manager') THEN
+    CREATE ROLE bloombox_catalog_manager NOLOGIN;
+  END IF;
 END
 $$;
 
@@ -151,3 +154,13 @@ GRANT UPDATE (on_hand, reserved, version) ON bloombox.inventory_stock TO bloombo
 GRANT INSERT ON bloombox.inventory_reservations TO bloombox_application;
 GRANT UPDATE (status, updated_at) ON bloombox.inventory_reservations TO bloombox_application, bloombox_worker;
 GRANT INSERT ON bloombox.inventory_movements TO bloombox_application, bloombox_worker;
+
+GRANT USAGE ON SCHEMA bloombox TO bloombox_catalog_manager;
+GRANT EXECUTE ON FUNCTION bloombox.lock_native_catalog_operator(uuid) TO bloombox_catalog_manager;
+GRANT SELECT, INSERT ON bloombox.catalog_products TO bloombox_catalog_manager;
+GRANT UPDATE (slug, status, available, name, subtitle, description, price_minor, image_url, image_alt, palette,
+  occasions, flowers, grower, version, updated_at) ON bloombox.catalog_products TO bloombox_catalog_manager;
+GRANT SELECT ON bloombox.inventory_stock TO bloombox_catalog_manager;
+GRANT INSERT (product_id, on_hand) ON bloombox.inventory_stock TO bloombox_catalog_manager;
+GRANT UPDATE (on_hand, version) ON bloombox.inventory_stock TO bloombox_catalog_manager;
+GRANT SELECT, INSERT ON bloombox.catalog_changes, bloombox.inventory_adjustments TO bloombox_catalog_manager;

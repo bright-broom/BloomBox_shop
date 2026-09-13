@@ -128,3 +128,5 @@ Before a material change, answer:
 7. Is a smaller reversible design sufficient?
 
 - [ADR 0006: Google operator login](adr/0006-google-operator-login.md) — implementation selection; live OAuth setup and account binding required
+
+- [ADR 0011: 自作商品の運営管理](adr/0011-native-catalog-management.md) — Google主体と独立した管理権限、専用接続、商品・在庫変更の監査。

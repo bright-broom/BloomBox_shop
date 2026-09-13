@@ -1,0 +1,13 @@
+import { beforeEach, expect, it, vi } from "vitest";
+import { saveCatalogManagement } from "@/app/operations/catalog/actions";
+import { CatalogManagementError } from "@/modules/catalog/public";
+const mocks=vi.hoisted(()=>({change:vi.fn(),headers:vi.fn(),refresh:vi.fn()}));
+vi.mock("./native-catalog-management",()=>({changeManagedCatalog:mocks.change}));
+vi.mock("next/headers",()=>({headers:mocks.headers}));vi.mock("next/cache",()=>({revalidatePath:mocks.refresh}));
+beforeEach(()=>{vi.resetAllMocks();mocks.headers.mockResolvedValue(new Headers({origin:"https://operators.example"}));});
+it("does not refresh or claim success after a conflict",async()=>{mocks.change.mockRejectedValue(new CatalogManagementError("CONFLICT"));
+  expect(await saveCatalogManagement({status:"SAVED"},new FormData())).toEqual({status:"CONFLICT"});expect(mocks.refresh).not.toHaveBeenCalled();});
+it("keeps committed success despite refresh failure and never logs raw errors",async()=>{const log=vi.spyOn(console,"error").mockImplementation(()=>undefined);
+  mocks.change.mockRejectedValueOnce(new Error("PRIVATE_DATABASE_URL"));expect(await saveCatalogManagement({status:"IDLE"},new FormData())).toEqual({status:"UNAVAILABLE"});
+  mocks.refresh.mockImplementation(()=>{throw new Error("PRIVATE_REFRESH");});
+  expect(await saveCatalogManagement({status:"IDLE"},new FormData())).toEqual({status:"SAVED"});expect(JSON.stringify(log.mock.calls)).not.toContain("PRIVATE");log.mockRestore();});

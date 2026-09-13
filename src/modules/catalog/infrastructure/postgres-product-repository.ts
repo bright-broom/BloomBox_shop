@@ -1,3 +1,4 @@
+import { MAX_PUBLISHED_CATALOG_PRODUCTS } from "../application/manage-catalog";
 import type { StockAvailabilityReader } from "@/modules/inventory/public";
 import { z } from "zod";
 import { money } from "@/shared/domain/money";
@@ -6,7 +7,7 @@ import { isNativeCatalogImageUrl } from "@/shared/infrastructure/config/native-c
 import { productId, type Product, type ProductId } from "../domain/product";
 import type { ProductRepository } from "../domain/product-repository";
 
-export const NATIVE_CATALOG_MAX_PRODUCTS = 1000;
+export const NATIVE_CATALOG_MAX_PRODUCTS = MAX_PUBLISHED_CATALOG_PRODUCTS;
 const nativeId = /^native_([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/;
 const slugSchema = z.string().max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const text = (max: number) => z.string().trim().min(1).max(max);

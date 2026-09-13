@@ -35,7 +35,7 @@ describeDatabase("native PostgreSQL catalog", () => {
     }
     await sql.unsafe((await readFile("database/roles.sql", "utf8")).replace(/^\\set ON_ERROR_STOP on$/m, ""));
   });
-  beforeEach(async () => { await sql`TRUNCATE bloombox.inventory_movements, bloombox.inventory_reservations, bloombox.inventory_stock, bloombox.catalog_products`; });
+  beforeEach(async () => { await sql`TRUNCATE bloombox.catalog_changes, bloombox.inventory_adjustments, bloombox.inventory_movements, bloombox.inventory_reservations, bloombox.inventory_stock, bloombox.catalog_products`; });
   afterAll(async () => { await sql.end({ timeout: 5 }); });
 
   async function insert(options: { slug?: string; status?: string; available?: boolean; price?: number } = {}) {
