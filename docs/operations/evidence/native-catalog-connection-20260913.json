@@ -1,0 +1,71 @@
+{
+  "environment": "isolated-local",
+  "product": {
+    "status": "DRAFT",
+    "available": false,
+    "price": "1100",
+    "version": "2"
+  },
+  "stock": {
+    "on_hand": 2,
+    "reserved": 0,
+    "version": "2"
+  },
+  "catalogChanges": [
+    {
+      "previous_version": "0",
+      "version": "1",
+      "price": "1000",
+      "verified_operator": true
+    },
+    {
+      "previous_version": "1",
+      "version": "2",
+      "price": "1100",
+      "verified_operator": true
+    }
+  ],
+  "inventoryAdjustments": [
+    {
+      "delta": 3,
+      "reason": "RECEIVED",
+      "before_quantity": 0,
+      "after_quantity": 3,
+      "verified_operator": true
+    },
+    {
+      "delta": -1,
+      "reason": "CORRECTION",
+      "before_quantity": 3,
+      "after_quantity": 2,
+      "verified_operator": true
+    }
+  ],
+  "privileges": {
+    "superuser": false,
+    "can_create_roles": false,
+    "management_role": true,
+    "can_update_reserved": false,
+    "can_read_orders": false,
+    "can_delete_history": false
+  },
+  "rejectedChangesLeftStateUnchanged": true,
+  "verifiedOn": "2026-09-13",
+  "codeReference": "b54ed78459ae60ebfe0528b7dec8c29932c3bd49",
+  "googleLogin": "real-provider-success",
+  "browserProductCreateAndEdit": "success",
+  "browserStockCreateAndCorrect": "success",
+  "browserInvalidStockInput": "rejected-input-preserved",
+  "browserStaleVersion": "rejected",
+  "browserRevokedPermissionWrite": "rejected",
+  "browserRevokedPermissionRead": "not-found",
+  "browserPermissionRestore": "success",
+  "browserLogout": "success-on-retry-and-two-additional-login-cycles",
+  "browserAfterLogoutRead": "not-found",
+  "logoutCaveat": "Initial logout click did not visibly end the session; cause not established. Subsequent retry and independent login cycle succeeded. No authentication code was changed.",
+  "productionValidated": false,
+  "customerGoogleLoginValidated": false,
+  "realOrdersOrPaymentsCreated": false,
+  "logoutResponseDeletesSessionCookie": true,
+  "subsequentRequestHasSessionCookie": false
+}

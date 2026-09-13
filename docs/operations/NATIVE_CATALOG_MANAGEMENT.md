@@ -9,7 +9,7 @@
 3. 既存のGoogle運営者ログインと `AUTH_OPERATOR_BINDINGS` の主体対応を確認します。実際の環境変数名・設定形式は [運営者ログイン](GOOGLE_OPERATOR_LOGIN.md) と設定スキーマを確認してください。
 4. DB管理者が、確認済みの運営者UUIDに対する `native_catalog_operators` の行を登録します。`enabled=true`、現在より後の `valid_until` が必要です。発送担当者や権限取消担当者には自動で許可されません。期限切れ・無効化は次回の読取・保存に反映されます。
 
-管理画面から管理権限そのものを付与する機能はありません。Googleの設定・権限・接続は今回実環境へ追加していません。
+管理画面から管理権限そのものを付与する機能はありません。本番環境のGoogle設定・権限・接続は今回追加していません。2026-09-13に、既存の実Google設定と隔離ローカルDBで接続を確認しました（[検証記録](NATIVE_CATALOG_CONNECTION_VERIFICATION.md)）。
 
 ## 商品と在庫の操作
 
@@ -39,4 +39,4 @@
 ![通常幅](evidence/native-catalog-management/desktop.png)
 
 
-実環境の権限・専用接続・商品情報・価格・在庫登録、実Googleログインから保存までの確認、Stripeと出荷の接続確認は未完了です。
+本番環境の権限・専用接続・商品情報・価格・実在庫登録、Stripeと出荷の接続確認は未完了です。実Googleログインから隔離ローカルDBへの保存は、[2026-09-13の接続検証](NATIVE_CATALOG_CONNECTION_VERIFICATION.md)で確認しました。
