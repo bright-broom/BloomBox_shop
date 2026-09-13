@@ -67,5 +67,18 @@
   "customerGoogleLoginValidated": false,
   "realOrdersOrPaymentsCreated": false,
   "logoutResponseDeletesSessionCookie": true,
-  "subsequentRequestHasSessionCookie": false
+  "subsequentRequestHasSessionCookie": false,
+  "logoutFollowUp": {
+    "additionalRealGoogleLoginCycles": 2,
+    "logoutImmediatelyAfterNavigation": "success-on-first-click-in-both-cycles",
+    "bothResponsesDeleteSessionCookie": true,
+    "otherTabAfterLogout": "not-found",
+    "operatorPageReloadAfterLogout": "signed-out",
+    "initialFailureReproduced": false,
+    "initialFailureRootCause": "not-established",
+    "authenticationImplementationChanged": false,
+    "realLibraryRegressionCasesAdded": 8,
+    "frameworkRequestResponseBoundary": "simulated-in-automated-tests",
+    "diagnosticProbeRemoved": true
+  }
 }
