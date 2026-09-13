@@ -62,6 +62,7 @@ function GiftConfigurationForm({
   const [state, setState] = useState<CreatePurchaseIntentFormState>({});
   const [pending, setPending] = useState(false);
   const [quantity, setQuantity] = useState(sizeOptions.length ? LAUNCH_PREVIEW_QUANTITY : shippingAmount !== undefined ? SHIPPING_QUOTE_MAX_QUANTITY : editingCart?.quantity ?? GIFT_QUANTITY_MIN);
+  const [giftMessage, setGiftMessage] = useState(editingCart?.giftMessage ?? giftExperienceContent.giftForm.defaultMessage);
 
   function addToCart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -174,7 +175,7 @@ function GiftConfigurationForm({
         <input
           aria-invalid={Boolean(state.fieldErrors?.deliveryDate?.length)}
           id="deliveryDate"
-          defaultValue={editingCart?.deliveryDate ?? ""}
+          defaultValue={editingCart?.deliveryDate ?? minDeliveryDate}
           name="deliveryDate"
           type="date"
           min={minDeliveryDate}
@@ -190,19 +191,21 @@ function GiftConfigurationForm({
       <div className="form-field">
         <div className="label-row">
           <label htmlFor="giftMessage"><span>04</span> 贈ることば <i aria-hidden="true">*</i></label>
-          <span>{GIFT_MESSAGE_MAX_LENGTH} 文字まで</span>
+          <span id="giftMessage-count">{giftMessage.length} / {GIFT_MESSAGE_MAX_LENGTH} 文字</span>
         </div>
         <textarea
           aria-invalid={Boolean(state.fieldErrors?.giftMessage?.length)}
           id="giftMessage"
-          defaultValue={editingCart?.giftMessage ?? ""}
+          value={giftMessage}
+          onChange={(event) => setGiftMessage(event.target.value)}
           name="giftMessage"
           rows={5}
           maxLength={GIFT_MESSAGE_MAX_LENGTH}
           placeholder="伝えたい気持ちを、あなたの言葉で。"
-          aria-describedby="giftMessage-error"
+          aria-describedby="giftMessage-help giftMessage-count giftMessage-error"
           required
         />
+        <p className="field-note" id="giftMessage-help">{giftExperienceContent.giftForm.messageHint}</p>
         <FieldError id="giftMessage-error" messages={state.fieldErrors?.giftMessage} />
       </div>
       {state.error ? <p className="form-error" role="alert">{state.error}</p> : null}

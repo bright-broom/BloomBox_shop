@@ -23,6 +23,7 @@ export default async function GiftPage({ params }: GiftPageProps) {
   if (!product) notFound();
   const sizeProducts = product.previewOffer ? (await application.listProducts.execute()).filter((candidate) => candidate.previewOffer?.family === product.previewOffer?.family) : [];
   const sizeOptions = sizeProducts.map((candidate) => ({ id: candidate.id, name: candidate.name, size: candidate.previewOffer!.size, price: candidate.price, shippingAmount: candidate.previewOffer!.shippingAmount }));
+  const now = new Date();
 
   return (
     <section className="gift-page section-shell">
@@ -62,8 +63,8 @@ export default async function GiftPage({ params }: GiftPageProps) {
           productName={product.name}
           unitPrice={product.price}
           shippingAmount={product.shippingAmount}
-          minDeliveryDate={getEarliestDeliveryDate()}
-          maxDeliveryDate={getLatestDeliveryDate()}
+          minDeliveryDate={getEarliestDeliveryDate(now)}
+          maxDeliveryDate={getLatestDeliveryDate(now)}
         /> : (
           <div className="checkout-empty" role="status">
             <h2>この花は現在ご注文いただけません</h2>
