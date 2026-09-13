@@ -40,7 +40,7 @@ The main Vercel project's Preview environment was reported empty by the CLI befo
 
 ## Remaining commerce work
 
-Native catalog/inventory, authenticated buyer binding at checkout, complete Stripe payment/refund/reconciliation tests, native fulfillment and operations remain migration work. Existing preview checkout receipts never populate real account history. See ADR 0009 for the ordered rollout; this account slice does not enable sales.
+Real catalog setup/native inventory, live verification of authenticated buyer binding, complete Stripe payment/refund/reconciliation tests, native fulfillment and operations remain migration work. Existing preview checkout receipts never populate real account history. See ADR 0009 for the ordered rollout; this account slice does not enable sales.
 
 ## Verification recorded — 2026-09-13
 
@@ -53,3 +53,7 @@ Native catalog/inventory, authenticated buyer binding at checkout, complete Stri
 ## Rollback
 
 Disable CUSTOMER_ACCOUNT_ENABLED or revert the application change. Retain all durable customer IDs, audit entries and commerce facts. Rotate CUSTOMER_ACCOUNT_SECRET to invalidate all cookies. Do not automatically migrate native customers into Shopify or vice versa.
+
+## Purchase ownership
+
+[Purchase customer binding](PURCHASE_CUSTOMER_BINDING.md) adds migration 0020. New intents retain only the customer ID/version verified by the server; the payment acceptance transaction carries that owner into the buyer and order. Guest/historical purchases stay unlinked, and email or provider-customer metadata never claim orders. New production intake remains paused pending inventory reservations.

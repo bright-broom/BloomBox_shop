@@ -1,3 +1,4 @@
+import type { CheckoutBuyerWriter } from "@/modules/customer/public";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type {
@@ -55,6 +56,7 @@ const disputePayloadSchema = z.object({
 const purchaseIntentRowSchema = z.object({
   id: z.string().uuid(),
   display_id: z.string(),
+  commerce_provider: z.literal("STRIPE"),
   status: z.string(),
   external_checkout_id: z.string().nullable(),
   currency: z.literal("JPY"),
@@ -93,6 +95,7 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
     private readonly sql: DatabaseClient,
     private readonly protector: AesGcmDataProtector,
     private readonly taxBehavior: "inclusive" | "exclusive" | "unspecified",
+    private readonly buyerWriter: (transaction: DatabaseTransaction) => CheckoutBuyerWriter,
     private readonly createId: () => string = randomUUID,
   ) {}
 
@@ -156,6 +159,7 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
         SELECT
           intent.id,
           intent.display_id,
+          intent.commerce_provider,
           intent.status,
           intent.external_checkout_id,
           intent.currency,
@@ -245,10 +249,7 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
         throw new InvalidStripeCommerceEventError();
       }
 
-      await transaction`
-        INSERT INTO bloombox.buyers (id, created_at)
-        VALUES (${buyerId}, ${event.occurredAt})
-      `;
+      await this.buyerWriter(transaction).create({ buyerId, purchaseIntentId: intent.id, occurredAt: event.occurredAt });
       await transaction`
         INSERT INTO bloombox.recipients (id, created_at)
         VALUES (${recipientId}, ${event.occurredAt})

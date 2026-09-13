@@ -113,7 +113,7 @@ Decision records:
 - [ADR 0008: Native customer account](adr/0008-native-customer-account.md) — superseded by ADR 0009.
 - [ADR 0009: Native commerce and Google customers](adr/0009-native-commerce-and-google-customers.md) — current direction; activation blocked.
 
-The production catalog reader uses PostgreSQL; see [native catalog](../operations/NATIVE_CATALOG.md). Publication and manual availability are not inventory reservation. New production checkout remains paused in code until inventory and buyer binding are complete.
+The production catalog reader uses PostgreSQL; see [native catalog](../operations/NATIVE_CATALOG.md). Publication and manual availability are not inventory reservation. Purchase customer binding is implemented through a server-owned identity reader and immutable intent references; Customer owns buyer creation inside the existing acceptance transaction. See [purchase customer binding](../operations/PURCHASE_CUSTOMER_BINDING.md). New production checkout remains paused pending inventory reservations.
 
 ## Architecture decision test
 
