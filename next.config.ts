@@ -50,7 +50,7 @@ const nextConfig: NextConfig = {
         { key: "X-Robots-Tag", value: "noindex, nofollow" },
       ] })),
       ...["/account/:path*", "/api/customer-auth/:path*"].map((source) => ({ source, headers: [
-        { key: "Content-Security-Policy", value: "base-uri 'self'; form-action 'self' https://shopify.com; frame-ancestors 'none'; object-src 'none'" },
+        { key: "Content-Security-Policy", value: "base-uri 'self'; form-action 'self' https://accounts.google.com; frame-ancestors 'none'; object-src 'none'" },
         { key: "Cache-Control", value: "private, no-store, max-age=0" },
         { key: "Referrer-Policy", value: source === "/account/:path*" ? "same-origin" : "no-referrer" },
         { key: "X-Robots-Tag", value: "noindex, nofollow" },
