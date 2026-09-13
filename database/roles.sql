@@ -140,3 +140,6 @@ GRANT SELECT ON ALL TABLES IN SCHEMA bloombox TO bloombox_readonly;
 
 -- Storefronts and settlement workers cannot change catalog publication or prices.
 GRANT SELECT ON bloombox.catalog_products TO bloombox_application, bloombox_worker;
+
+-- The order ownership constraint reads only the buyer key and its customer reference.
+GRANT SELECT (id, customer_id) ON bloombox.buyers TO bloombox_worker;

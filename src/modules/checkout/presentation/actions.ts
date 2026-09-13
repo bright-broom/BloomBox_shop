@@ -7,6 +7,7 @@ import { formatMoney } from "@/shared/domain/money";
 import { application } from "@/shared/infrastructure/composition-root";
 import { reportUnexpectedError } from "@/shared/infrastructure/observability/report-unexpected-error";
 import { ProductUnavailableError } from "../application/create-purchase-intent";
+import { PurchaseCustomerMismatchError } from "../domain/purchase-customer";
 import { CheckoutPausedError } from "../application/checkout-paused-error";
 import { InvalidPurchaseIntentInputError } from "../domain/purchase-intent-policy";
 import {
@@ -54,6 +55,7 @@ export async function createPurchaseIntentAction(
   } catch (error) {
     if (
       error instanceof ProductUnavailableError
+      || error instanceof PurchaseCustomerMismatchError
       || error instanceof CheckoutPausedError
       || error instanceof DeliveryDateUnavailableError
       || error instanceof InvalidPurchaseIntentInputError

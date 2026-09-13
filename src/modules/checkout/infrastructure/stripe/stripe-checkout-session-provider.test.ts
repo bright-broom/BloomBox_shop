@@ -43,6 +43,8 @@ describe("StripeCheckoutSessionProvider", () => {
       idempotencyKey: "stable-idempotency-key",
     }));
     const serialized = JSON.stringify(create.mock.calls[0][0]);
+    expect(serialized).not.toContain("00000000-0000-4000-8000-000000000321");
+    expect(serialized).not.toContain("customerId");
     expect(serialized).not.toContain("花子");
     expect(serialized).not.toContain("おめでとう");
   });
@@ -171,6 +173,7 @@ function createIntent(): PurchaseIntent {
     recipient: { name: recipientName("花子"), deliveryDate: "2026-08-28" },
     giftMessage: giftMessage("おめでとう"),
     createdAt: new Date("2026-08-21T00:00:00.000Z"),
+    customer: { customerId: "00000000-0000-4000-8000-000000000321", version: 1 },
   });
   intent.transitionTo("READY_FOR_CHECKOUT");
   return intent;
