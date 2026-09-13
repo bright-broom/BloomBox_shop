@@ -1,5 +1,7 @@
 # Native customer account with Google login
 
+> 検証状況の更新（2026-09-14）：以下の機能追加時点の「2顧客未検証」「実接続未設定」は履歴です。後続の [実Google2顧客の表示分離](CUSTOMER_ORDER_ISOLATION_VERIFICATION.md) で、架空注文の本人表示・相互非表示を確認しました。実Stripeでの認証済み購入、本番HTTPSは未検証です。最新の残件は [BACKLOG.md](BACKLOG.md) を参照。
+
 2026-09-13. The user selected Shopify-independent commerce under [ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md). `/account` now uses Google OIDC directly and native PostgreSQL customer/order records. Shopify Customer Account credentials and operator Google credentials are not accepted for this route.
 
 ## Implemented

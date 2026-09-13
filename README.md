@@ -2,6 +2,10 @@
 
 想い・花・ことば・受取体験をひとつにつなぐ、ギフト体験プラットフォームの MVP です。
 
+## 開発を引き継ぐ方へ
+
+AI・人を問わず、最初に [AGENTS.md](AGENTS.md) → [開発引き継ぎ](docs/operations/HANDOFF.md) → [残課題台帳](docs/operations/BACKLOG.md) の順に確認してください。現行方針、確認済みの範囲、未完了事項、次の順序、記録の更新方法を共有しています。課題の状態は台帳へ集約し、チャット履歴を前提にしません。
+
 ## 現在できること
 
 - 季節の商品一覧、商品検索、贈る場面での絞り込み、並び替え
@@ -14,7 +18,9 @@
 - Canonical、Open Graph、Product JSON-LD、Sitemap、環境別 Robots
 - Mobile 表示、Keyboard 操作、入力エラー、404、予期しないエラーの表示
 
-Preview では個人情報や購入情報を永続保存せず、金銭も発生しません。Production 用の Shopify Catalog、PostgreSQL、Stripe Adapter、Stripe Test Mode のアカウント契約検証は実装済みですが、実アカウントの決済 E2E、在庫確保、税・送料、法務・Privacy・Support の承認が完了するまで、本番 Commerce のリリース判定は必ず失敗する設計です。
+通常のPreview購入は検証用データで動き、実決済は発生しません。Google認証や商品管理を隔離DBへ接続する検証は別で、確認用のデータが保存される場合があります。Previewという表示だけで非永続と判断しないでください。
+
+自作PostgreSQLの商品・在庫管理、顧客Google認証、購入者紐付け、在庫予約・確定・解放、送料固定、Stripe Adapterと接続確認ツールを実装済みです。実Stripe購入から発送・復旧までの検証、本番設定、正式な商品・販売条件の承認が残り、新規の本番注文はコードとリリース判定で停止しています。実装と実接続の証拠は [残課題台帳](docs/operations/BACKLOG.md) で区別しています。
 
 ## 開発
 
@@ -60,6 +66,6 @@ Presentation → Application → Domain
 
 ## 本番化に必要な次の境界
 
-ADR 0001 により、Shopify を商品、価格、在庫、チェックアウト、決済、注文、返金の正本とします。Next.js はブランド体験とギフト設定を担当し、Shopify との通信は Infrastructure Adapter に隔離します。
+ADR 0009 により、顧客・商品・価格・在庫・注文・発送はBloomBoxのPostgreSQLで管理します。顧客はGoogleで直接認証し、次の決済接続には既存のStripe Checkoutを使用します。支払・返金の事実は検証済み事業者通知と照合で確定し、SDKをInfrastructure Adapterに隔離します。Shopify実装は移行前の経路として残っており、現在の新規開発の前提ではありません。
 
-本番移行の完了条件と自動デプロイ手順は [`docs/operations/RELEASE.md`](docs/operations/RELEASE.md)、判断理由は [`docs/architecture/adr/0001-shopify-first-commerce-boundary.md`](docs/architecture/adr/0001-shopify-first-commerce-boundary.md) を参照してください。
+本番移行の完了条件とデプロイ手順は [RELEASE.md](docs/operations/RELEASE.md)、判断理由は [ADR 0009](docs/architecture/adr/0009-native-commerce-and-google-customers.md) を参照してください。

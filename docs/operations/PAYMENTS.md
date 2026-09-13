@@ -1,5 +1,7 @@
 # BloomBox 決済導入：Shopify Payments + KOMOJU
 
+> 履歴資料（2026-09-14注記）：以下はADR 0003当時の選定・調査です。現在は [ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md) の自作Commerce＋既存Stripe接続が優先します。以下の手順や料金を現行の導入指示・最新料金として使用しないでください。現在の作業は [STRIPE.md](STRIPE.md) と [BACKLOG.md](BACKLOG.md) を参照。
+
 更新日：2026-09-11。選定は [ADR 0003](../architecture/adr/0003-shopify-payments-and-komoju.md)。本番の接続・審査・決済は未確認で、現時点では利用開始していません。
 
 ## 採用構成
