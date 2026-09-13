@@ -7,8 +7,17 @@
   --field: #f7f7f7;
   --line: #e9e9eb;
   --control-border: #858a95;
-  --accent: #16804a;
-  --accent-hover: #10663b;
+  --accent: #13785f;
+  --accent-hover: #0d5d49;
+  --accent-ink: #123f35;
+  --accent-mint-start: #b8f3d5;
+  --accent-mint-middle: #82e5bd;
+  --accent-mint-end: #63d8c7;
+  --accent-mint-hover-start: #a5ebc6;
+  --accent-mint-hover-middle: #6cd8ad;
+  --accent-mint-hover-end: #4ac9b7;
+  --accent-gradient: linear-gradient(120deg, var(--accent-mint-start), var(--accent-mint-middle) 52%, var(--accent-mint-end));
+  --accent-gradient-hover: linear-gradient(120deg, var(--accent-mint-hover-start), var(--accent-mint-hover-middle) 52%, var(--accent-mint-hover-end));
   --positive: #247447;
   --danger: #b42318;
   --danger-surface: #fff0ed;
@@ -69,13 +78,13 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
 .section-shell { width: 100%; max-width: var(--page-max); margin-inline: auto; padding-inline: var(--page-gutter); }
 .eyebrow { margin: 0 0 var(--space-4); font-size: var(--text-meta); font-weight: 500; line-height: 1.5; letter-spacing: .12em; text-transform: uppercase; }
 .primary-button, .secondary-button, .header-cta { min-height: var(--control-height); padding: var(--space-3) var(--space-5); display: inline-flex; align-items: center; justify-content: center; gap: var(--space-5); border: 1px solid transparent; border-radius: var(--radius-pill); font-size: var(--text-small); font-weight: 500; line-height: 1.5; text-align: center; cursor: pointer; transition: background var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast); }
-.primary-button, .header-cta { background: var(--accent); color: var(--paper); }
-.primary-button:hover, .header-cta:hover { background: var(--accent-hover); }
+.primary-button, .header-cta { background: var(--accent-mint-middle) var(--accent-gradient); color: var(--accent-ink); }
+.primary-button:hover:not(:disabled), .header-cta:hover { background: var(--accent-mint-hover-middle) var(--accent-gradient-hover); }
 .secondary-button { border-color: var(--control-border); background: transparent; color: var(--ink); }
 .secondary-button:hover { border-color: var(--ink); background: var(--surface); }
 .primary-button:disabled, .secondary-button:disabled { cursor: not-allowed; opacity: .5; }
 .text-link, .text-button { display: inline-flex; align-items: center; justify-content: space-between; min-height: var(--control-height); gap: var(--space-6); padding: var(--space-2) 0; border: 0; border-bottom: 1px solid currentColor; background: transparent; color: inherit; font-size: var(--text-small); cursor: pointer; }
-.text-link:hover, .text-button:hover { color: var(--accent); }
+.text-link:hover, .text-button:hover { color: var(--accent-hover); }
 
 /* Compact navigation. Preview disclosure remains visible independently of commerce state. */
 .service-bar { min-height: 28px; padding: var(--space-1) var(--page-gutter); display: flex; justify-content: center; gap: var(--space-7); background: var(--surface); color: var(--ink-soft); font-size: var(--text-meta); line-height: 1.7; }
