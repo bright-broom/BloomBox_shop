@@ -1,3 +1,4 @@
+import { PostgresCheckoutBuyerWriter } from "@/modules/customer/infrastructure/postgres-checkout-buyer-writer";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -55,8 +56,8 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       ORDER BY version
     `;
 
-    expect(rows).toHaveLength(19);
-    expect(rows.map((row) => row.version)).toEqual(["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019"]);
+    expect(rows).toHaveLength(20);
+    expect(rows.map((row) => row.version)).toEqual(["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020"]);
     expect(rows.every((row) => /^[0-9a-f]{64}$/.test(row.checksum))).toBe(true);
   });
 
@@ -189,7 +190,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       occurredAt: new Date("2026-08-21T00:05:00.000Z"),
     });
     await repository.saveCheckoutCreated(intent);
-    const processor = new StripeCommerceEventProcessor(sql, protector, "inclusive");
+    const processor = new StripeCommerceEventProcessor(sql, protector, "inclusive", (tx) => new PostgresCheckoutBuyerWriter(tx));
     const paidEvent = {
       provider: "STRIPE" as const,
       providerAccountId: "acct_example",

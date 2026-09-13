@@ -1,3 +1,5 @@
+import { readCurrentPurchaseCustomer } from "./security/customer-auth/purchase-customer";
+import { PostgresCheckoutBuyerWriter } from "@/modules/customer/infrastructure/postgres-checkout-buyer-writer";
 import { ReadShopifyReference } from "@/modules/payment/application/read-shopify-reference";
 import { ShopifyAdminOrderReader } from "@/modules/payment/infrastructure/shopify/shopify-admin-order-reader";
 import { loadShopifyAdminConfig } from "./config/shopify-admin-config";
@@ -50,6 +52,7 @@ const createPurchaseIntent = new CreatePurchaseIntent(
   purchaseIntentRepository,
   undefined,
   acceptsNewCheckout,
+  readCurrentPurchaseCustomer,
 );
 const startCheckout = createStartCheckout(purchaseIntentRepository);
 
@@ -78,7 +81,7 @@ function createProductRepository(): ProductRepository {
 
 function acceptsNewCheckout(): boolean {
   const enabled = loadCheckoutIntakeEnabled();
-  // ADR 0009: native inventory reservation and buyer binding are still incomplete.
+  // ADR 0009: native inventory reservations are still incomplete.
   // Settlement/reconciliation must remain available for existing transactions.
   return loadRuntimeMode() === "preview" && enabled;
 }
@@ -103,7 +106,7 @@ function createStartCheckout(intents: PurchaseIntentRepository): StartCheckout |
     new StripeSdkCheckoutApi(config),
     config.apiVersion,
   );
-  return new StartCheckout(intents, provider, undefined, acceptsNewCheckout);
+  return new StartCheckout(intents, provider, undefined, acceptsNewCheckout, readCurrentPurchaseCustomer);
 }
 
 let stripeWebhookReceiver: ReceiveProviderWebhook | undefined;
@@ -163,7 +166,7 @@ export function getStripeInboxProcessor(): ProcessProviderInbox {
     new PostgresWebhookInbox(sql, protector, undefined, undefined, {
       provider: "STRIPE", accountId: config.accountId,
     }),
-    new StripeCommerceEventProcessor(sql, protector, config.taxBehavior),
+    new StripeCommerceEventProcessor(sql, protector, config.taxBehavior, (tx) => new PostgresCheckoutBuyerWriter(tx)),
   );
   return stripeInboxProcessor;
 }
