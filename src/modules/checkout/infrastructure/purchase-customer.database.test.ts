@@ -112,6 +112,45 @@ describeDatabase("durable purchase customer and paid-order ownership", () => {
     expect(JSON.stringify(ready)).not.toContain(a.customerId);
   });
 
+  it("isolates both paid histories and details after interleaved duplicate events with identical provider identities", async () => {
+    const a = await customer(), b = await customer();
+    const intentA = await create(a).execute(input()), intentB = await create(b).execute(input());
+    const guest = await create(null).execute(input());
+    const eventA = await paidEvent(intentA), eventB = await paidEvent(intentB), guestEvent = await paidEvent(guest);
+    // Identical provider customer/email values must not merge either owner or claim the guest order.
+    for (const event of [eventB, guestEvent, eventA, eventB, eventA, guestEvent]) await processor.process(event);
+    const connection = postgres(safeDatabase(), { max: 1, ssl: false });
+    try {
+      await connection`SET ROLE bloombox_application`;
+      const reader = new PostgresCustomerOrderHistory(connection);
+      const pageA = await reader.read(a.customerId, null), pageB = await reader.read(b.customerId, null);
+      expect(pageA.orders).toHaveLength(1); expect(pageB.orders).toHaveLength(1);
+      const orderA = pageA.orders[0], orderB = pageB.orders[0];
+      expect(orderA.id).not.toBe(orderB.id);
+      for (const [owner, ownOrder, otherOrder] of [[a, orderA, orderB], [b, orderB, orderA]] as const) {
+        expect(await reader.readDetail(owner.customerId, ownOrder.id)).toMatchObject({
+          id: ownOrder.id, totalYen: 5000, payment: "CAPTURED", fulfillment: "UNFULFILLED",
+          items: [{ quantity: 1, unitYen: 4000, totalYen: 4000 }],
+        });
+        expect(await reader.readDetail(owner.customerId, otherOrder.id)).toBeNull();
+      }
+      const guestOrders = await sql`SELECT id FROM bloombox.orders WHERE purchase_intent_id = ${guest.id}`;
+      expect(guestOrders).toHaveLength(1);
+      expect(await reader.readDetail(a.customerId, guestOrders[0].id)).toBeNull();
+      expect(await reader.readDetail(b.customerId, guestOrders[0].id)).toBeNull();
+      const bindings = await sql`SELECT orders.id, buyer.customer_id FROM bloombox.orders orders
+        JOIN bloombox.buyers buyer ON buyer.id = orders.buyer_id
+        WHERE purchase_intent_id IN (${intentA.id}, ${intentB.id}, ${guest.id})`;
+      expect(bindings).toHaveLength(3);
+      expect(bindings.find((row) => row.id === orderA.id)?.customer_id).toBe(a.customerId);
+      expect(bindings.find((row) => row.id === orderB.id)?.customer_id).toBe(b.customerId);
+      expect(bindings.find((row) => row.id === guestOrders[0].id)?.customer_id).toBeNull();
+    } finally {
+      await connection`RESET ROLE`;
+      await connection.end({ timeout: 5 });
+    }
+  });
+
   it("settles after logout/revocation/account disable while private history remains unavailable for the disabled account", async () => {
     const a = await customer(), intent = await create(a).execute(input()), event = await paidEvent(intent);
     await sql`UPDATE bloombox.customer_accounts SET status = 'DISABLED', version = version + 1 WHERE id = ${a.customerId}`;
