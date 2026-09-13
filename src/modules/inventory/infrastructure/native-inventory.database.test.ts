@@ -1,8 +1,11 @@
+import { CheckoutPreparationUnavailableError } from "@/modules/checkout/application/checkout-session-provider";
+import { StripeCheckoutSessionProvider, StripeSdkCheckoutApi, type StripeCheckoutSessionsClient } from "@/modules/checkout/infrastructure/stripe/stripe-checkout-session-provider";
+import type { StripeConfig } from "@/shared/infrastructure/config/stripe-config";
 import { StartCheckout } from "@/modules/checkout/application/start-checkout";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
 import { PostgresInventoryReservations } from "./postgres-inventory-reservations";
 import { PostgresStockAvailabilityReader } from "./postgres-stock-availability-reader";
@@ -119,6 +122,48 @@ describeDatabase("native inventory reservations", () => {
     await create.execute(input(id)); expect(await balance(id)).toEqual({ on_hand: 1, reserved: 1 });
   });
 
+  it.each(["retry", "cancel", "expire"])("keeps a locally rejected checkout recoverable through %s", async (recovery) => {
+    const id = await stock(1), intent = await create.execute(input(id));
+    const session = { id: `cs_test_${intent.id}`, client_reference_id: intent.id,
+      url: "https://checkout.stripe.com/test", expires_at: intent.expiresAt.getTime() / 1000, livemode: false };
+    const sessions: StripeCheckoutSessionsClient = { create: vi.fn(async () => session), retrieve: vi.fn(async () => session) };
+    const config: StripeConfig = {
+      mode: "test", checkoutSecretKey: "rk_test_fixture", reconciliationSecretKey: "rk_test_fixture",
+      webhookSecret: "whsec_fixture", accountId: "acct_fixture", shippingRateId: "shr_fixture",
+      taxBehavior: "exclusive", automaticTaxEnabled: true, termsAcceptance: "required",
+      allowedCheckoutHostnames: ["checkout.stripe.com"], publicOrigin: "https://shop.example.com", apiVersion: "2026-07-29.dahlia",
+    };
+    const checkout = (taxBehavior: StripeConfig["taxBehavior"]) => new StartCheckout(repo,
+      new StripeCheckoutSessionProvider(new StripeSdkCheckoutApi({ ...config, taxBehavior }, sessions), config.apiVersion), now);
+
+    await expect(checkout("exclusive").execute(intent.id)).rejects.toBeInstanceOf(CheckoutPreparationUnavailableError);
+    expect(sessions.create).not.toHaveBeenCalled();
+    expect((await repo.findById(intent.id))?.commerceProvider).toBeUndefined();
+    expect(await balance(id)).toEqual({ on_hand: 1, reserved: 1 });
+    if (recovery === "retry") {
+      await checkout("inclusive").execute(intent.id);
+      await checkout("inclusive").execute(intent.id);
+      expect(sessions.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+        shipping_options: [{ shipping_rate_data: { type: "fixed_amount", display_name: "配送料",
+          fixed_amount: { amount: 0, currency: "jpy" }, tax_behavior: "inclusive" } }],
+      }), { idempotencyKey: `purchase-intent:${intent.id}:checkout:v1` });
+      expect((await repo.findById(intent.id))?.status).toBe("CHECKOUT_CREATED");
+      expect(await balance(id)).toEqual({ on_hand: 1, reserved: 1 });
+      expect(await sql`SELECT id FROM bloombox.inventory_movements WHERE purchase_intent_id = ${intent.id}`).toHaveLength(1);
+      return;
+    }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (recovery === "cancel") await cancel.execute(intent.id);
+      else await retention.execute(new Date("2026-09-15T00:00:00Z"));
+    }
+    expect((await repo.findById(intent.id))?.status).toBe(recovery === "cancel" ? "ABANDONED" : "EXPIRED");
+    expect(await balance(id)).toEqual({ on_hand: 1, reserved: 0 });
+    expect(await sql`SELECT id FROM bloombox.inventory_movements WHERE purchase_intent_id = ${intent.id} AND kind = 'RELEASED'`).toHaveLength(1);
+    await create.execute(input(id));
+    expect(await balance(id)).toEqual({ on_hand: 1, reserved: 1 });
+    expect(sessions.create).not.toHaveBeenCalled();
+  });
+
   it("serializes cancellation against provider assignment: the winner determines whether inventory remains held", async () => {
     const id = await stock(1), intent = await create.execute(input(id));
     const results = await Promise.allSettled([cancel.execute(intent.id), repo.claimCommerceProvider(intent.id, "STRIPE")]);
@@ -132,13 +177,18 @@ describeDatabase("native inventory reservations", () => {
     const keys: string[] = [];
     const session = { id: `cs_test_${intent.id}`, provider: "STRIPE" as const, purchaseIntentId: intent.id,
       url: "https://checkout.stripe.com/test", apiVersion: "test", expiresAt: new Date("2026-09-13T01:00:00Z") };
-    const provider = { provider: "STRIPE" as const,
+    const provider = { provider: "STRIPE" as const, validateCreate: vi.fn(),
       create: async (_intent: PurchaseIntent, key: string) => { keys.push(key); if (keys.length === 1) throw new Error("Simulated timeout"); return session; },
       retrieve: async () => session,
     };
     const start = new StartCheckout(repo, provider, now);
     await expect(start.execute(intent.id)).rejects.toThrow("Simulated timeout");
     expect(await balance(id)).toEqual({ on_hand: 1, reserved: 1 });
+    await expect(cancel.execute(intent.id)).rejects.toThrow();
+    provider.validateCreate.mockImplementationOnce(() => { throw new CheckoutPreparationUnavailableError(); });
+    await expect(start.execute(intent.id)).rejects.toBeInstanceOf(CheckoutPreparationUnavailableError);
+    expect(await balance(id)).toEqual({ on_hand: 1, reserved: 1 });
+    expect((await repo.findById(intent.id))?.commerceProvider).toBe("STRIPE");
     await expect(cancel.execute(intent.id)).rejects.toThrow();
     await start.execute(intent.id);
     expect(keys).toHaveLength(2); expect(keys[0]).toBe(keys[1]);

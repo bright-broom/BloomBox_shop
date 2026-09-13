@@ -1351,7 +1351,7 @@ describeDatabase("durable Shopify checkout attempts", () => {
     const intent = await prepare(); const shopify = flow(intent);
     const session = { provider: "STRIPE" as const, id: "cs_test_race", url: "https://checkout.stripe.com/test", purchaseIntentId: intent.id,
       apiVersion: "test", expiresAt: intent.expiresAt };
-    const stripeProvider = { provider: "STRIPE" as const, create: vi.fn(async () => session), retrieve: vi.fn(async () => session) };
+    const stripeProvider = { provider: "STRIPE" as const, validateCreate: vi.fn(), create: vi.fn(async () => session), retrieve: vi.fn(async () => session) };
     const stripe = new StartCheckout(intents, stripeProvider, () => now);
     const results = await Promise.allSettled([shopify.useCase.execute(intent.id), stripe.execute(intent.id)]);
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);

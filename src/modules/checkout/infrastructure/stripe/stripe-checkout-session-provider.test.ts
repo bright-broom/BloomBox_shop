@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { CheckoutPreparationUnavailableError } from "../../application/checkout-session-provider";
 import { money } from "@/shared/domain/money";
 import {
   catalogProductReference,
@@ -25,6 +26,7 @@ describe("StripeCheckoutSessionProvider", () => {
       expiresAt: new Date("2026-08-21T23:00:00.000Z"),
     });
     const api: StripeCheckoutApi = {
+      validateCreate: vi.fn(),
       create,
       retrieve: vi.fn<StripeCheckoutApi["retrieve"]>(),
     };
@@ -89,7 +91,7 @@ describe("StripeSdkCheckoutApi", () => {
       purchaseIntentId: createIntent().id, productId: "native_12345678-abcd-4000-8000-123456789012",
       externalProductReference: "native_test", productName: "試験商品", unitAmount: 4000, currency: "JPY",
       expiresAt: createIntent().expiresAt, idempotencyKey: "same-request", ...quote,
-    })).rejects.toBeInstanceOf(StripeCheckoutResponseError);
+    })).rejects.toBeInstanceOf(CheckoutPreparationUnavailableError);
     expect(create).not.toHaveBeenCalled();
   });
 

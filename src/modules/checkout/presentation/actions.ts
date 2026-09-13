@@ -10,6 +10,7 @@ import { reportUnexpectedError } from "@/shared/infrastructure/observability/rep
 import { ProductUnavailableError } from "../application/create-purchase-intent";
 import { PurchaseCustomerMismatchError } from "../domain/purchase-customer";
 import { CheckoutPausedError } from "../application/checkout-paused-error";
+import { CheckoutPreparationUnavailableError } from "../application/checkout-session-provider";
 import { InvalidPurchaseIntentInputError } from "../domain/purchase-intent-policy";
 import { ShippingPriceUnavailableError } from "../domain/purchase-shipping";
 import {
@@ -62,6 +63,7 @@ export async function createPurchaseIntentAction(
       || error instanceof ProductUnavailableError
       || error instanceof PurchaseCustomerMismatchError
       || error instanceof CheckoutPausedError
+      || error instanceof CheckoutPreparationUnavailableError
       || error instanceof DeliveryDateUnavailableError
       || error instanceof InvalidPurchaseIntentInputError
     ) {

@@ -1,4 +1,5 @@
 import { SHIPPING_QUOTE_MAX_QUANTITY } from "../../domain/purchase-shipping";
+import { CheckoutPreparationUnavailableError } from "../../application/checkout-session-provider";
 import Stripe from "stripe";
 import type {
   CheckoutSession,
@@ -44,6 +45,7 @@ export interface StripeCheckoutSessionsClient {
 }
 
 export interface StripeCheckoutApi {
+  validateCreate(request: Omit<StripeCheckoutRequest, "idempotencyKey">): void;
   create(request: StripeCheckoutRequest): Promise<StripeCheckoutResponse>;
   retrieve(sessionId: string): Promise<StripeCheckoutResponse>;
 }
@@ -63,11 +65,20 @@ export class StripeCheckoutSessionProvider implements CheckoutSessionProvider {
     private readonly apiVersion: string,
   ) {}
 
-  create(intent: PurchaseIntent, idempotencyKey: string): Promise<CheckoutSession> {
+  validateCreate(intent: PurchaseIntent): void {
+    this.api.validateCreate(this.toRequest(intent));
+  }
+
+  async create(intent: PurchaseIntent, idempotencyKey: string): Promise<CheckoutSession> {
+    const session = await this.api.create({ ...this.toRequest(intent), idempotencyKey });
+    return this.toCheckoutSession(session);
+  }
+
+  private toRequest(intent: PurchaseIntent): Omit<StripeCheckoutRequest, "idempotencyKey"> {
     if (intent.item.productId.startsWith("native_") && intent.shippingAmount === null) {
-      return Promise.reject(new StripeCheckoutResponseError());
+      throw new CheckoutPreparationUnavailableError();
     }
-    return this.api.create({
+    return {
       purchaseIntentId: intent.id,
       productId: intent.item.productId,
       externalProductReference: intent.item.externalProductReference,
@@ -77,8 +88,7 @@ export class StripeCheckoutSessionProvider implements CheckoutSessionProvider {
       shippingAmount: intent.shippingAmount?.amount,
       currency: intent.item.unitPriceSnapshot.currency,
       expiresAt: intent.expiresAt,
-      idempotencyKey,
-    }).then((session) => this.toCheckoutSession(session));
+    };
   }
 
   retrieve(externalCheckoutId: string): Promise<CheckoutSession> {
@@ -114,13 +124,17 @@ export class StripeSdkCheckoutApi implements StripeCheckoutApi {
     };
   }
 
-  async create(request: StripeCheckoutRequest): Promise<StripeCheckoutResponse> {
-    if (request.productId.startsWith("native_") && request.shippingAmount === undefined) throw new StripeCheckoutResponseError();
+  validateCreate(request: Omit<StripeCheckoutRequest, "idempotencyKey">): void {
+    if (request.productId.startsWith("native_") && request.shippingAmount === undefined) throw new CheckoutPreparationUnavailableError();
     if (request.shippingAmount !== undefined && (
       !Number.isSafeInteger(request.shippingAmount) || request.shippingAmount < 0
       || request.quantity !== SHIPPING_QUOTE_MAX_QUANTITY || this.config.taxBehavior !== "inclusive"
       || !Number.isSafeInteger(request.unitAmount + request.shippingAmount)
-    )) throw new StripeCheckoutResponseError();
+    )) throw new CheckoutPreparationUnavailableError();
+  }
+
+  async create(request: StripeCheckoutRequest): Promise<StripeCheckoutResponse> {
+    this.validateCreate(request);
     const session = await this.sessions.create({
       mode: "payment",
       client_reference_id: request.purchaseIntentId,

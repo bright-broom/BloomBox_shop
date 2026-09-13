@@ -68,6 +68,9 @@ export class StartCheckout {
     const minimumExpiry = occurredAt.getTime() + MINIMUM_CHECKOUT_WINDOW_MINUTES * 60 * 1000;
     if (intent.expiresAt.getTime() < minimumExpiry) throw new CheckoutWindowExpiredError();
 
+    // Local rejection must not mark an unstarted purchase as potentially sent to Stripe.
+    // Existing provider claims remain intact: a prior request may already have succeeded.
+    this.provider.validateCreate(intent);
     if (!this.acceptsNewCheckout()) throw new CheckoutPausedError();
     await this.intents.claimCommerceProvider(id, this.provider.provider);
     if (!this.acceptsNewCheckout()) throw new CheckoutPausedError();
