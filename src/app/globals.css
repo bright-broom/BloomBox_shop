@@ -548,3 +548,12 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
   .account-welcome, .account-empty { padding: var(--space-5); }
   .account-content .primary-button, .account-content .secondary-button { max-width: 100%; }
 }
+
+.catalog-management-page { max-width: var(--reading-max); }
+.catalog-management-card { margin-block: var(--space-6); padding: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-card); }
+.catalog-management-form fieldset { min-width: 0; border: 0; padding: 0; display: grid; gap: var(--space-4); }
+.catalog-management-form legend { margin-block: var(--space-4); font-weight: 600; }
+.catalog-management-form textarea { width: 100%; max-width: 100%; }
+.catalog-management-card summary { cursor: pointer; padding-block: var(--space-4); }
+.catalog-stock-summary { display: flex; flex-wrap: wrap; gap: var(--space-6); }
+.catalog-stock-summary dd { margin: 0; font-weight: 600; }

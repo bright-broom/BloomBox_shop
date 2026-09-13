@@ -1,3 +1,4 @@
+import { InventoryUnavailableError, type InventoryReservations } from "@/modules/inventory/public";
 import type { CheckoutBuyerWriter } from "@/modules/customer/public";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -97,6 +98,7 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
     private readonly taxBehavior: "inclusive" | "exclusive" | "unspecified",
     private readonly buyerWriter: (transaction: DatabaseTransaction) => CheckoutBuyerWriter,
     private readonly createId: () => string = randomUUID,
+    private readonly inventory?: (tx: DatabaseTransaction) => InventoryReservations,
   ) {}
 
   async process(event: VerifiedProviderEvent): Promise<void> {
@@ -120,11 +122,14 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
     const payload = checkoutPayloadSchema.safeParse(event.payload);
     if (!payload.success) throw new InvalidStripeCommerceEventError();
 
+    if (event.externalObjectId !== payload.data.id) throw new InvalidStripeCommerceEventError();
     if (event.eventType === "checkout.session.expired") {
+      if (payload.data.checkoutStatus !== "expired" || payload.data.paymentStatus !== "unpaid") throw new InvalidStripeCommerceEventError();
       await this.transitionPurchaseIntent(event, payload.data.purchaseIntentId, "EXPIRED");
       return;
     }
     if (event.eventType === "checkout.session.async_payment_failed") {
+      if (payload.data.paymentStatus !== "unpaid") throw new InvalidStripeCommerceEventError();
       await this.transitionPurchaseIntent(event, payload.data.purchaseIntentId, "ABANDONED");
       return;
     }
@@ -344,6 +349,10 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
         intent.currency,
         event.occurredAt,
       );
+      if (intent.catalog_product_id.startsWith("native_")) {
+        if (!this.inventory) throw new InventoryUnavailableError();
+        await this.inventory(transaction).commit(intent.id, event.occurredAt);
+      }
       await transaction`
         UPDATE bloombox.purchase_intents
         SET status = 'CONVERTED', version = version + 1, updated_at = ${event.occurredAt}
@@ -369,24 +378,20 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
     status: "EXPIRED" | "ABANDONED",
   ): Promise<void> {
     await this.sql.begin(async (transaction) => {
-      const updated = await transaction`
-        UPDATE bloombox.purchase_intents
-        SET status = ${status}, version = version + 1, updated_at = ${event.occurredAt}
-        WHERE id = ${purchaseIntentId}
-          AND status = 'CHECKOUT_CREATED'
-          AND external_checkout_id = ${event.externalObjectId ?? null}
-        RETURNING id
-      `;
-      if (updated.length === 0) {
-        const rows = await transaction`
-          SELECT status FROM bloombox.purchase_intents WHERE id = ${purchaseIntentId}
-        `;
-        if (rows.length === 0) throw new StripeCommerceEventDependencyError();
-        if (rows[0].status !== status && rows[0].status !== "CONVERTED") {
-          throw new InvalidStripeCommerceEventError();
-        }
-        return;
+      const rows = await transaction`SELECT intent.status, intent.commerce_provider, intent.external_checkout_id, item.catalog_product_id
+        FROM bloombox.purchase_intents intent JOIN bloombox.purchase_intent_items item ON item.purchase_intent_id = intent.id AND item.position = 0
+        WHERE intent.id = ${purchaseIntentId} FOR UPDATE OF intent`;
+      const row = rows[0];
+      if (!row) throw new StripeCommerceEventDependencyError();
+      if (row.commerce_provider !== "STRIPE" || row.external_checkout_id !== event.externalObjectId) throw new InvalidStripeCommerceEventError();
+      if (row.status === status || row.status === "CONVERTED") return;
+      if (row.status !== "CHECKOUT_CREATED") throw new InvalidStripeCommerceEventError();
+      if (String(row.catalog_product_id).startsWith("native_")) {
+        if (!this.inventory) throw new InventoryUnavailableError();
+        await this.inventory(transaction).release(purchaseIntentId, status === "EXPIRED" ? "CHECKOUT_EXPIRED" : "PAYMENT_FAILED", event.occurredAt);
       }
+      await transaction`UPDATE bloombox.purchase_intents SET status = ${status}, version = version + 1, updated_at = ${event.occurredAt}
+        WHERE id = ${purchaseIntentId}`;
       await insertAudit(transaction, this.createId(), event, `checkout.${status.toLowerCase()}`, purchaseIntentId);
     });
   }

@@ -1,3 +1,5 @@
+import { PostgresInventoryReservations } from "@/modules/inventory/infrastructure/postgres-inventory-reservations";
+import { PostgresStockAvailabilityReader } from "@/modules/inventory/infrastructure/postgres-stock-availability-reader";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -23,7 +25,7 @@ const describeDatabase = databaseUrl ? describe : describe.skip;
 
 describeDatabase("native PostgreSQL catalog", () => {
   const sql = postgres(safeDatabase(), { max: 2, ssl: false });
-  const repository = new PostgresProductRepository(sql);
+  const repository = new PostgresProductRepository(sql, new PostgresStockAvailabilityReader(sql));
   beforeAll(async () => {
     await sql.unsafe("DROP SCHEMA IF EXISTS bloombox CASCADE");
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -33,7 +35,7 @@ describeDatabase("native PostgreSQL catalog", () => {
     }
     await sql.unsafe((await readFile("database/roles.sql", "utf8")).replace(/^\\set ON_ERROR_STOP on$/m, ""));
   });
-  beforeEach(async () => { await sql`TRUNCATE bloombox.catalog_products`; });
+  beforeEach(async () => { await sql`TRUNCATE bloombox.catalog_changes, bloombox.inventory_adjustments, bloombox.inventory_movements, bloombox.inventory_reservations, bloombox.inventory_stock, bloombox.catalog_products`; });
   afterAll(async () => { await sql.end({ timeout: 5 }); });
 
   async function insert(options: { slug?: string; status?: string; available?: boolean; price?: number } = {}) {
@@ -46,6 +48,7 @@ describeDatabase("native PostgreSQL catalog", () => {
       '試験商品', '試験用サブタイトル', 'テスト専用の商品説明', ${options.price ?? 4000},
       'https://images.unsplash.com/test-only', '試験画像', '白', ARRAY['お祝い'], ARRAY['試験用の花'], '試験用生産者'
     )`;
+    await sql`INSERT INTO bloombox.inventory_stock (product_id, on_hand) VALUES (${id}, 100)`;
     return { id, publicId: productId(`native_${id}`) };
   }
 
@@ -130,7 +133,7 @@ describeDatabase("native PostgreSQL catalog", () => {
   it("uses current DB prices at purchase creation and keeps the durable price snapshot on retries", async () => {
     const item = await insert();
     const protector = new AesGcmDataProtector({ activeKeyId: "test", keys: new Map([["test", Buffer.alloc(32, 7)]]) });
-    const intents = new PostgresPurchaseIntentRepository(sql, protector);
+    const intents = new PostgresPurchaseIntentRepository(sql, protector, undefined, (tx) => new PostgresInventoryReservations(tx));
     // Isolated application test only. The production composition blocks new intake until reservations exist.
     const create = new CreatePurchaseIntent(repository, intents, () => new Date("2026-09-13T00:00:00Z"));
     const input = { requestId: randomUUID(), productId: item.publicId, quantity: 2, recipientName: "試験用受取人", deliveryDate: "2026-09-20", giftMessage: "試験" };
@@ -148,7 +151,7 @@ describeDatabase("native PostgreSQL catalog", () => {
   it("permits role-scoped reads but prevents storefront and worker price/publication writes; read failures recover explicitly", async () => {
     const item = await insert();
     const connection = postgres(safeDatabase(), { max: 1, ssl: false });
-    const reader = new PostgresProductRepository(connection);
+    const reader = new PostgresProductRepository(connection, new PostgresStockAvailabilityReader(connection));
     try {
       for (const role of ["bloombox_application", "bloombox_worker"]) {
         await connection.unsafe(`SET ROLE ${role}`);

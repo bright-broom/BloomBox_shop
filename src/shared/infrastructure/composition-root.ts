@@ -1,3 +1,6 @@
+import { PostgresInventoryReservations } from "@/modules/inventory/infrastructure/postgres-inventory-reservations";
+import { PostgresStockAvailabilityReader } from "@/modules/inventory/infrastructure/postgres-stock-availability-reader";
+import { CancelPurchaseIntent } from "@/modules/checkout/application/cancel-purchase-intent";
 import { readCurrentPurchaseCustomer } from "./security/customer-auth/purchase-customer";
 import { PostgresCheckoutBuyerWriter } from "@/modules/customer/infrastructure/postgres-checkout-buyer-writer";
 import { ReadShopifyReference } from "@/modules/payment/application/read-shopify-reference";
@@ -61,6 +64,7 @@ export const application = {
   searchProducts: new SearchProducts(productRepository),
   getProduct: new GetProduct(productRepository),
   createPurchaseIntent,
+  cancelPurchaseIntent: new CancelPurchaseIntent(purchaseIntentRepository, readCurrentPurchaseCustomer),
   preparePurchase: new PreparePurchase(createPurchaseIntent, startCheckout),
   getOrderStatus: new GetOrderStatus(createOrderStatusQuery()),
   lookupPostalCode: new LookupPostalCode(new ZipcloudPostalAddressRepository()),
@@ -76,22 +80,22 @@ function createOrderStatusQuery(): OrderStatusQuery {
 function createProductRepository(): ProductRepository {
   if (loadRuntimeMode() === "preview") return new InMemoryProductRepository();
 
-  return new PostgresProductRepository(getApplicationDatabaseClient());
+  return new PostgresProductRepository(getApplicationDatabaseClient(), new PostgresStockAvailabilityReader(getApplicationDatabaseClient()));
 }
 
 function acceptsNewCheckout(): boolean {
   const enabled = loadCheckoutIntakeEnabled();
-  // ADR 0009: native inventory reservations are still incomplete.
+  // ADR 0009: live inventory/payment recovery and fulfillment evidence remain incomplete.
   // Settlement/reconciliation must remain available for existing transactions.
   return loadRuntimeMode() === "preview" && enabled;
 }
 
-function createPurchaseIntentRepository(): PurchaseIntentRepository {
+function createPurchaseIntentRepository(): InMemoryPurchaseIntentRepository | PostgresPurchaseIntentRepository {
   if (loadRuntimeMode() === "preview") return new InMemoryPurchaseIntentRepository();
 
   const sql = getApplicationDatabaseClient();
   const protector = new AesGcmDataProtector(loadDataProtectionConfig());
-  return new PostgresPurchaseIntentRepository(sql, protector);
+  return new PostgresPurchaseIntentRepository(sql, protector, undefined, (tx) => new PostgresInventoryReservations(tx));
 }
 
 function createStartCheckout(intents: PurchaseIntentRepository): StartCheckout | undefined {
@@ -166,7 +170,7 @@ export function getStripeInboxProcessor(): ProcessProviderInbox {
     new PostgresWebhookInbox(sql, protector, undefined, undefined, {
       provider: "STRIPE", accountId: config.accountId,
     }),
-    new StripeCommerceEventProcessor(sql, protector, config.taxBehavior, (tx) => new PostgresCheckoutBuyerWriter(tx)),
+    new StripeCommerceEventProcessor(sql, protector, config.taxBehavior, (tx) => new PostgresCheckoutBuyerWriter(tx), undefined, (tx) => new PostgresInventoryReservations(tx)),
   );
   return stripeInboxProcessor;
 }
@@ -175,7 +179,7 @@ export function getCommerceDataRetentionJob(): PostgresDataRetentionJob {
   if (loadRuntimeMode() !== "production") {
     throw new Error("Commerce data retention is disabled");
   }
-  commerceDataRetentionJob ??= new PostgresDataRetentionJob(getWorkerDatabaseClient());
+  commerceDataRetentionJob ??= new PostgresDataRetentionJob(getWorkerDatabaseClient(), undefined, (tx) => new PostgresInventoryReservations(tx));
   return commerceDataRetentionJob;
 }
 

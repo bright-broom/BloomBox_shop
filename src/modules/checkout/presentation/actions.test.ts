@@ -1,3 +1,4 @@
+import { InsufficientInventoryError } from "@/modules/inventory/public";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { money } from "@/shared/domain/money";
 import { PurchaseCustomerMismatchError } from "../domain/purchase-customer";
@@ -65,6 +66,11 @@ describe("createPurchaseIntentAction", () => {
     expect(execute.mock.calls[0][0]).not.toHaveProperty("customerId");
     expect(execute.mock.calls[0][0]).not.toHaveProperty("customerVersion");
     expect(result).toEqual({ error: new PurchaseCustomerMismatchError().message });
+  });
+
+  it("returns stock shortage guidance without a draft or payment redirect", async () => {
+    execute.mockRejectedValue(new InsufficientInventoryError());
+    expect(await createPurchaseIntentAction({}, formData())).toEqual({ error: new InsufficientInventoryError().message });
   });
 
   it("does not call the application layer when form input is invalid", async () => {
