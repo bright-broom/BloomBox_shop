@@ -15,7 +15,9 @@ import { StripeCommerceEventProcessor } from "@/modules/payment/infrastructure/s
 import { PostgresDataRetentionJob } from "@/shared/infrastructure/database/data-retention-job";
 import { AesGcmDataProtector } from "@/shared/infrastructure/security/aes-gcm-data-protector";
 import { InsufficientInventoryError } from "../public";
-import type { PurchaseIntent } from "@/modules/checkout/domain/purchase-intent";
+import { PurchaseIntent, purchaseIntentId, catalogProductReference, commerceProductReference } from "@/modules/checkout/domain/purchase-intent";
+import { giftMessage, recipientName } from "@/modules/checkout/domain/purchase-intent-policy";
+import { money } from "@/shared/domain/money";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 function safeDatabase() {
@@ -46,8 +48,8 @@ describeDatabase("native inventory reservations", () => {
   afterAll(async () => { await sql.end({ timeout: 5 }); });
   async function stock(quantity: number | null) {
     const id = randomUUID();
-    await sql`INSERT INTO bloombox.catalog_products (id, slug, status, available, name, subtitle, description, price_minor, image_url, image_alt, palette, occasions, flowers, grower)
-      VALUES (${id}, ${'stock-' + id}, 'PUBLISHED', true, '在庫試験商品', '試験', '試験用の商品', 4000,
+    await sql`INSERT INTO bloombox.catalog_products (id, slug, status, available, name, subtitle, description, price_minor, shipping_minor, image_url, image_alt, palette, occasions, flowers, grower)
+      VALUES (${id}, ${'stock-' + id}, 'PUBLISHED', true, '在庫試験商品', '試験', '試験用の商品', 4000, 0,
         'https://images.unsplash.com/test-only', '試験', '白', ARRAY['試験'], ARRAY['試験用の花'], '試験')`;
     if (quantity !== null) await sql`INSERT INTO bloombox.inventory_stock (product_id, on_hand) VALUES (${id}, ${quantity})`;
     return id;
@@ -82,7 +84,15 @@ describeDatabase("native inventory reservations", () => {
       await expect(create.execute(input(id))).rejects.toThrow();
     }
     const id = await stock(1), request = input(id, 2);
-    await expect(create.execute(request)).rejects.toBeInstanceOf(InsufficientInventoryError);
+    // A legacy unquoted purchase still reaches inventory validation independently of the new one-box quote policy.
+    const oversized = PurchaseIntent.create({
+      id: purchaseIntentId(request.requestId), displayId: `BBI-TEST-${request.requestId}`,
+      item: { productId: catalogProductReference(request.productId), externalProductReference: commerceProductReference(request.productId),
+        productName: "試験", quantity: 2, unitPriceSnapshot: money(4000), subtotal: money(8000) },
+      recipient: { name: recipientName("試験"), deliveryDate: request.deliveryDate }, giftMessage: giftMessage("試験"), createdAt: now(),
+    });
+    oversized.transitionTo("READY_FOR_CHECKOUT");
+    await expect(repo.save(oversized)).rejects.toBeInstanceOf(InsufficientInventoryError);
     expect(await balance(id)).toEqual({ on_hand: 1, reserved: 0 });
     expect(await sql`SELECT id FROM bloombox.purchase_intents WHERE id = ${request.requestId}`).toHaveLength(0);
   });

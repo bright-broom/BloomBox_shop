@@ -1,5 +1,6 @@
+import { quotePurchaseShipping } from "./purchase-shipping";
 import { purchaseCustomer, type PurchaseCustomer } from "./purchase-customer";
-import type { Money } from "@/shared/domain/money";
+import { money, type Money } from "@/shared/domain/money";
 import {
   purchaseIntentExpiry,
   purchaseIntentPiiRetentionExpiry,
@@ -80,7 +81,12 @@ export class PurchaseIntent {
     private currentProviderApiVersion?: string,
     private currentCheckoutCreatedAt?: Date,
     readonly customer: PurchaseCustomer | null = null,
+    readonly shippingAmount: Money | null = null,
   ) {
+    if (shippingAmount !== null) {
+      quotePurchaseShipping(shippingAmount.amount, item.quantity);
+      money(item.subtotal.amount + shippingAmount.amount);
+    }
     this.currentStatus = status;
   }
 
@@ -92,6 +98,7 @@ export class PurchaseIntent {
     giftMessage: GiftMessage;
     createdAt: Date;
     customer?: PurchaseCustomer | null;
+    shippingAmount?: Money | null;
   }): PurchaseIntent {
     return new PurchaseIntent(
       input.id,
@@ -104,6 +111,7 @@ export class PurchaseIntent {
       purchaseIntentPiiRetentionExpiry(input.createdAt),
       "DRAFT",
       undefined, undefined, undefined, undefined, purchaseCustomer(input.customer ?? null),
+      input.shippingAmount ?? null,
     );
   }
 
@@ -115,6 +123,7 @@ export class PurchaseIntent {
     giftMessage: GiftMessage;
     createdAt: Date;
     customer?: PurchaseCustomer | null;
+    shippingAmount?: Money | null;
     expiresAt: Date;
     piiRetentionExpiresAt: Date;
     status: PurchaseIntentStatus;
@@ -138,6 +147,7 @@ export class PurchaseIntent {
       input.providerApiVersion,
       input.checkoutCreatedAt,
       purchaseCustomer(input.customer ?? null),
+      input.shippingAmount ?? null,
     );
   }
 

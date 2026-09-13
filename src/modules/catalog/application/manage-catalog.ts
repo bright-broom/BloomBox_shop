@@ -2,6 +2,7 @@ export const MAX_PUBLISHED_CATALOG_PRODUCTS = 1000;
 export const CATALOG_MANAGEMENT_PAGE_SIZE = 30;
 export type CatalogFields = Readonly<{
   slug: string; name: string; subtitle: string; description: string; price: number;
+  shippingAmount?: number | null;
   imageUrl: string; imageAlt: string; palette: string; occasions: readonly string[]; flowers: readonly string[]; grower: string;
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED"; available: boolean;
 }>;

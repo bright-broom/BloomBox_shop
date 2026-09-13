@@ -38,6 +38,7 @@ export async function changeManagedCatalog(form: FormData, origin: string | null
   if (operation !== "catalog" || !["true", "false"].includes(String(values.available))) throw new CatalogManagementError("INVALID");
   const lines = (v: FormDataEntryValue | undefined) => typeof v === "string" ? v.split("\n").map((s) => s.trim()).filter(Boolean) : [];
   const parsed = catalogSaveSchema.safeParse({ ...values, expectedVersion: integer(values.expectedVersion), price: integer(values.price),
+    shippingAmount: values.shippingAmount === undefined || values.shippingAmount === "" ? null : integer(values.shippingAmount),
     available: values.available === "true", occasions: lines(values.occasions), flowers: lines(values.flowers) });
   if (!parsed.success) throw new CatalogManagementError("INVALID");
   return withCatalogManager(sql, actor, (tx) => new PostgresCatalogManager(tx).save(parsed.data, actor));

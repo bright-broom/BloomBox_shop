@@ -5,6 +5,7 @@ export {
   RECIPIENT_NAME_MAX_LENGTH,
 } from "./domain/purchase-intent-policy";
 export { previewTotals, LAUNCH_PREVIEW_QUANTITY } from "./domain/preview-pricing";
+export { SHIPPING_QUOTE_MAX_QUANTITY, quotePurchaseShipping } from "./domain/purchase-shipping";
 
 export {
   type ShopifyOrderLinker, type ShopifyOrderLinkInput, type ShopifyOrderLink,

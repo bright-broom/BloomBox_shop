@@ -45,6 +45,7 @@ export function loadCatalog(input: unknown = catalog): readonly Product[] {
     subtitle: item.subtitle,
     description: item.description,
     price: money(item.priceAmount),
+    shippingAmount: item.previewOffer?.shippingAmount,
     imageUrl: item.imageUrl,
     imageAlt: item.imageAlt,
     palette: item.palette,

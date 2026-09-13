@@ -50,7 +50,7 @@ describe.each(["property", "getItem"] as const)("denied storage %s", (mode) => {
 
   it.each([
     ["gift", <GiftForm key="GiftForm" productId="test" productName="Test" unitPrice={money(4000)} minDeliveryDate="2026-09-15" maxDeliveryDate="2026-11-11" />],
-    ["cart", <CartPage key="CartPage" added={false} checkoutCancelled={false} previewMode previewPrices={[]} />],
+    ["cart", <CartPage key="CartPage" added={false} checkoutCancelled={false} previewMode catalogPrices={[]} />],
     ["buyer", <PreviewBuyerForm key="PreviewBuyerForm" enabled />],
     ["review", <PreviewOrderReview key="PreviewOrderReview" enabled />],
     ["payment", <PreviewPayment key="PreviewPayment" enabled />],
