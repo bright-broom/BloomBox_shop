@@ -10,7 +10,7 @@ const catalogItemSchema = z.object({
   subtitle: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(500),
   priceAmount: z.number().int().nonnegative(),
-  imageUrl: z.url(),
+  imageUrl: z.union([z.url(), z.string().regex(/^\/images\/products\/[a-z0-9-]+\.(?:png|webp|jpg)$/)]),
   imageAlt: z.string().trim().min(1).max(160),
   palette: z.string().trim().min(1).max(100),
   occasion: z.array(z.string().trim().min(1)).min(1),

@@ -40,7 +40,7 @@ Version 2.2 · 2026-09-13 · 対象：公開サイト、商品一覧・詳細、
 | フォントの取得・適用 | [`layout.tsx`](../../src/app/layout.tsx) | 本文／表示用CSS変数 |
 | ブランド、ホームの文章・写真、プレビュー表記 | [`content/site.json`](../../content/site.json) | レイアウト、ホーム、メタデータ |
 | 上記の入力制約 | [`site-content.ts`](../../src/shared/infrastructure/content/site-content.ts) | ビルド・実行時に検証 |
-| 商品の写真・紹介文（プレビュー用） | [`content/catalog.json`](../../content/catalog.json) | 一覧、詳細、関連商品 |
+| 商品の画像・紹介文（プレビュー用） | [`content/catalog.json`](../../content/catalog.json) | 一覧、詳細、関連商品。M・Lの画像原本は `public/images/products/` |
 | 商品カード構造 | [`product-card.tsx`](../../src/ui/product-card.tsx) | ホーム、一覧、関連商品 |
 | モバイルの開閉操作 | [`mobile-navigation.tsx`](../../src/ui/mobile-navigation.tsx) | 全画面の共通ヘッダー |
 | 色の直書き・トークン欠落検出 | [`check-design-tokens.mjs`](../../scripts/check-design-tokens.mjs) | `pnpm check:design`、CI |
@@ -103,8 +103,8 @@ Version 2.2 · 2026-09-13 · 対象：公開サイト、商品一覧・詳細、
 | 読み物・購入者フォーム | 最大720px | 左右24px内 |
 | ヒーロー | 画面高−ヘッダー−告知、最低640px | 最低560px |
 | 商品グリッド | 3列、列間32px | 959px以下2列、519px以下1列 |
-| 商品画像 | 5:6、cover、角丸8px | 同じ比率 |
-| 詳細ページ | 写真54%／情報46% | 959px以下縦積み、写真4:3 |
+| 商品画像 | 通常は5:6・cover。M・Lのパッケージ案は1:1・contain、角丸8px | 同じ比率 |
+| 詳細ページ | 写真54%／情報46%。パッケージ案は1:1・contain | 959px以下縦積み。通常写真4:3、パッケージ案1:1 |
 | ギフト入力 | 商品約44%／フォーム約56% | 767px以下縦積み |
 | カート・確認・決済 | 本文＋最大390pxのサマリー | 959px以下縦積み |
 

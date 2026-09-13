@@ -21,7 +21,8 @@ export default async function GiftPage({ params }: GiftPageProps) {
   const { productId: rawProductId } = await params;
   const product = await application.getProduct.byId(productId(rawProductId));
   if (!product) notFound();
-  const sizeOptions = product.previewOffer ? (await application.listProducts.execute()).filter((candidate) => candidate.previewOffer?.family === product.previewOffer?.family).map((candidate) => ({ id: candidate.id, name: candidate.name, size: candidate.previewOffer!.size, price: candidate.price, shippingAmount: candidate.previewOffer!.shippingAmount })) : [];
+  const sizeProducts = product.previewOffer ? (await application.listProducts.execute()).filter((candidate) => candidate.previewOffer?.family === product.previewOffer?.family) : [];
+  const sizeOptions = sizeProducts.map((candidate) => ({ id: candidate.id, name: candidate.name, size: candidate.previewOffer!.size, price: candidate.price, shippingAmount: candidate.previewOffer!.shippingAmount }));
 
   return (
     <section className="gift-page section-shell">
@@ -34,7 +35,10 @@ export default async function GiftPage({ params }: GiftPageProps) {
       </header>
       <div className="gift-layout">
         <aside className="order-summary">
-          <div className="summary-image">
+          {sizeProducts.length ? <div className="summary-size-images">{sizeProducts.map((candidate) => <figure key={candidate.id}>
+            <div className="summary-image"><Image src={candidate.imageUrl} alt={candidate.imageAlt} fill sizes="(max-width: 767px) 45vw, 22vw" /></div>
+            <figcaption>{candidate.name}</figcaption>
+          </figure>)}</div> : <div className="summary-image">
             <Image
               src={product.imageUrl}
               alt={product.imageAlt}
@@ -42,7 +46,7 @@ export default async function GiftPage({ params }: GiftPageProps) {
               priority
               sizes="(max-width: 760px) 112px, 36vw"
             />
-          </div>
+          </div>}
           <div className="summary-copy">
             <div><p className="eyebrow">YOUR SELECTION</p><h2>{product.previewOffer ? "BLOOM BOX" : product.name}</h2></div>
             {!product.previewOffer ? <p>{formatMoney(product.price)}</p> : null}

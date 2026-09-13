@@ -53,13 +53,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
         {serializeStructuredData(jsonLd)}
       </script> : null}
       <div className="detail-page">
-        <div className="detail-image">
+        <div className={`detail-image${product.previewOffer ? " is-package" : ""}`}>
         <Image
           src={product.imageUrl}
           alt={product.imageAlt}
           fill
           priority
-          sizes="(max-width: 760px) 100vw, 54vw"
+          sizes="(max-width: 959px) 100vw, 54vw"
         />
         <Link className="back-link" href="/flowers">← 一覧へ</Link>
         </div>
