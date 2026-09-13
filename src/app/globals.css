@@ -47,6 +47,9 @@
   --space-7: 48px;
   --space-8: 64px;
   --space-section: 120px;
+  --ratio-golden: 1.618;
+  --package-note-space-before: var(--space-5);
+  --package-note-space-after: calc(var(--package-note-space-before) * var(--ratio-golden));
   --page-gutter: 48px;
   --page-max: 1440px;
   --reading-max: 720px;
@@ -369,6 +372,7 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
 .size-option { padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-card); }
 .size-option-image { position: relative; display: block; aspect-ratio: 1; overflow: hidden; border-radius: var(--radius-media); }
 .size-option-image img { object-fit: contain; }
+.size-option > .field-note, .detail-copy > .field-note { margin-block: var(--package-note-space-before) var(--package-note-space-after); }
 .size-option .primary-button { width: 100%; }
 .gift-next-page { max-width: 960px; padding-block: var(--space-section); }
 .gift-next-page h1 { font-size: var(--text-section); }
