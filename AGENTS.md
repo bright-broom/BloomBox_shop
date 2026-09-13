@@ -19,6 +19,7 @@ This is the mandatory, token-efficient policy for the whole repository. An appro
 - Prefer the smallest explicit, testable, recoverable solution. Do not add speculative infrastructure.
 - Use deterministic checks for facts they can prove; do not duplicate lint, test, or scanner work with long narrative reviews.
 - Read guidance progressively. Search headings first and load only the sections needed for the changed surface.
+- Write PR titles, descriptions, and review comments in Japanese. Preserve machine-required template headings and identifiers.
 - Do not push directly to `main`. Use a focused PR with risk, verification, and rollback evidence.
 
 ## 2. Product and architecture invariants

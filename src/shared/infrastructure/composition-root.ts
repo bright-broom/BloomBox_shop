@@ -1,20 +1,17 @@
 import { ReadShopifyReference } from "@/modules/payment/application/read-shopify-reference";
 import { ShopifyAdminOrderReader } from "@/modules/payment/infrastructure/shopify/shopify-admin-order-reader";
 import { loadShopifyAdminConfig } from "./config/shopify-admin-config";
-import { isIP } from "node:net";
 import { loadShopifyWebhookConfig } from "./config/shopify-webhook-config";
 import {
   ShopifyWebhookVerifier,
   type ShopifyWebhookHeaders,
 } from "@/modules/payment/infrastructure/shopify-webhook-verifier";
-import { headers } from "next/headers";
 import { GetProduct } from "@/modules/catalog/application/get-product";
 import { ListProducts } from "@/modules/catalog/application/list-products";
 import { SearchProducts } from "@/modules/catalog/application/search-products";
 import { InMemoryProductRepository } from "@/modules/catalog/infrastructure/in-memory-product-repository";
 import type { ProductRepository } from "@/modules/catalog/public";
-import { ShopifyProductRepository } from "@/modules/catalog/infrastructure/shopify-product-repository";
-import { ShopifyStorefrontFetchClient } from "@/modules/catalog/infrastructure/shopify-storefront-client";
+import { PostgresProductRepository } from "@/modules/catalog/infrastructure/postgres-product-repository";
 import { CreatePurchaseIntent } from "@/modules/checkout/application/create-purchase-intent";
 import { PreparePurchase } from "@/modules/checkout/application/prepare-purchase";
 import { StartCheckout } from "@/modules/checkout/application/start-checkout";
@@ -29,7 +26,6 @@ import { loadDataProtectionConfig } from "./config/data-protection-config";
 import { loadCheckoutIntakeEnabled, loadCheckoutProviderMode } from "./config/checkout-provider-config";
 import { loadRuntimeMode } from "./config/runtime-config";
 import { loadStripeConfig } from "./config/stripe-config";
-import { loadShopifyStorefrontConfig } from "./config/shopify-storefront-config";
 import {
   getApplicationDatabaseClient,
   getWorkerDatabaseClient,
@@ -53,7 +49,7 @@ const createPurchaseIntent = new CreatePurchaseIntent(
   productRepository,
   purchaseIntentRepository,
   undefined,
-  loadCheckoutIntakeEnabled,
+  acceptsNewCheckout,
 );
 const startCheckout = createStartCheckout(purchaseIntentRepository);
 
@@ -77,27 +73,14 @@ function createOrderStatusQuery(): OrderStatusQuery {
 function createProductRepository(): ProductRepository {
   if (loadRuntimeMode() === "preview") return new InMemoryProductRepository();
 
-  const config = loadShopifyStorefrontConfig();
-  return new ShopifyProductRepository(
-    new ShopifyStorefrontFetchClient(
-      config,
-      { buyerIp: getRequestBuyerIp },
-    ),
-    config.catalogTag,
-  );
+  return new PostgresProductRepository(getApplicationDatabaseClient());
 }
 
-async function getRequestBuyerIp(): Promise<string | undefined> {
-  try {
-    const requestHeaders = await headers();
-    const candidates = [
-      requestHeaders.get("x-forwarded-for")?.split(",")[0].trim(),
-      requestHeaders.get("x-real-ip")?.trim(),
-    ];
-    return candidates.find((candidate) => candidate && isIP(candidate));
-  } catch {
-    return undefined;
-  }
+function acceptsNewCheckout(): boolean {
+  const enabled = loadCheckoutIntakeEnabled();
+  // ADR 0009: native inventory reservation and buyer binding are still incomplete.
+  // Settlement/reconciliation must remain available for existing transactions.
+  return loadRuntimeMode() === "preview" && enabled;
 }
 
 function createPurchaseIntentRepository(): PurchaseIntentRepository {
@@ -120,7 +103,7 @@ function createStartCheckout(intents: PurchaseIntentRepository): StartCheckout |
     new StripeSdkCheckoutApi(config),
     config.apiVersion,
   );
-  return new StartCheckout(intents, provider, undefined, loadCheckoutIntakeEnabled);
+  return new StartCheckout(intents, provider, undefined, acceptsNewCheckout);
 }
 
 let stripeWebhookReceiver: ReceiveProviderWebhook | undefined;

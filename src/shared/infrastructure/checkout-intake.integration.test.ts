@@ -16,13 +16,13 @@ afterEach(() => {
 });
 
 describe("production composition during a checkout pause", () => {
-  it.each(["false", "invalid"])("keeps settlement services available with intake=%s", async (intake) => {
+  it.each(["true", "false", "invalid"])("keeps settlement services available with intake=%s", async (intake) => {
     const environment = {
       BLOOMBOX_RUNTIME_MODE: "production",
       BLOOMBOX_CHECKOUT_PROVIDER: "stripe",
       BLOOMBOX_CHECKOUT_INTAKE_ENABLED: intake,
-      SHOPIFY_STORE_DOMAIN: "example.myshopify.com",
-      SHOPIFY_STOREFRONT_ACCESS_TOKEN: "storefront-token-example",
+      SHOPIFY_STORE_DOMAIN: "",
+      SHOPIFY_STOREFRONT_ACCESS_TOKEN: "",
       BLOOMBOX_PII_KEYRING: JSON.stringify({ activeKeyId: "test", keys: { test: Buffer.alloc(32, 1).toString("base64") } }),
       STRIPE_MODE: "test",
       STRIPE_CHECKOUT_SECRET_KEY: "rk_test_checkout_example",
@@ -47,13 +47,17 @@ describe("production composition during a checkout pause", () => {
       recipientName: "花子",
       deliveryDate: "2026-08-28",
       giftMessage: "おめでとう",
-    })).rejects.toBeInstanceOf(intake === "false" ? CheckoutPausedError : InvalidCheckoutProviderConfigurationError);
+    })).rejects.toBeInstanceOf(intake === "invalid" ? InvalidCheckoutProviderConfigurationError : CheckoutPausedError);
 
     expect(composition.getStripeWebhookReceiver().execute).toBeTypeOf("function");
     expect(composition.getStripeInboxProcessor().execute).toBeTypeOf("function");
     expect(composition.getStripeEventReconciler().execute).toBeTypeOf("function");
     expect(composition.getCommerceDataRetentionJob().execute).toBeTypeOf("function");
     expect(query).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+    await expect(composition.application.getProduct.bySlug("native-test"))
+      .rejects.toThrow("Native catalog unavailable");
+    expect(query).toHaveBeenCalledOnce();
     expect(fetch).not.toHaveBeenCalled();
   });
 });

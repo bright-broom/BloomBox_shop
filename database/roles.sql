@@ -137,3 +137,6 @@ GRANT INSERT ON bloombox.fulfillment_permission_revocations, bloombox.audit_logs
 GRANT EXECUTE ON FUNCTION bloombox.disable_fulfillment_permission(uuid, bigint) TO bloombox_permission_manager;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA bloombox TO bloombox_readonly;
+
+-- Storefronts and settlement workers cannot change catalog publication or prices.
+GRANT SELECT ON bloombox.catalog_products TO bloombox_application, bloombox_worker;

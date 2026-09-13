@@ -17,7 +17,7 @@ export type Product = Readonly<{
   flowers: readonly string[];
   grower: string;
   available: boolean;
-  /** Launch-preview SKU metadata. Never populated by the production Shopify adapter. */
+  /** Launch-preview SKU metadata. Never populated by production catalog adapters. */
   previewOffer?: Readonly<{ family: string; size: "M" | "L"; shippingAmount: number }>;
 }>;
 
