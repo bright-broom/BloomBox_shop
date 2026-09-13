@@ -1,3 +1,4 @@
+import type { StockAvailabilityReader } from "@/modules/inventory/public";
 import { z } from "zod";
 import { money } from "@/shared/domain/money";
 import type { DatabaseClient } from "@/shared/infrastructure/database/postgres-client";
@@ -36,7 +37,7 @@ export class NativeCatalogUnavailableError extends Error {
 
 /** Read-only catalog adapter. No preview fallback, external calls or stock writes. */
 export class PostgresProductRepository implements ProductRepository {
-  constructor(private readonly sql: DatabaseClient) {}
+  constructor(private readonly sql: DatabaseClient, private readonly stock: StockAvailabilityReader) {}
 
   async findAvailable(): Promise<readonly Product[]> {
     return this.read(async () => {
@@ -46,7 +47,8 @@ export class PostgresProductRepository implements ProductRepository {
         ORDER BY slug, id LIMIT ${NATIVE_CATALOG_MAX_PRODUCTS + 1}
       `;
       if (rows.length > NATIVE_CATALOG_MAX_PRODUCTS) throw new NativeCatalogUnavailableError();
-      return rows.map(mapProduct);
+      const products = await this.withStock(rows.map(mapProduct));
+      return products.filter((product) => product.available);
     });
   }
 
@@ -58,7 +60,7 @@ export class PostgresProductRepository implements ProductRepository {
         SELECT *, price_minor::text AS price_minor FROM bloombox.catalog_products
         WHERE id = ${match[1]}::uuid AND status = 'PUBLISHED'
       `;
-      return rows.length ? mapProduct(rows[0]) : null;
+      return rows.length ? (await this.withStock([mapProduct(rows[0])]))[0] : null;
     });
   }
 
@@ -69,8 +71,13 @@ export class PostgresProductRepository implements ProductRepository {
         SELECT *, price_minor::text AS price_minor FROM bloombox.catalog_products
         WHERE slug = ${slug} AND status = 'PUBLISHED'
       `;
-      return rows.length ? mapProduct(rows[0]) : null;
+      return rows.length ? (await this.withStock([mapProduct(rows[0])]))[0] : null;
     });
+  }
+
+  private async withStock(products: readonly Product[]): Promise<readonly Product[]> {
+    const available = await this.stock.availableProductIds(products.map((product) => product.id));
+    return products.map((product) => ({ ...product, available: product.available && available.has(product.id) }));
   }
 
   private async read<T>(query: () => Promise<T>): Promise<T> {

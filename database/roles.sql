@@ -143,3 +143,11 @@ GRANT SELECT ON bloombox.catalog_products TO bloombox_application, bloombox_work
 
 -- The order ownership constraint reads only the buyer key and its customer reference.
 GRANT SELECT (id, customer_id) ON bloombox.buyers TO bloombox_worker;
+
+GRANT SELECT ON bloombox.inventory_stock, bloombox.inventory_reservations, bloombox.inventory_movements
+  TO bloombox_application, bloombox_worker;
+GRANT UPDATE (reserved, version) ON bloombox.inventory_stock TO bloombox_application;
+GRANT UPDATE (on_hand, reserved, version) ON bloombox.inventory_stock TO bloombox_worker;
+GRANT INSERT ON bloombox.inventory_reservations TO bloombox_application;
+GRANT UPDATE (status, updated_at) ON bloombox.inventory_reservations TO bloombox_application, bloombox_worker;
+GRANT INSERT ON bloombox.inventory_movements TO bloombox_application, bloombox_worker;
