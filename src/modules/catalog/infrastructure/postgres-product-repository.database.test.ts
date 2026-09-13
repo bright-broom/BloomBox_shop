@@ -11,6 +11,8 @@ import { PostgresProductRepository, NativeCatalogUnavailableError, NATIVE_CATALO
 import { CreatePurchaseIntent } from "@/modules/checkout/application/create-purchase-intent";
 import { PostgresPurchaseIntentRepository } from "@/modules/checkout/infrastructure/postgres-purchase-intent-repository";
 import { AesGcmDataProtector } from "@/shared/infrastructure/security/aes-gcm-data-protector";
+import { StripeCommerceEventProcessor, InvalidStripeCommerceEventError } from "@/modules/payment/infrastructure/stripe-commerce-event-processor";
+import { PostgresCheckoutBuyerWriter } from "@/modules/customer/infrastructure/postgres-checkout-buyer-writer";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 function safeDatabase() {
@@ -38,14 +40,14 @@ describeDatabase("native PostgreSQL catalog", () => {
   beforeEach(async () => { await sql`TRUNCATE bloombox.catalog_changes, bloombox.inventory_adjustments, bloombox.inventory_movements, bloombox.inventory_reservations, bloombox.inventory_stock, bloombox.catalog_products`; });
   afterAll(async () => { await sql.end({ timeout: 5 }); });
 
-  async function insert(options: { slug?: string; status?: string; available?: boolean; price?: number } = {}) {
+  async function insert(options: { slug?: string; status?: string; available?: boolean; price?: number; shipping?: number | null } = {}) {
     const id = randomUUID();
     await sql`INSERT INTO bloombox.catalog_products (
-      id, slug, status, available, name, subtitle, description, price_minor, image_url, image_alt,
+      id, slug, status, available, name, subtitle, description, price_minor, shipping_minor, image_url, image_alt,
       palette, occasions, flowers, grower
     ) VALUES (
       ${id}, ${options.slug ?? 'test-' + id}, ${options.status ?? 'PUBLISHED'}, ${options.available ?? true},
-      '試験商品', '試験用サブタイトル', 'テスト専用の商品説明', ${options.price ?? 4000},
+      '試験商品', '試験用サブタイトル', 'テスト専用の商品説明', ${options.price ?? 4000}, ${options.shipping === undefined ? 1000 : options.shipping},
       'https://images.unsplash.com/test-only', '試験画像', '白', ARRAY['お祝い'], ARRAY['試験用の花'], '試験用生産者'
     )`;
     await sql`INSERT INTO bloombox.inventory_stock (product_id, on_hand) VALUES (${id}, 100)`;
@@ -102,7 +104,7 @@ describeDatabase("native PostgreSQL catalog", () => {
     for (const price of ["-1", "9007199254740992"]) {
       await expect(sql`UPDATE bloombox.catalog_products SET price_minor = ${price}::bigint WHERE id = ${item.id}`).rejects.toThrow();
     }
-    await sql`UPDATE bloombox.catalog_products SET price_minor = 9007199254740991, status = 'PUBLISHED' WHERE id = ${item.id}`;
+    await sql`UPDATE bloombox.catalog_products SET price_minor = 9007199254740991, shipping_minor = 0, status = 'PUBLISHED' WHERE id = ${item.id}`;
     expect((await repository.findById(item.publicId))?.price.amount).toBe(Number.MAX_SAFE_INTEGER);
   });
 
@@ -123,9 +125,9 @@ describeDatabase("native PostgreSQL catalog", () => {
     await expect(repository.findById(item.publicId)).rejects.toThrow(NativeCatalogUnavailableError);
     await sql`UPDATE bloombox.catalog_products SET flowers = ARRAY['試験用の花'] WHERE id = ${item.id}`;
     await sql`INSERT INTO bloombox.catalog_products (
-      id, slug, status, available, name, subtitle, description, currency, price_minor, image_url, image_alt, palette, occasions, flowers, grower
+      id, slug, status, available, name, subtitle, description, currency, price_minor, shipping_minor, image_url, image_alt, palette, occasions, flowers, grower
     ) SELECT md5('test-native-product-' || i::text)::uuid, 'test-' || i, status, available, name, subtitle, description,
-      currency, price_minor, image_url, image_alt, palette, occasions, flowers, grower
+      currency, price_minor, shipping_minor, image_url, image_alt, palette, occasions, flowers, grower
       FROM bloombox.catalog_products CROSS JOIN generate_series(1, ${NATIVE_CATALOG_MAX_PRODUCTS}) i WHERE id = ${item.id}`;
     await expect(repository.findAvailable()).rejects.toThrow(NativeCatalogUnavailableError);
   });
@@ -136,16 +138,76 @@ describeDatabase("native PostgreSQL catalog", () => {
     const intents = new PostgresPurchaseIntentRepository(sql, protector, undefined, (tx) => new PostgresInventoryReservations(tx));
     // Isolated application test only. The production composition blocks new intake until reservations exist.
     const create = new CreatePurchaseIntent(repository, intents, () => new Date("2026-09-13T00:00:00Z"));
-    const input = { requestId: randomUUID(), productId: item.publicId, quantity: 2, recipientName: "試験用受取人", deliveryDate: "2026-09-20", giftMessage: "試験" };
+    const input = { requestId: randomUUID(), productId: item.publicId, quantity: 1, recipientName: "試験用受取人", deliveryDate: "2026-09-20", giftMessage: "試験" };
     const first = await create.execute(input);
-    await sql`UPDATE bloombox.catalog_products SET price_minor = 5000, version = version + 1 WHERE id = ${item.id}`;
+    await sql`UPDATE bloombox.catalog_products SET price_minor = 5000, shipping_minor = 0, version = version + 1 WHERE id = ${item.id}`;
     const repeated = await create.execute(input);
     const fresh = await create.execute({ ...input, requestId: randomUUID() });
-    expect(first.item.subtotal.amount).toBe(8000);
-    expect(repeated.item.subtotal.amount).toBe(8000);
-    expect(fresh.item.subtotal.amount).toBe(10000);
+    expect(first.item.subtotal.amount).toBe(4000);
+    expect(repeated.item.subtotal.amount).toBe(4000);
+    expect(fresh.item.subtotal.amount).toBe(5000);
+    expect(first.shippingAmount?.amount).toBe(1000);
+    expect(repeated.shippingAmount?.amount).toBe(1000);
+    expect(fresh.shippingAmount?.amount).toBe(0);
     await sql`UPDATE bloombox.catalog_products SET available = false WHERE id = ${item.id}`;
     await expect(create.execute({ ...input, requestId: randomUUID() })).rejects.toThrow("現在ご注文いただけません");
+  });
+
+  it("keeps unconfigured shipping distinct from free shipping and refuses unpriced quantities without reserving stock", async () => {
+    const item = await insert({ shipping: null });
+    const protector = new AesGcmDataProtector({ activeKeyId: "test", keys: new Map([["test", Buffer.alloc(32, 7)]]) });
+    const intents = new PostgresPurchaseIntentRepository(sql, protector, undefined, (tx) => new PostgresInventoryReservations(tx));
+    const create = new CreatePurchaseIntent(repository, intents, () => new Date("2026-09-13T00:00:00Z"));
+    const input = { requestId: randomUUID(), productId: item.publicId, quantity: 1, recipientName: "試験", deliveryDate: "2026-09-20", giftMessage: "試験" };
+    expect((await repository.findById(item.publicId))?.shippingAmount).toBeUndefined();
+    await expect(create.execute(input)).rejects.toThrow("送料を確認できない");
+    await sql`UPDATE bloombox.catalog_products SET shipping_minor = 0 WHERE id = ${item.id}`;
+    await expect(create.execute({ ...input, quantity: 2 })).rejects.toThrow("1箱まで");
+    expect(await sql`SELECT id FROM bloombox.purchase_intents WHERE id = ${input.requestId}`).toHaveLength(0);
+    expect((await sql`SELECT reserved FROM bloombox.inventory_stock WHERE product_id = ${item.id}`)[0].reserved).toBe(0);
+    expect((await create.execute(input)).shippingAmount?.amount).toBe(0);
+  });
+
+  it.each([{ price: 4000, shipping: 1000 }, { price: 8000, shipping: 0 }])("preserves the quote through edits, rejects mismatched events atomically and converts matching payment once: %j", async ({ price, shipping }) => {
+    const item = await insert({ price, shipping });
+    const protector = new AesGcmDataProtector({ activeKeyId: "test", keys: new Map([["test", Buffer.alloc(32, 7)]]) });
+    const intents = new PostgresPurchaseIntentRepository(sql, protector, undefined, (tx) => new PostgresInventoryReservations(tx));
+    const create = new CreatePurchaseIntent(repository, intents, () => new Date("2026-09-13T00:00:00Z"));
+    const input = { requestId: randomUUID(), productId: item.publicId, quantity: 1, recipientName: "試験", deliveryDate: "2026-09-20", giftMessage: "試験" };
+    const intent = await create.execute(input);
+    await expect(sql`UPDATE bloombox.purchase_intents SET shipping_minor = ${shipping + 100} WHERE id = ${intent.id}`).rejects.toThrow("immutable");
+    await expect(sql`UPDATE bloombox.purchase_intents SET shipping_minor = NULL WHERE id = ${intent.id}`).rejects.toThrow("immutable");
+    await sql`UPDATE bloombox.catalog_products SET shipping_minor = ${shipping + 100} WHERE id = ${item.id}`;
+    const restored = await create.execute(input);
+    expect(restored.shippingAmount?.amount).toBe(shipping);
+    const checkoutId = `cs_test_${intent.id}`;
+    restored.recordCheckoutCreated({ provider: "STRIPE", externalCheckoutId: checkoutId, providerApiVersion: "2026-07-29.dahlia", occurredAt: new Date("2026-09-13T00:01:00Z") });
+    await intents.saveCheckoutCreated(restored);
+    const processor = new StripeCommerceEventProcessor(sql, protector, "inclusive", (tx) => new PostgresCheckoutBuyerWriter(tx), randomUUID, (tx) => new PostgresInventoryReservations(tx));
+    const event = {
+      provider: "STRIPE" as const, providerAccountId: "acct_example", externalEventId: `evt_${intent.id}`,
+      eventType: "checkout.session.completed", externalObjectId: checkoutId, apiVersion: "2026-07-29.dahlia", occurredAt: new Date("2026-09-13T00:02:00Z"),
+      payload: { objectType: "checkout_session", id: checkoutId, purchaseIntentId: intent.id, paymentIntentId: `pi_${intent.id}`,
+        paymentStatus: "paid", checkoutStatus: "complete", amountTotal: price + shipping, amountSubtotal: price, currency: "jpy",
+        totalDetails: { amount_discount: 0, amount_shipping: shipping, amount_tax: 0 },
+        customerId: `cus_${intent.id}`, customerDetails: { email: "shipping-test@example.test" },
+        collectedInformation: { shipping_details: { name: "試験", address: { country: "JP" } } },
+      },
+    };
+    for (const change of [
+      { amountTotal: price + shipping + 100, totalDetails: { ...event.payload.totalDetails, amount_shipping: shipping + 100 } },
+      { totalDetails: { ...event.payload.totalDetails, amount_shipping: null } },
+      { amountTotal: price + shipping - 100, totalDetails: { ...event.payload.totalDetails, amount_discount: 100 } },
+    ]) {
+      await expect(processor.process({ ...event, payload: { ...event.payload, ...change } })).rejects.toBeInstanceOf(InvalidStripeCommerceEventError);
+      expect(await sql`SELECT id FROM bloombox.orders WHERE purchase_intent_id = ${intent.id}`).toHaveLength(0);
+      expect((await sql`SELECT on_hand, reserved FROM bloombox.inventory_stock WHERE product_id = ${item.id}`)[0]).toMatchObject({ on_hand: 100, reserved: 1 });
+    }
+    await processor.process(event);
+    await processor.process(event);
+    const orders = await sql`SELECT shipping_minor::text, total_minor::text FROM bloombox.orders WHERE purchase_intent_id = ${intent.id}`;
+    expect(orders).toEqual([{ shipping_minor: String(shipping), total_minor: String(price + shipping) }]);
+    expect((await sql`SELECT on_hand, reserved FROM bloombox.inventory_stock WHERE product_id = ${item.id}`)[0]).toMatchObject({ on_hand: 99, reserved: 0 });
   });
 
   it("permits role-scoped reads but prevents storefront and worker price/publication writes; read failures recover explicitly", async () => {

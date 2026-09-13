@@ -1,9 +1,11 @@
 import content from "../../../../content/gift-experience.json";
 import { z } from "zod";
+import { GIFT_MESSAGE_MAX_LENGTH } from "@/modules/checkout/public";
 
 const copy = z.string().trim().min(1).max(500);
 export const giftExperienceSchema = z.object({
-  cart: z.object({ removeError: copy }),
+  giftForm: z.object({ defaultMessage: z.string().trim().min(1).max(GIFT_MESSAGE_MAX_LENGTH), messageHint: copy }),
+  cart: z.object({ removeError: copy, shippingUnavailable: copy }),
   storageUnavailable: z.object({ title: copy, message: copy, retry: copy, browse: copy }),
   metrics: z.object({ title: copy, notice: copy, start: copy, stop: copy, refresh: copy, error: copy, referral: copy, labels: z.object({ product_view: copy, size_select: copy, gift_start: copy, begin_checkout: copy, preview_purchase: copy, recipient_page_view: copy }) }),
   loading: z.object({ title: copy, note: copy, tipLabel: copy, tips: z.array(copy).min(1).max(5), payment: copy, cart: copy }),

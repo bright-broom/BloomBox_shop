@@ -22,6 +22,10 @@ export function CatalogManagementForm({ product, id, requestId, action }: {produ
               step={field === "price" ? 1 : undefined} maxLength={limits[field]} defaultValue={value}/>}
         </div>; })}
       <p className="form-hint">{copy.imageHint} {copy.listHint}</p>
+      <div className="form-field"><label htmlFor={`${prefix}-shipping`}>{copy.shippingLabel}</label>
+        <input id={`${prefix}-shipping`} name="shippingAmount" type="number" min={0} step={1} defaultValue={product?.shippingAmount ?? ""} aria-describedby={`${prefix}-shipping-hint`} />
+        <p className="field-note" id={`${prefix}-shipping-hint`}>{copy.shippingHint}</p>
+      </div>
       {product ? <><div className="form-field"><label htmlFor={`${prefix}-status`}>{copy.labels.status}</label><select id={`${prefix}-status`} name="status" defaultValue={product.status}>
         {(["DRAFT", "PUBLISHED", "ARCHIVED"] as const).map((s) => <option key={s} value={s}>{copy.statuses[s]}</option>)}</select></div>
         <div className="form-field"><label htmlFor={`${prefix}-available`}>{copy.labels.available}</label><select id={`${prefix}-available`} name="available" defaultValue={String(product.available)}>

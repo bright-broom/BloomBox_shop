@@ -158,7 +158,7 @@ GRANT INSERT ON bloombox.inventory_movements TO bloombox_application, bloombox_w
 GRANT USAGE ON SCHEMA bloombox TO bloombox_catalog_manager;
 GRANT EXECUTE ON FUNCTION bloombox.lock_native_catalog_operator(uuid) TO bloombox_catalog_manager;
 GRANT SELECT, INSERT ON bloombox.catalog_products TO bloombox_catalog_manager;
-GRANT UPDATE (slug, status, available, name, subtitle, description, price_minor, image_url, image_alt, palette,
+GRANT UPDATE (slug, status, available, name, subtitle, description, price_minor, shipping_minor, image_url, image_alt, palette,
   occasions, flowers, grower, version, updated_at) ON bloombox.catalog_products TO bloombox_catalog_manager;
 GRANT SELECT ON bloombox.inventory_stock TO bloombox_catalog_manager;
 GRANT INSERT (product_id, on_hand) ON bloombox.inventory_stock TO bloombox_catalog_manager;

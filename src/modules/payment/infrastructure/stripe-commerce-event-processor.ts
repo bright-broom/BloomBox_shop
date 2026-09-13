@@ -62,6 +62,7 @@ const purchaseIntentRowSchema = z.object({
   external_checkout_id: z.string().nullable(),
   currency: z.literal("JPY"),
   subtotal_minor: integerValueSchema(),
+  shipping_minor: integerValueSchema().nullable().default(null),
   delivery_date: z.string(),
   pii_key_id: z.string().nullable(),
   recipient_ciphertext: z.instanceof(Buffer).nullable(),
@@ -169,6 +170,7 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
           intent.external_checkout_id,
           intent.currency,
           intent.subtotal_minor,
+          intent.shipping_minor,
           intent.delivery_date::text,
           intent.pii_key_id,
           intent.recipient_ciphertext,
@@ -215,6 +217,10 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
       const reportedTax = totalDetails.amount_tax;
       const tax = this.taxBehavior === "exclusive" ? reportedTax : 0;
       const includedTax = this.taxBehavior === "inclusive" ? reportedTax : 0;
+      if (intent.shipping_minor !== null && (
+        totalDetails.amount_shipping === null || shipping !== toSafeInteger(intent.shipping_minor) || discount !== 0
+        || this.taxBehavior !== "inclusive" || amountTotal !== itemSubtotal + shipping
+      )) throw new InvalidStripeCommerceEventError();
       if (this.taxBehavior === "unspecified" && reportedTax !== 0) {
         throw new InvalidStripeCommerceEventError();
       }

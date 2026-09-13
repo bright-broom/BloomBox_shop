@@ -16,7 +16,7 @@ type CartRouteProps = {
 
 export default async function CartRoute({ searchParams }: CartRouteProps) {
   const query = await searchParams;
-  const previewPrices = loadRuntimeMode() === "preview" ? (await application.listProducts.execute()).flatMap((product) => product.previewOffer ? [{ productId: product.id, unitAmount: product.price.amount, shippingAmount: product.previewOffer.shippingAmount }] : []) : [];
+  const catalogPrices = (await application.listProducts.execute()).flatMap((product) => product.shippingAmount !== undefined ? [{ productId: product.id, unitAmount: product.price.amount, shippingAmount: product.shippingAmount }] : []);
   return (
     <section className="checkout-page section-shell" data-checkout-page="cart">
       <CheckoutProgress currentStep={3} />
@@ -26,7 +26,7 @@ export default async function CartRoute({ searchParams }: CartRouteProps) {
         <p>お届け内容を確認して、購入手続きへお進みください。</p>
       </header>
       <CartPage
-        previewPrices={previewPrices}
+        catalogPrices={catalogPrices}
         added={query.added === "1"}
         checkoutCancelled={query.checkout === "cancelled"}
         previewMode={loadRuntimeMode() === "preview"}

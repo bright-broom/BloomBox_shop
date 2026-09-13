@@ -30,10 +30,27 @@ if (url && (!["127.0.0.1","localhost"].includes(new URL(url).hostname) || !new U
   const save=(p:CatalogSave,a=actor)=>withCatalogManager(manager,a,(tx)=>new PostgresCatalogManager(tx).save(p,a));
   const change=(p:StockChange,a=actor)=>withCatalogManager(manager,a,(tx)=>new PostgresStockManager(tx).change(p,a.operatorId));
   function draft():CatalogSave {const id=randomUUID(); return {id,requestId:randomUUID(),expectedVersion:0,slug:"test-"+id,status:"DRAFT",available:false,
-    name:"試験商品",subtitle:"紹介",description:"試験の説明",price:4000,imageUrl:"https://images.unsplash.com/test-only",imageAlt:"試験",palette:"白",occasions:["試験"],flowers:["花"],grower:"試験生産者"};}
+    name:"試験商品",subtitle:"紹介",description:"試験の説明",price:4000,shippingAmount:1000,imageUrl:"https://images.unsplash.com/test-only",imageAlt:"試験",palette:"白",occasions:["試験"],flowers:["花"],grower:"試験生産者"};}
   async function product(){const p=draft();await save(p);return p;}
   const adjustment=(id:string,delta=10,version=0):StockChange=>({productId:id,delta,expectedVersion:version,requestId:randomUUID(),reason:"RECEIVED"});
   async function balance(id:string){const [r]=await owner`SELECT on_hand,reserved,version::text AS version FROM bloombox.inventory_stock WHERE product_id=${id}`;return r;}
+  it("audits shipping edits with scoped credentials, preserves zero versus missing and rejects unsafe amounts", async () => {
+    const p = { ...draft(), shippingAmount: null };
+    await save(p);
+    for (const [index, shippingAmount] of [1000, 0].entries()) {
+      const update = { ...p, requestId: randomUUID(), expectedVersion: index + 1, shippingAmount };
+      await save(update); await save(update);
+      await expect(save({ ...update, shippingAmount: shippingAmount + 1 })).rejects.toMatchObject({ code: "CONFLICT" });
+    }
+    const changes = await owner`SELECT command, before_snapshot FROM bloombox.catalog_changes WHERE product_id = ${p.id} ORDER BY version`;
+    expect(changes.map((r) => r.command.shippingAmount)).toEqual([null, 1000, 0]);
+    expect(changes[2].before_snapshot.shipping_minor).toBe(1000);
+    const page = await withCatalogManager(manager, actor, (tx) => new PostgresCatalogManager(tx).list());
+    expect(page.products.find((product) => product.id === p.id)?.shippingAmount).toBe(0);
+    for (const shippingAmount of [-1, 0.5, Number.MAX_SAFE_INTEGER]) {
+      await expect(save({ ...p, requestId: randomUUID(), expectedVersion: 3, shippingAmount })).rejects.toMatchObject({ code: "INVALID" });
+    }
+  });
   it("creates a draft once under concurrent retries, rejects changed payload and stale edits, and retains before/after history",async()=>{
     const p=draft();await Promise.all([save(p),save(p),save(p)]);
     await expect(save({...p,name:"改変"})).rejects.toMatchObject({code:"CONFLICT"});

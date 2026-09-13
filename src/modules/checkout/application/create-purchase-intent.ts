@@ -6,6 +6,7 @@ import { multiplyMoney } from "@/shared/domain/money";
 import { BUSINESS_TIME_ZONE } from "@/shared/domain/time";
 import { CheckoutPausedError } from "./checkout-paused-error";
 import { assertPreviewQuantity } from "../domain/preview-pricing";
+import { quotePurchaseShipping, ShippingPriceUnavailableError } from "../domain/purchase-shipping";
 import {
   catalogProductReference,
   commerceProductReference,
@@ -67,6 +68,8 @@ export class CreatePurchaseIntent {
       throw new ProductUnavailableError();
     }
     assertPreviewQuantity(normalizedQuantity, Boolean(product.previewOffer));
+    const shippingAmount = product.shippingAmount ?? product.previewOffer?.shippingAmount;
+    if (product.id.startsWith("native_") && shippingAmount === undefined) throw new ShippingPriceUnavailableError();
 
     const createdAt = this.now();
     assertAvailableDeliveryDate(input.deliveryDate, createdAt);
@@ -88,6 +91,7 @@ export class CreatePurchaseIntent {
       giftMessage: normalizedGiftMessage,
       createdAt,
       customer,
+      shippingAmount: shippingAmount === undefined ? null : quotePurchaseShipping(shippingAmount, normalizedQuantity),
     });
 
     intent.transitionTo("READY_FOR_CHECKOUT");

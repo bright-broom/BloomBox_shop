@@ -27,9 +27,9 @@ function elements(node: ReactNode): Array<Record<string, unknown>> {
     return [{ ...child.props, elementType: child.type }, ...elements(child.props.children)];
   });
 }
-function render() {
+function render(catalogPrices: Parameters<typeof CartPage>[0]["catalogPrices"] = []) {
   harness.cursor = 0;
-  return CartPage({ added: false, checkoutCancelled: false, previewMode: true, previewPrices: [] });
+  return CartPage({ added: false, checkoutCancelled: false, previewMode: true, catalogPrices });
 }
 function removeButton(tree: ReactNode) {
   const button = elements(tree).find((item) => item.elementType === "button" && item.children === "カートから削除");
@@ -54,6 +54,23 @@ beforeEach(() => {
   storage.removeItem.mockClear();
 });
 afterEach(() => vi.unstubAllGlobals());
+
+it.each([
+  { shipping: undefined, quantity: 1, blocked: true },
+  { shipping: 0, quantity: 1, blocked: false },
+  { shipping: 1000, quantity: 2, blocked: true },
+])("keeps the cart recoverable when shipping is unavailable: %j", ({ shipping, quantity, blocked }) => {
+  const cart = readRecoverableCart(storage);
+  if (!cart) throw new Error("Missing fixture cart");
+  const productId = "native_12345678-abcd-4000-8000-123456789012";
+  storeCart(storage, { ...cart, productId, quantity });
+  const tree = render(shipping === undefined ? [] : [{ productId, unitAmount: 4000, shippingAmount: shipping }]);
+  const submit = elements(tree).find((item) => item.elementType === "button" && item.type === "submit");
+  expect(submit?.disabled).toBe(blocked);
+  expect(alerts(tree).length).toBe(blocked ? 1 : 0);
+  expect(elements(tree).some((item) => item.href === `/gift/${productId}`)).toBe(true);
+  expect(readRecoverableCart(storage)).toMatchObject({ recipientName: cart.recipientName, giftMessage: cart.giftMessage });
+});
 
 it.each(["SecurityError", "QuotaExceededError"])("shows retry feedback after %s and reaches the empty cart after retry", (name) => {
   storage.removeItem.mockImplementationOnce(() => { throw new DOMException("private detail", name); });
