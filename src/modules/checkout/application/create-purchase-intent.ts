@@ -1,3 +1,5 @@
+import { anonymousPurchaseCustomer, type CurrentPurchaseCustomer } from "./current-purchase-customer";
+import { purchaseCustomer, assertPurchaseCustomer, type PurchaseCustomer } from "../domain/purchase-customer";
 import { productId, type ProductRepository } from "@/modules/catalog/public";
 import { assertAvailableDeliveryDate } from "@/modules/fulfillment/public";
 import { multiplyMoney } from "@/shared/domain/money";
@@ -40,6 +42,7 @@ export class CreatePurchaseIntent {
     private readonly intents: PurchaseIntentRepository,
     private readonly now: () => Date = () => new Date(),
     private readonly acceptsNewCheckout: () => boolean = () => true,
+    private readonly currentCustomer: CurrentPurchaseCustomer = anonymousPurchaseCustomer,
   ) {}
 
   async execute(input: CreatePurchaseIntentInput): Promise<PurchaseIntent> {
@@ -48,6 +51,7 @@ export class CreatePurchaseIntent {
     const normalizedRecipientName = recipientName(input.recipientName);
     const normalizedGiftMessage = giftMessage(input.giftMessage);
     const normalizedQuantity = giftQuantity(input.quantity);
+    const customer = purchaseCustomer(await this.currentCustomer());
     const existing = await this.intents.findById(id);
     if (existing) return assertIdempotentMatch(
       existing,
@@ -55,6 +59,7 @@ export class CreatePurchaseIntent {
       normalizedRecipientName,
       normalizedGiftMessage,
       normalizedQuantity,
+      customer,
     );
 
     const product = await this.products.findById(productId(input.productId));
@@ -82,6 +87,7 @@ export class CreatePurchaseIntent {
       },
       giftMessage: normalizedGiftMessage,
       createdAt,
+      customer,
     });
 
     intent.transitionTo("READY_FOR_CHECKOUT");
@@ -97,6 +103,7 @@ export class CreatePurchaseIntent {
         normalizedRecipientName,
         normalizedGiftMessage,
         normalizedQuantity,
+        customer,
       );
     }
     return intent;
@@ -116,7 +123,9 @@ function assertIdempotentMatch(
   normalizedRecipientName: ReturnType<typeof recipientName>,
   normalizedGiftMessage: ReturnType<typeof giftMessage>,
   normalizedQuantity: number,
+  customer: PurchaseCustomer | null,
 ): PurchaseIntent {
+  assertPurchaseCustomer(existing.customer, customer);
   if (
     existing.item.productId !== input.productId
     || existing.item.quantity !== normalizedQuantity

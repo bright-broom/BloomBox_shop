@@ -1,3 +1,4 @@
+import { PostgresCheckoutBuyerWriter } from "@/modules/customer/infrastructure/postgres-checkout-buyer-writer";
 import { execFileSync } from "node:child_process";
 import { createHmac } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -70,7 +71,7 @@ describeDatabase("Shopify durable webhook capture", () => {
     const stripe = inbox("STRIPE", config.storeDomain);
     await expect(stripe.markProcessed(event, now, "worker")).rejects.toBeInstanceOf(WebhookInboxPersistenceError);
     await expect(stripe.markFailed(event, "TestError", now, "worker")).rejects.toBeInstanceOf(WebhookInboxPersistenceError);
-    await expect(new StripeCommerceEventProcessor(sql, protector, "inclusive").process(event)).rejects.toThrow();
+    await expect(new StripeCommerceEventProcessor(sql, protector, "inclusive", (tx) => new PostgresCheckoutBuyerWriter(tx)).process(event)).rejects.toThrow();
     expect((await sql`SELECT status FROM bloombox.webhook_inbox`)[0].status).toBe("PROCESSING");
   });
   it("recovers stale claims, rejects stale completion, and preserves references through retry", async () => {

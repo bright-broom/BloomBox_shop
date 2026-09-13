@@ -1,3 +1,4 @@
+import { purchaseCustomer, type PurchaseCustomer } from "./purchase-customer";
 import type { Money } from "@/shared/domain/money";
 import {
   purchaseIntentExpiry,
@@ -78,6 +79,7 @@ export class PurchaseIntent {
     private currentExternalCheckoutId?: string,
     private currentProviderApiVersion?: string,
     private currentCheckoutCreatedAt?: Date,
+    readonly customer: PurchaseCustomer | null = null,
   ) {
     this.currentStatus = status;
   }
@@ -89,6 +91,7 @@ export class PurchaseIntent {
     recipient: IntendedRecipient;
     giftMessage: GiftMessage;
     createdAt: Date;
+    customer?: PurchaseCustomer | null;
   }): PurchaseIntent {
     return new PurchaseIntent(
       input.id,
@@ -100,6 +103,7 @@ export class PurchaseIntent {
       purchaseIntentExpiry(input.createdAt),
       purchaseIntentPiiRetentionExpiry(input.createdAt),
       "DRAFT",
+      undefined, undefined, undefined, undefined, purchaseCustomer(input.customer ?? null),
     );
   }
 
@@ -110,6 +114,7 @@ export class PurchaseIntent {
     recipient: IntendedRecipient;
     giftMessage: GiftMessage;
     createdAt: Date;
+    customer?: PurchaseCustomer | null;
     expiresAt: Date;
     piiRetentionExpiresAt: Date;
     status: PurchaseIntentStatus;
@@ -132,6 +137,7 @@ export class PurchaseIntent {
       input.externalCheckoutId,
       input.providerApiVersion,
       input.checkoutCreatedAt,
+      purchaseCustomer(input.customer ?? null),
     );
   }
 

@@ -22,6 +22,8 @@ import { PURCHASE_INTENT_STATUSES } from "../domain/purchase-intent-status";
 const persistedIntentSchema = z.object({
   id: z.string().uuid(),
   display_id: z.string().min(1),
+  customer_id: z.uuid().nullable(),
+  customer_version: z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER).nullable(),
   status: z.enum(PURCHASE_INTENT_STATUSES),
   currency: z.literal("JPY"),
   subtotal_minor: z.union([z.string(), z.number(), z.bigint()]),
@@ -74,14 +76,19 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
 
     try {
       await this.sql.begin(async (transaction) => {
+        if (intent.customer) {
+          const account = await transaction`SELECT id FROM bloombox.customer_accounts
+            WHERE id = ${intent.customer.customerId} AND status = 'ACTIVE' AND version = ${intent.customer.version} FOR SHARE`;
+          if (account.length !== 1) throw new PurchaseIntentPersistenceError();
+        }
         await transaction`
           INSERT INTO bloombox.purchase_intents (
-            id, display_id, status, currency, subtotal_minor, delivery_date,
+            id, display_id, status, currency, subtotal_minor, delivery_date, customer_id, customer_version,
             pii_key_id, recipient_ciphertext, gift_message_ciphertext,
             version, created_at, updated_at, expires_at, pii_retention_expires_at
           ) VALUES (
             ${intent.id}, ${intent.displayId}, ${intent.status}, ${intent.item.subtotal.currency},
-            ${intent.item.subtotal.amount}, ${intent.recipient.deliveryDate}, ${recipient.keyId},
+            ${intent.item.subtotal.amount}, ${intent.recipient.deliveryDate}, ${intent.customer?.customerId ?? null}, ${intent.customer?.version ?? null}, ${recipient.keyId},
             ${recipient.ciphertext}, ${giftMessagePayload.ciphertext}, 1,
             ${intent.createdAt}, ${intent.createdAt}, ${intent.expiresAt},
             ${intent.piiRetentionExpiresAt}
@@ -121,6 +128,8 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
       SELECT
         intent.id,
         intent.display_id,
+        intent.customer_id,
+        intent.customer_version,
         intent.status,
         intent.currency,
         intent.subtotal_minor,
@@ -173,6 +182,8 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
       id: purchaseIntentId(row.data.id),
       displayId: row.data.display_id,
       status: row.data.status,
+      customer: row.data.customer_id && row.data.customer_version
+        ? { customerId: row.data.customer_id, version: row.data.customer_version } : null,
       item: {
         productId: catalogProductReference(row.data.catalog_product_id),
         externalProductReference: commerceProductReference(row.data.external_product_id),

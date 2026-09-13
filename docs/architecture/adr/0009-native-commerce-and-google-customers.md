@@ -18,6 +18,8 @@ Replace the unpublished Shopify customer-account route with direct Google OIDC a
 
 Read order summaries through Order's public query contract and a buyer-to-customer join. Browser parameters control pagination only. Never use recipient identity, email matches, preview receipts or Shopify account IDs as ownership. Existing unlinked orders stay unlinked. Preserve distinct order, payment and fulfillment statuses; mixed states remain unknown rather than invented as paid or shipped.
 
+Purchase customer binding is now implemented: Checkout snapshots the verified customer ID/version, Customer creates the buyer from that immutable reference in the existing payment acceptance transaction, and Order history filters by the buyer. Guest and historical purchases remain unlinked. See [binding operations](../../operations/PURCHASE_CUSTOMER_BINDING.md). This is not live checkout evidence.
+
 ## Security and recovery
 
 PKCE/S256, state, nonce, RS256 signature, issuer, audience, verified email and expiry checks remain mandatory. Scope is openid/email/profile only. Google access/refresh/ID tokens are not retained. Cookies are HttpOnly and host-only, Secure on HTTPS; HTTP is allowed only on localhost/127.0.0.1 outside production runtime. Sessions have an absolute 15-minute maximum, with database identity/status/version rechecked. Fixed callbacks and post-login destination, bounded provider requests, redacted errors, no-store responses and CSRF remain in place.
@@ -31,7 +33,7 @@ PKCE/S256, state, nonce, RS256 signature, issuer, audience, verified email and e
 5. Connect native fulfillment operations and test stock release, partial fulfillment and refund behavior; replace Shopify-specific operator workflows as each native equivalent is verified.
 6. Review tax/shipping, merchant identity, privacy/support, data retention, backups, restore and incident ownership before production activation. Update the release gate to require native catalog evidence when that adapter exists; do not remove the current failing gate merely to deploy.
 
-The production catalog reader now uses PostgreSQL (migration 0019); Shopify fulfillment adapters remain during migration. New production purchase intake is paused in code pending native inventory reservations and buyer binding. See [native catalog](../../operations/NATIVE_CATALOG.md) for implemented behavior and remaining work. They are not the chosen end state and are not proof of a completed migration. No Shopify data, merchant accounts, OAuth credentials or accepted orders are deleted by this change.
+The production catalog reader now uses PostgreSQL (migration 0019); Shopify fulfillment adapters remain during migration. New production purchase intake is paused in code pending native inventory reservations. See [native catalog](../../operations/NATIVE_CATALOG.md) for implemented behavior and remaining work. They are not the chosen end state and are not proof of a completed migration. No Shopify data, merchant accounts, OAuth credentials or accepted orders are deleted by this change.
 
 ## Alternatives and trade-offs
 
