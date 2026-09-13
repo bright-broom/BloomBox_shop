@@ -32,17 +32,19 @@ Set server-side only in the isolated deployment:
 
 NEXTAUTH_URL and AUTH_REDIRECT_PROXY_URL overrides are rejected. Old CUSTOMER_ACCOUNT_CLIENT_ID/CLIENT_SECRET/SHOP_ID values cannot enable Google login. The new cookie namespace rejects historical Shopify sessions. Database connection failure fails closed; it must not display an empty successful history.
 
-## Real-provider verification still required
+## Real-provider verification status
+
+2026-09-13追記：顧客専用OAuthをローカルに接続し、実Googleアカウント1件で初回・再ログイン、同意キャンセル、DB障害からの復旧、セッション版による失効、ログアウト、運営者用認証との分離を確認しました。[実接続検証記録](CUSTOMER_GOOGLE_CONNECTION_VERIFICATION.md)を参照してください。実注文・2顧客間の注文分離・本番環境は未検証です。以下は公開前に必要な全体の確認範囲です。
 
 Two independent customers: first/repeat login, concurrent login, separate order histories, empty account, forged callback, denied Google consent, API/DB failure, account disable/version revocation, expiration, logout and browser back/reload. Inspect no-store headers and confirm client props/network/session JSON contain no tokens. Synthetic fixtures are not evidence of a live Google login.
 
-The main Vercel project's Preview environment was reported empty by the CLI before this change. No customer OAuth credentials, deployment settings, paid subscriptions or live customer data were changed.
+The main Vercel project's Preview environment was reported empty by the CLI before the initial account implementation. The later local verification created customer-only test OAuth credentials and one test customer in an isolated local database; deployment settings were not changed.
 
 ## Remaining commerce work
 
 Real catalog setup/native inventory, live verification of authenticated buyer binding, complete Stripe payment/refund/reconciliation tests, native fulfillment and operations remain migration work. Existing preview checkout receipts never populate real account history. See ADR 0009 for the ordered rollout; this account slice does not enable sales.
 
-## Verification recorded — 2026-09-13
+## Initial implementation verification — 2026-09-13
 
 - Node 24.21.0 / pnpm 10.23.0: repository, architecture, migration, design, hardcoding, type and lint checks passed; 846 unit/route/presentation tests passed.
 - All 143 PostgreSQL tests passed on a separate local PostgreSQL 14 test instance, including concurrent identity creation, revocation, ownership isolation, microsecond-safe pagination, least-privilege access and transaction rollback. CI separately runs PostgreSQL 16.
@@ -66,7 +68,7 @@ Disable CUSTOMER_ACCOUNT_ENABLED or revert the application change. Retain all du
 
 検証：`pnpm check:ci` の静的検査・882テスト・ビルドが成功。隔離したPostgreSQLで顧客所有権関連8テストが成功（今回追加3ケース）。通常テストでスキップされるDB専用190テストはCIの専用ジョブで検証します。実ブラウザーではM/Lのサンプル履歴→詳細→履歴の遷移、明細・金額・発送表示、未接続時の非表示を確認しました。実測幅840pxと320pxで横あふれなし。詳細URLの応答は `private, no-store` と `noindex, nofollow` を保持しています。
 
-[サンプル詳細](/preview/account/order)はPreview限定で、実認証・実注文の接続証跡ではありません。顧客専用Google OAuthが未設定のため、実Googleログインから実注文を表示するE2Eは未検証です。配送追跡・返金内訳・住所編集は今回に含めません。戻す場合は詳細へのリンクと追加画面・読取処理を戻し、保存済み顧客・注文は保持します。
+[サンプル詳細](/preview/account/order)はPreview限定で、実認証・実注文の接続証跡ではありません。詳細画面の実装時点では顧客専用Google OAuthが未設定でした。同日後続のローカル実接続でGoogleログインは確認しましたが、実注文を表示するE2Eは未検証です。配送追跡・返金内訳・住所編集は今回に含めません。戻す場合は詳細へのリンクと追加画面・読取処理を戻し、保存済み顧客・注文は保持します。
 
 画面記録（架空サンプルのみ、ページ上部のスクリーンショット）：
 

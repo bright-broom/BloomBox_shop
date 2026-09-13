@@ -1,0 +1,73 @@
+{
+  "date": "2026-09-13",
+  "codeReference": "7a1f4cc6b2f71c222de5010370972f3fe78036e0",
+  "environment": "isolated-local-preview",
+  "provider": "real-google",
+  "independentGoogleAccounts": 1,
+  "audience": "external-testing",
+  "applicationName": "BLOOM BOX",
+  "callback": "http://localhost:3000/api/customer-auth/callback/google",
+  "scopes": [
+    "openid",
+    "email",
+    "profile"
+  ],
+  "customerClientSeparateFromOperator": true,
+  "customerSecretSeparateFromOperator": true,
+  "existingMigrationsApplied": "0001-0022",
+  "applicationRole": {
+    "superuser": false,
+    "createDatabase": false,
+    "createRole": false,
+    "replication": false
+  },
+  "passed": [
+    "consent-cancel-without-registration",
+    "first-login-empty-history",
+    "repeat-login-no-duplicate-customer",
+    "customer-session-does-not-authenticate-operator",
+    "database-outage-fails-closed",
+    "database-recovery-with-existing-session",
+    "logout-and-other-tab-reload",
+    "account-version-revocation",
+    "reauthentication-after-revocation",
+    "signed-out-account-revisit-and-reload"
+  ],
+  "countsAfterConsentCancel": {
+    "customers": 0,
+    "identities": 0,
+    "auditRecords": 0,
+    "orders": 0
+  },
+  "finalCounts": {
+    "customers": 1,
+    "identities": 1,
+    "auditRecords": 1,
+    "contacts": 0,
+    "marketingConsents": 0,
+    "orders": 0
+  },
+  "finalAccountVersion": 2,
+  "finalBrowserState": "signed-out-of-bloombox",
+  "browserBackAfterLogout": "google-account-chooser",
+  "accountResponseHeaders": {
+    "cache-control": "private, no-store, max-age=0",
+    "x-robots-tag": "noindex, nofollow"
+  },
+  "sessionJsonLiveInspection": "blocked-by-client",
+  "notVerified": [
+    "second-real-google-customer",
+    "live-provider-purchase-binding-and-order-isolation",
+    "real-order-details",
+    "concurrent-real-login",
+    "natural-session-expiry",
+    "account-disable",
+    "google-outage",
+    "forged-callback-live-browser",
+    "production-https-cookies-callback-database",
+    "all-network-token-exposure"
+  ],
+  "productionChanged": false,
+  "orderIntakeEnabled": false,
+  "runtimeCodeChanged": false
+}
