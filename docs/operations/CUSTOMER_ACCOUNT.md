@@ -4,6 +4,8 @@
 
 2026-09-13. The user selected Shopify-independent commerce under [ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md). `/account` now uses Google OIDC directly and native PostgreSQL customer/order records. Shopify Customer Account credentials and operator Google credentials are not accepted for this route.
 
+> 2026-09-14：専用入口 `/account/login` と既存の `/account` を3025番の実Google OAuth・顧客DBへ接続しました。[本人画面までの実接続・再開手順](CUSTOMER_GOOGLE_3025_VERIFICATION.md)を参照。
+
 ## Implemented
 
 - Google login returns to BloomBox `/account`; local logout ends only the BloomBox session.
