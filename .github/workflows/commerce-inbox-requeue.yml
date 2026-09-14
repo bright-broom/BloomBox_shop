@@ -1,0 +1,61 @@
+name: Commerce Inbox Requeue
+
+on:
+  workflow_dispatch:
+    inputs:
+      event_ids:
+        description: "Comma-separated Stripe event IDs (evt_...) that are FAILED in the Inbox. Maximum 20."
+        required: true
+        type: string
+      incident_issue:
+        description: "Number of the incident issue that records the investigation and fix."
+        required: true
+        type: number
+      confirm:
+        description: "The cause is fixed and deployed, and these events must be processed again."
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# A separate group: sharing the scheduled worker's group would let its next run replace a queued requeue.
+# Row locks in the database serialise the requeue against Inbox processing.
+concurrency:
+  group: commerce-inbox-requeue
+  cancel-in-progress: false
+
+jobs:
+  requeue:
+    name: Requeue failed Stripe Inbox events
+    if: github.ref == 'refs/heads/main' && inputs.confirm == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
+      COMMERCE_WORKER_SECRET: ${{ secrets.COMMERCE_WORKER_SECRET }}
+      # Inputs reach the script only through environment variables, never by template interpolation.
+      EVENT_IDS: ${{ inputs.event_ids }}
+      INCIDENT_ISSUE: ${{ inputs.incident_issue }}
+      REQUESTED_BY: ${{ github.actor }}
+    steps:
+      - name: Requeue through the protected worker endpoint
+        run: |
+          test -n "$PRODUCTION_BASE_URL"
+          test -n "$COMMERCE_WORKER_SECRET"
+          body="$(node -e '
+            const ids = process.env.EVENT_IDS.split(",").map((id) => id.trim()).filter(Boolean);
+            process.stdout.write(JSON.stringify({
+              externalEventIds: ids,
+              incidentIssue: Number(process.env.INCIDENT_ISSUE),
+              requestedBy: process.env.REQUESTED_BY,
+            }));
+          ')"
+          # The response lists only event IDs and outcomes; the worker then processes requeued events on its next run.
+          curl --fail-with-body --silent --show-error --max-time 60 \
+            --request POST \
+            --header "Authorization: Bearer $COMMERCE_WORKER_SECRET" \
+            --header "Content-Type: application/json" \
+            --data "$body" \
+            "${PRODUCTION_BASE_URL%/}/api/internal/commerce-inbox-requeue"
