@@ -3,6 +3,7 @@ import { PreviewMetric } from "@/ui/preview-metric";
 import { productId } from "@/modules/catalog/public";
 import { getEarliestDeliveryDate, getLatestDeliveryDate } from "@/modules/fulfillment/public";
 import { application } from "@/shared/infrastructure/composition-root";
+import { loadRuntimeMode } from "@/shared/infrastructure/config/runtime-config";
 import { formatMoney, money } from "@/shared/domain/money";
 import { GiftForm } from "@/ui/gift-form";
 import { CheckoutProgress } from "@/ui/checkout-progress";
@@ -64,6 +65,7 @@ export default async function GiftPage({ params }: GiftPageProps) {
           unitPrice={product.price}
           minDeliveryDate={getEarliestDeliveryDate(now)}
           maxDeliveryDate={getLatestDeliveryDate(now)}
+          previewMode={loadRuntimeMode() === "preview"}
         /> : (
           <div className="checkout-empty" role="status">
             <h2>この花は現在ご注文いただけません</h2>

@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 type CartRouteProps = {
-  searchParams: Promise<{ added?: string | string[]; checkout?: string | string[] }>;
+  searchParams: Promise<{ added?: string | string[]; checkout?: string | string[]; previous?: string | string[] }>;
 };
 
 export default async function CartRoute({ searchParams }: CartRouteProps) {
@@ -32,6 +32,7 @@ export default async function CartRoute({ searchParams }: CartRouteProps) {
         loyalty={loyalty}
         added={query.added === "1"}
         checkoutCancelled={query.checkout === "cancelled"}
+        previousOrderKept={query.previous === "completed"}
         previewMode={loadRuntimeMode() === "preview"}
       />
     </section>

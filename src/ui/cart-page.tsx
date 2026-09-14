@@ -29,10 +29,13 @@ export function CartPage({
   previewMode,
   catalogPrices,
   loyalty = null,
+  previousOrderKept = false,
 }: {
   loyalty?: CustomerLoyaltyState | null;
   added: boolean;
   checkoutCancelled: boolean;
+  /** The replaced cart belonged to a checkout that was already completed and was not cancelled. */
+  previousOrderKept?: boolean;
   previewMode: boolean;
   catalogPrices: readonly { productId: string; unitAmount: number; shippingAmount: number }[];
 }) {
@@ -134,6 +137,7 @@ export function CartPage({
           </div>
         ) : null}
         {added ? <p className="checkout-notice" role="status">ギフトをカートに保存しました。</p> : null}
+        {previousOrderKept ? <p className="checkout-notice" role="status">{giftExperienceContent.cart.previousOrderKeptNotice}</p> : null}
         {checkoutCancelled ? (
           <p className="checkout-notice" role="status">
             Stripe の決済は行われていません。カートの内容を保持しているため、もう一度お進みいただけます。

@@ -11,6 +11,7 @@ vi.mock("react", async (original) => ({
   useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) => snapshot(),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock("@/modules/checkout/presentation/actions", () => ({ cancelPurchaseIntentAction: vi.fn() }));
 
 const sizeOptions = [
   { id: "prod_bloombox_m", name: "BLOOM BOX M", size: "M" as const, price: money(4000), shippingAmount: 1000 },

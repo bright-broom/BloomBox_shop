@@ -13,6 +13,7 @@ import {
   type CreatePurchaseIntentFormState,
 } from "@/modules/checkout/presentation/create-purchase-intent-schema";
 import { CartChangedError, readRecoverableCart, storeCart, type BrowserCartItem } from "@/modules/checkout/presentation/browser-checkout-session";
+import { cancelPurchaseIntentAction } from "@/modules/checkout/presentation/actions";
 import {
   isAvailableDeliveryDate,
   DELIVERY_BOOKING_WINDOW_DAYS,
@@ -35,6 +36,8 @@ type GiftFormProps = {
   shippingAmount?: number;
   minDeliveryDate: string;
   maxDeliveryDate: string;
+  /** Preview carts are local only. Otherwise a replaced cart's prepared purchase is cancelled on the server first. */
+  previewMode?: boolean;
 };
 
 export function GiftForm(props: GiftFormProps) {
@@ -46,6 +49,7 @@ export function GiftForm(props: GiftFormProps) {
 
 function GiftConfigurationForm({
   productId: initialProductId, productName: initialProductName, unitPrice: initialUnitPrice, shippingAmount, minDeliveryDate, maxDeliveryDate, initialCart, sizeOptions = [],
+  previewMode = false,
 }: GiftFormProps & { initialCart: BrowserCartItem | null }) {
   // Snapshot the cart once: a background revision must not overwrite in-progress typing.
   const [cartAtOpen] = useState(initialCart);
@@ -64,7 +68,7 @@ function GiftConfigurationForm({
   const [quantity, setQuantity] = useState(sizeOptions.length ? LAUNCH_PREVIEW_QUANTITY : editingCart?.quantity ?? GIFT_QUANTITY_MIN);
   const [giftMessage, setGiftMessage] = useState(editingCart?.giftMessage ?? giftExperienceContent.giftForm.defaultMessage);
 
-  function addToCart(event: FormEvent<HTMLFormElement>) {
+  async function addToCart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending || (replacingCart && !replacementAccepted)) return;
     setPending(true);
@@ -86,6 +90,25 @@ function GiftConfigurationForm({
       return;
     }
 
+    let previousOrderKept = false;
+    if (cartAtOpen && !previewMode) {
+      // Saving replaces the cart with a new request. Close the purchase the previous cart may have
+      // prepared first, so an edited or swapped gift does not leave a box reserved (ADR 0010).
+      try {
+        const result = await cancelPurchaseIntentAction(cartAtOpen.requestId);
+        if ("error" in result) {
+          setState({ error: result.error });
+          setPending(false);
+          return;
+        }
+        previousOrderKept = result.status === "completed";
+      } catch {
+        setState({ error: giftExperienceContent.cart.cancelFailed });
+        setPending(false);
+        return;
+      }
+    }
+
     try {
       storeCart(window.sessionStorage, {
         version: 1,
@@ -93,7 +116,7 @@ function GiftConfigurationForm({
         productName,
         unitAmount: unitPrice.amount,
       }, cartAtOpen?.requestId ?? null);
-      router.push("/cart?added=1");
+      router.push(previousOrderKept ? "/cart?added=1&previous=completed" : "/cart?added=1");
     } catch (error) {
       setState({ error: error instanceof CartChangedError ? error.message : "カートに保存できませんでした。ブラウザーの設定をご確認ください。" });
       setPending(false);
