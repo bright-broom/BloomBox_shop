@@ -1,4 +1,8 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+
+// A distinct title tells assistive technology and browser history that this is not the requested page.
+export const metadata: Metadata = { title: "ページが見つかりません" };
 
 export default function NotFound() {
   return (
