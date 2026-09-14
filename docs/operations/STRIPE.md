@@ -131,6 +131,8 @@ Optional variable: STRIPE_CHECKOUT_CUSTOM_DOMAIN
 
 An expired Checkout or an asynchronous payment failure leaves no Order and moves the PurchaseIntent to a terminal state. The return page displays the specific non-charge state and links to a fresh purchase flow for the same catalog product instead of remaining indefinitely in “processing.”
 
+When a customer removes a production cart, the server first cancels that customer's PurchaseIntent. An issued Checkout Session is closed through Stripe's expire operation for the stored Session ID; the application key's Checkout Session write access covers this call. Success requires Stripe to report the Session as `expired`, directly or on retrieval. A completed Session is never cancelled: only the stale browser cart is cleared, and the customer is told that the order was not cancelled. If Stripe refuses to expire a Session it still reports as open, the original error is reported. An unconfirmed result is also reported and keeps the cart for a retry. Inventory is still released only by the verified `checkout.session.expired` event.
+
 Webhook payloads and terminal PurchaseIntent personal data are cryptographically protected at rest and purged after 30 days. Unstarted PurchaseIntents are automatically expired after 24 hours with an Outbox Event and audit record. Confirmed Order gift and delivery snapshots follow the separately approved order-retention policy and are not deleted by this transient-data job.
 
 ## Test-mode activation evidence
@@ -139,6 +141,7 @@ Before changing `STRIPE_MODE` to `live`, record all of the following in the acti
 
 - a successful `Stripe Test Mode Readiness` workflow run for the exact test deployment revision;
 - successful, failed, canceled, expired, and asynchronous Checkout Sessions;
+- customer cart removal after returning from Checkout: expiry request, verified expiry event, released reservation, and the cart no longer reappearing;
 - duplicate form submission, provider timeout after Session creation, duplicate Webhook, invalid signature, delayed delivery, and reversed event order;
 - full and partial refund, failed refund, dispute opened and dispute closed;
 - changed price, unavailable catalog item, shipping-rate failure, and tax configuration mismatch;

@@ -10,6 +10,12 @@ import { formatMoney } from "@/shared/domain/money";
 import { application } from "@/shared/infrastructure/composition-root";
 import { reportUnexpectedError } from "@/shared/infrastructure/observability/report-unexpected-error";
 import { ProductUnavailableError } from "../application/create-purchase-intent";
+import {
+  PurchaseCancellationUnavailableError,
+  PurchaseCancellationUnconfirmedError,
+} from "../application/cancel-purchase-intent";
+import { PurchaseIntentNotFoundError } from "../application/start-checkout";
+import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { PurchaseCustomerMismatchError } from "../domain/purchase-customer";
 import { CheckoutPausedError } from "../application/checkout-paused-error";
 import { CheckoutPreparationUnavailableError } from "../application/checkout-session-provider";
@@ -77,5 +83,36 @@ export async function createPurchaseIntentAction(
     return {
       error: `ご注文を開始できませんでした。時間をおいてもう一度お試しください。（エラー ID: ${errorId}）`,
     };
+  }
+}
+
+export type CancelPurchaseIntentResult =
+  | Readonly<{ status: "cancelled" }>
+  | Readonly<{ status: "not_prepared" }>
+  | Readonly<{ status: "completed" }>
+  | Readonly<{ error: string }>;
+
+/**
+ * Ownership, state, and provider confirmation are decided by the use case. The browser only
+ * learns whether its local cart may be removed; it never releases inventory itself.
+ */
+export async function cancelPurchaseIntentAction(requestId: unknown): Promise<CancelPurchaseIntentResult> {
+  const parsed = createPurchaseIntentSchema.shape.requestId.safeParse(requestId);
+  if (!parsed.success) return { error: giftExperienceContent.cart.cancelFailed };
+
+  try {
+    const outcome = await application.cancelPurchaseIntent.execute(parsed.data);
+    // A finished checkout is never cancelled here; the browser may only clear its stale cart.
+    return outcome === "CHECKOUT_COMPLETED" ? { status: "completed" } : { status: "cancelled" };
+  } catch (error) {
+    // No server-side purchase was prepared from this cart, so nothing is reserved.
+    if (error instanceof PurchaseIntentNotFoundError) return { status: "not_prepared" };
+    if (error instanceof PurchaseCustomerMismatchError || error instanceof PurchaseCancellationUnavailableError) {
+      return { error: error.message };
+    }
+    // Unconfirmed provider results stay observable: a persistent Stripe fault must not look like a retry loop.
+    const errorId = reportUnexpectedError(error, { operation: "cancel_purchase_intent" });
+    const message = error instanceof PurchaseCancellationUnconfirmedError ? error.message : giftExperienceContent.cart.cancelFailed;
+    return { error: `${message}（エラー ID: ${errorId}）` };
   }
 }

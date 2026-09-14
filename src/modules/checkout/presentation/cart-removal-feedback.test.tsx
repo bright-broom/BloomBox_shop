@@ -1,9 +1,10 @@
 import { loyaltyProgress } from "@/modules/customer/public";
 import { Children, isValidElement, type ReactNode } from "react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CartPage } from "@/ui/cart-page";
 import { getEarliestDeliveryDate } from "@/modules/fulfillment/public";
-import { readRecoverableCart, storeCart } from "./browser-checkout-session";
+import { CartChangedError, readRecoverableCart, storeCart } from "./browser-checkout-session";
+import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 
 const harness = vi.hoisted(() => ({ values: [] as unknown[], cursor: 0, pending: false }));
 vi.mock("react", async (original) => ({
@@ -16,7 +17,8 @@ vi.mock("react", async (original) => ({
   useActionState: () => [{}, vi.fn(), harness.pending],
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
-vi.mock("./actions", () => ({ createPurchaseIntentAction: vi.fn() }));
+const actions = vi.hoisted(() => ({ cancel: vi.fn() }));
+vi.mock("./actions", () => ({ createPurchaseIntentAction: vi.fn(), cancelPurchaseIntentAction: actions.cancel }));
 vi.mock("@/ui/use-checkout-session-revision", async (original) => ({
   ...await original<typeof import("@/ui/use-checkout-session-revision")>(),
   useCheckoutSessionRevision: () => "test",
@@ -28,9 +30,9 @@ function elements(node: ReactNode): Array<Record<string, unknown>> {
     return [{ ...child.props, elementType: child.type }, ...elements(child.props.children)];
   });
 }
-function render(catalogPrices: Parameters<typeof CartPage>[0]["catalogPrices"] = []) {
+function render(catalogPrices: Parameters<typeof CartPage>[0]["catalogPrices"] = [], previewMode = true) {
   harness.cursor = 0;
-  return CartPage({ added: false, checkoutCancelled: false, previewMode: true, catalogPrices });
+  return CartPage({ added: false, checkoutCancelled: false, previewMode, catalogPrices });
 }
 function removeButton(tree: ReactNode) {
   const button = elements(tree).find((item) => item.elementType === "button" && item.children === "カートから削除");
@@ -46,7 +48,7 @@ const storage = {
 };
 
 beforeEach(() => {
-  harness.values = []; harness.cursor = 0; harness.pending = false;
+  harness.values = []; harness.cursor = 0; harness.pending = false; actions.cancel.mockReset();
   values.clear(); storage.removeItem.mockReset().mockImplementation((key) => { values.delete(key); });
   vi.stubGlobal("window", { sessionStorage: storage, dispatchEvent: vi.fn() });
   storeCart(storage, { version: 1, requestId: "12345678-abcd-4000-8000-123456789012",
@@ -126,4 +128,82 @@ it.each(["ready", "unavailable", "preview"] as const)("keeps native cart rewards
   else expect(text).not.toContain("会員割引");
   if (state === "unavailable") expect(alerts(tree)).toHaveLength(1);
   if (state === "preview") expect(text).toContain("5,000");
+});
+
+describe("production cart removal cancels the prepared purchase first", () => {
+  const requestId = "12345678-abcd-4000-8000-123456789012";
+  function cartButton(tree: ReactNode) {
+    const button = elements(tree).find((item) => item.elementType === "button" && item.className === "text-button");
+    if (!button || typeof button.onClick !== "function") throw new Error("Missing cart button");
+    return { disabled: button.disabled, children: button.children, click: button.onClick };
+  }
+  function deferred<T>() {
+    let resolve: (value: T) => void = () => undefined;
+    const promise = new Promise<T>((done) => { resolve = done; });
+    return { promise, resolve };
+  }
+
+  it.each([{ status: "cancelled" }, { status: "not_prepared" }] as const)("keeps the cart until the server reports %j", async (result) => {
+    const pendingCancel = deferred<typeof result>();
+    actions.cancel.mockReturnValue(pendingCancel.promise);
+    cartButton(render([], false)).click();
+    expect(actions.cancel).toHaveBeenCalledExactlyOnceWith(requestId);
+    const busy = render([], false);
+    expect(cartButton(busy)).toMatchObject({ disabled: true, children: giftExperienceContent.cart.cancelPending });
+    expect(elements(busy).find((item) => item.elementType === "button" && item.type === "submit")?.disabled).toBe(true);
+    expect(elements(busy).some((item) => item.role === "status" && item.children === giftExperienceContent.cart.cancelPending)).toBe(true);
+    expect(readRecoverableCart(storage)).not.toBeNull();
+    pendingCancel.resolve(result);
+    await vi.waitFor(() => expect(readRecoverableCart(storage)).toBeNull());
+    expect(alerts(render([], false))).toEqual([]);
+    expect(elements(render([], false)).some((item) => item.children === giftExperienceContent.cart.completedNotice)).toBe(false);
+  });
+
+  it("clears only the stale cart of a completed checkout and says the order was not cancelled", async () => {
+    actions.cancel.mockResolvedValue({ status: "completed" });
+    cartButton(render([], false)).click();
+    await vi.waitFor(() => expect(readRecoverableCart(storage)).toBeNull());
+    const tree = render([], false);
+    expect(elements(tree).some((item) => item.role === "status" && item.children === giftExperienceContent.cart.completedNotice)).toBe(true);
+    expect(elements(tree).some((item) => item.children === "カートは空です。")).toBe(true);
+    expect(alerts(tree)).toEqual([]);
+  });
+
+  it("keeps the cart and explains a refused cancellation", async () => {
+    actions.cancel.mockResolvedValue({ error: "決済手続きが始まっているため、この購入準備を取り消せません。" });
+    cartButton(render([], false)).click();
+    await vi.waitFor(() => expect(alerts(render([], false))).toHaveLength(1));
+    const tree = render([], false);
+    expect(alerts(tree)[0].children).toContain("取り消せません");
+    expect(cartButton(tree)).toMatchObject({ disabled: false, children: "カートから削除" });
+    expect(readRecoverableCart(storage)?.requestId).toBe(requestId);
+  });
+
+  it("keeps the cart when the server action cannot be reached", async () => {
+    actions.cancel.mockRejectedValue(new Error("private network detail"));
+    cartButton(render([], false)).click();
+    await vi.waitFor(() => expect(alerts(render([], false))).toHaveLength(1));
+    expect(alerts(render([], false))[0].children).toBe(giftExperienceContent.cart.cancelFailed);
+    expect(readRecoverableCart(storage)).not.toBeNull();
+  });
+
+  it("never removes a different cart that replaced the cancelled one", async () => {
+    const pendingCancel = deferred<{ status: "cancelled" }>();
+    actions.cancel.mockReturnValue(pendingCancel.promise);
+    cartButton(render([], false)).click();
+    const replacement = readRecoverableCart(storage);
+    if (!replacement) throw new Error("Missing fixture cart");
+    const replacementId = "87654321-abcd-4000-8000-123456789012";
+    storeCart(storage, { ...replacement, requestId: replacementId });
+    pendingCancel.resolve({ status: "cancelled" });
+    await vi.waitFor(() => expect(alerts(render([], false))).toHaveLength(1));
+    expect(alerts(render([], false))[0].children).toBe(new CartChangedError().message);
+    expect(readRecoverableCart(storage)?.requestId).toBe(replacementId);
+  });
+
+  it("leaves preview removal local", () => {
+    cartButton(render()).click();
+    expect(actions.cancel).not.toHaveBeenCalled();
+    expect(readRecoverableCart(storage)).toBeNull();
+  });
 });

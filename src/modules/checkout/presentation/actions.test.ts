@@ -4,17 +4,23 @@ import { money } from "@/shared/domain/money";
 import { PurchaseCustomerMismatchError } from "../domain/purchase-customer";
 import { CheckoutPreparationUnavailableError } from "../application/checkout-session-provider";
 import { CheckoutPausedError } from "../application/checkout-paused-error";
+import {
+  PurchaseCancellationUnavailableError,
+  PurchaseCancellationUnconfirmedError,
+} from "../application/cancel-purchase-intent";
+import { PurchaseIntentNotFoundError } from "../application/start-checkout";
 
-const { execute } = vi.hoisted(() => ({ execute: vi.fn() }));
+const { execute, cancel } = vi.hoisted(() => ({ execute: vi.fn(), cancel: vi.fn() }));
 
 vi.mock("@/shared/infrastructure/composition-root", () => ({
   application: {
     preparePurchase: { execute },
+    cancelPurchaseIntent: { execute: cancel },
     getProduct: { byId: async () => ({ available: true }) },
   },
 }));
 
-import { createPurchaseIntentAction } from "./actions";
+import { cancelPurchaseIntentAction, createPurchaseIntentAction } from "./actions";
 
 describe("createPurchaseIntentAction", () => {
   beforeEach(() => {
@@ -106,3 +112,60 @@ function formData(): FormData {
   data.set("giftMessage", "おめでとう");
   return data;
 }
+
+describe("cancelPurchaseIntentAction", () => {
+  const requestId = "12345678-abcd-4000-8000-123456789012";
+  beforeEach(() => { cancel.mockReset(); });
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each(["not-a-uuid", "", { requestId }, null])("rejects a malformed request before reaching the use case: %j", async (value) => {
+    const result = await cancelPurchaseIntentAction(value);
+    expect(result).toHaveProperty("error");
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
+  it("lets the browser remove its cart only after the server-side cancellation succeeds", async () => {
+    cancel.mockResolvedValue("EXPIRY_CONFIRMED");
+    await expect(cancelPurchaseIntentAction(requestId)).resolves.toEqual({ status: "cancelled" });
+    expect(cancel).toHaveBeenCalledExactlyOnceWith(requestId);
+  });
+
+  it("treats a cart that never prepared a purchase as having nothing reserved", async () => {
+    cancel.mockRejectedValue(new PurchaseIntentNotFoundError());
+    await expect(cancelPurchaseIntentAction(requestId)).resolves.toEqual({ status: "not_prepared" });
+  });
+
+  it("lets the browser clear a stale cart for a checkout that was already completed", async () => {
+    cancel.mockResolvedValue("CHECKOUT_COMPLETED");
+    await expect(cancelPurchaseIntentAction(requestId)).resolves.toEqual({ status: "completed" });
+  });
+
+  it("keeps an unconfirmed provider result observable while showing its retry message", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = new PurchaseCancellationUnconfirmedError({ cause: new Error("private provider detail") });
+    cancel.mockRejectedValue(error);
+    const result = await cancelPurchaseIntentAction(requestId);
+    if (!("error" in result)) throw new Error("Expected an error result");
+    expect(result.error).toContain(error.message);
+    expect(result.error).toContain("エラー ID");
+    expect(logged).toHaveBeenCalledOnce();
+    expect(JSON.stringify(logged.mock.calls)).not.toContain("private provider detail");
+  });
+
+  it.each([
+    new PurchaseCustomerMismatchError(),
+    new PurchaseCancellationUnavailableError(),
+  ])("returns the customer-safe business message for $name", async (error) => {
+    cancel.mockRejectedValue(error);
+    await expect(cancelPurchaseIntentAction(requestId)).resolves.toEqual({ error: error.message });
+  });
+
+  it("reports an unexpected failure without exposing its detail", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    cancel.mockRejectedValue(new Error("private provider detail"));
+    const result = await cancelPurchaseIntentAction(requestId);
+    if (!("error" in result)) throw new Error("Expected an error result");
+    expect(result.error).toContain("エラー ID");
+    expect(result.error).not.toContain("private provider detail");
+  });
+});

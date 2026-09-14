@@ -5,7 +5,11 @@ import type {
   CheckoutSession,
   CheckoutSessionProvider,
 } from "../../application/checkout-session-provider";
-import type { PurchaseIntent } from "../../domain/purchase-intent";
+import type { PurchaseIntent, PurchaseIntentId } from "../../domain/purchase-intent";
+import {
+  PurchaseCancellationUnconfirmedError,
+  type CheckoutSessionCanceller,
+} from "../../application/cancel-purchase-intent";
 import type { StripeConfig } from "@/shared/infrastructure/config/stripe-config";
 
 type StripeCheckoutRequest = Readonly<{
@@ -111,12 +115,7 @@ export class StripeSdkCheckoutApi implements StripeCheckoutApi {
     private readonly config: StripeConfig,
     sessions?: StripeCheckoutSessionsClient,
   ) {
-    const stripe = new Stripe(config.checkoutSecretKey, {
-      appInfo: { name: "BloomBox", version: "0.1.0" },
-      maxNetworkRetries: 2,
-      timeout: 10_000,
-      telemetry: false,
-    });
+    const stripe = createStripeCheckoutClient(config);
     this.sessions = sessions ?? {
       // Pin the wire API independently of the SDK's latest-only constructor type.
       create: (request, options) => stripe.checkout.sessions.create(request, { ...options, apiVersion: config.apiVersion }),
@@ -214,5 +213,91 @@ function mapStripeSession(
     purchaseIntentId: session.client_reference_id,
     url: checkoutUrl.toString(),
     expiresAt: new Date(session.expires_at * 1000),
+  };
+}
+
+type StripeCheckoutSessionState = Readonly<{
+  id: string;
+  client_reference_id: string | null;
+  status: string | null;
+  livemode: boolean;
+}>;
+
+export interface StripeCheckoutExpiryClient {
+  expire(sessionId: string): Promise<StripeCheckoutSessionState>;
+  retrieve(sessionId: string): Promise<StripeCheckoutSessionState>;
+}
+
+/**
+ * Customer-initiated closure of an issued hosted checkout. Inventory is not released here:
+ * the verified `checkout.session.expired` event for the stored session remains authoritative.
+ */
+export class StripeCheckoutSessionCanceller implements CheckoutSessionCanceller {
+  readonly provider = "STRIPE" as const;
+  private readonly sessions: StripeCheckoutExpiryClient;
+
+  constructor(
+    private readonly config: StripeConfig,
+    sessions?: StripeCheckoutExpiryClient,
+  ) {
+    this.sessions = sessions ?? sdkExpiryClient(createStripeCheckoutClient(config), config.apiVersion);
+  }
+
+  async expire(externalCheckoutId: string, purchaseIntentId: PurchaseIntentId): Promise<"EXPIRED" | "COMPLETED"> {
+    let expireFailure: Readonly<{ error: unknown }> | null = null;
+    try {
+      const expired = await this.sessions.expire(externalCheckoutId);
+      if (this.verified(expired, externalCheckoutId, purchaseIntentId).status === "expired") return "EXPIRED";
+    } catch (error) {
+      if (error instanceof StripeCheckoutResponseError) throw error;
+      // A session that is no longer open, a timeout, or an ambiguous response is settled by retrieval.
+      expireFailure = { error };
+    }
+    let current: StripeCheckoutSessionState;
+    try {
+      current = await this.sessions.retrieve(externalCheckoutId);
+    } catch (error) {
+      throw new PurchaseCancellationUnconfirmedError({ cause: error });
+    }
+    const status = this.verified(current, externalCheckoutId, purchaseIntentId).status;
+    if (status === "expired") return "EXPIRED";
+    if (status === "complete") return "COMPLETED";
+    // Stripe refused to close a session it still reports as open: surface the provider failure itself.
+    if (expireFailure) throw expireFailure.error;
+    throw new PurchaseCancellationUnconfirmedError();
+  }
+
+  private verified(
+    session: StripeCheckoutSessionState,
+    externalCheckoutId: string,
+    purchaseIntentId: PurchaseIntentId,
+  ): StripeCheckoutSessionState {
+    const expectedIdPrefix = this.config.mode === "test" ? "cs_test_" : "cs_live_";
+    if (
+      session.id !== externalCheckoutId
+      || !session.id.startsWith(expectedIdPrefix)
+      || session.livemode !== (this.config.mode === "live")
+      || session.client_reference_id !== purchaseIntentId
+    ) {
+      throw new StripeCheckoutResponseError();
+    }
+    return session;
+  }
+}
+
+function createStripeCheckoutClient(config: StripeConfig): Stripe {
+  return new Stripe(config.checkoutSecretKey, {
+    appInfo: { name: "BloomBox", version: "0.1.0" },
+    maxNetworkRetries: 2,
+    timeout: 10_000,
+    telemetry: false,
+  });
+}
+
+function sdkExpiryClient(stripe: Stripe, apiVersion: string): StripeCheckoutExpiryClient {
+  return {
+    // Pin the wire API independently of the SDK's latest-only constructor type.
+    expire: (sessionId) => stripe.checkout.sessions.expire(sessionId, {}, { apiVersion }),
+    retrieve: (sessionId) => stripe.checkout.sessions.retrieve(sessionId, {}, { apiVersion }),
   };
 }

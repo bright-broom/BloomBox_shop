@@ -11,7 +11,7 @@ import { PostgresInventoryReservations } from "./postgres-inventory-reservations
 import { PostgresStockAvailabilityReader } from "./postgres-stock-availability-reader";
 import { PostgresProductRepository } from "@/modules/catalog/infrastructure/postgres-product-repository";
 import { CreatePurchaseIntent } from "@/modules/checkout/application/create-purchase-intent";
-import { CancelPurchaseIntent } from "@/modules/checkout/application/cancel-purchase-intent";
+import { CancelPurchaseIntent, type CheckoutSessionCanceller } from "@/modules/checkout/application/cancel-purchase-intent";
 import { PostgresPurchaseIntentRepository } from "@/modules/checkout/infrastructure/postgres-purchase-intent-repository";
 import { PostgresCheckoutBuyerWriter } from "@/modules/customer/infrastructure/postgres-checkout-buyer-writer";
 import { StripeCommerceEventProcessor } from "@/modules/payment/infrastructure/stripe-commerce-event-processor";
@@ -220,6 +220,21 @@ describeDatabase("native inventory reservations", () => {
     await expect(processor.process({ ...terminal, eventType: "checkout.session.completed",
       payload: { ...terminal.payload, paymentStatus: "paid", checkoutStatus: "complete" } })).rejects.toThrow();
     expect(await balance(id)).toEqual({ on_hand: 1, reserved: 0 });
+  });
+
+  it("closes an issued checkout on customer cancellation but releases only on the verified expiry event", async () => {
+    const id = await stock(1), intent = await create.execute(input(id)), expired = await event(intent, "checkout.session.expired");
+    const expire = vi.fn<CheckoutSessionCanceller["expire"]>().mockResolvedValue("EXPIRED");
+    const customerCancel = new CancelPurchaseIntent(repo, undefined, { provider: "STRIPE", expire });
+    await expect(customerCancel.execute(intent.id)).resolves.toBe("EXPIRY_CONFIRMED");
+    expect(expire).toHaveBeenCalledExactlyOnceWith(`cs_test_${intent.id}`, intent.id);
+    expect(await balance(id)).toEqual({ on_hand: 1, reserved: 1 });
+    expect((await repo.findById(intent.id))?.status).toBe("CHECKOUT_CREATED");
+    // A retried cancellation may race the verified event; either order releases exactly once.
+    await Promise.all([processor.process(expired), customerCancel.execute(intent.id), processor.process(expired)]);
+    expect(await balance(id)).toEqual({ on_hand: 1, reserved: 0 });
+    await expect(customerCancel.execute(intent.id)).resolves.toBe("ALREADY_CLOSED");
+    expect(await sql`SELECT id FROM bloombox.inventory_movements WHERE purchase_intent_id = ${intent.id} AND kind = 'RELEASED'`).toHaveLength(1);
   });
 
   it("commits stock and one order once; a delayed expiry or a refund never restocks committed goods", async () => {

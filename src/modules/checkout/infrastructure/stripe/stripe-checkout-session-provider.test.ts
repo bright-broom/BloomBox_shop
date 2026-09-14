@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { CheckoutPreparationUnavailableError } from "../../application/checkout-session-provider";
+import { PurchaseCancellationUnconfirmedError } from "../../application/cancel-purchase-intent";
 import { money } from "@/shared/domain/money";
 import {
   catalogProductReference,
@@ -9,10 +10,12 @@ import {
 } from "../../domain/purchase-intent";
 import { giftMessage, recipientName } from "../../domain/purchase-intent-policy";
 import {
+  StripeCheckoutSessionCanceller,
   StripeCheckoutSessionProvider,
   StripeCheckoutResponseError,
   StripeSdkCheckoutApi,
   type StripeCheckoutApi,
+  type StripeCheckoutExpiryClient,
   type StripeCheckoutSessionsClient,
 } from "./stripe-checkout-session-provider";
 import type { StripeConfig } from "@/shared/infrastructure/config/stripe-config";
@@ -181,6 +184,72 @@ describe("StripeSdkCheckoutApi", () => {
       idempotencyKey: "stable-key",
     })).rejects.toBeInstanceOf(StripeCheckoutResponseError);
     await expect(new StripeSdkCheckoutApi(stripeConfig(), invalidRedirect).retrieve("cs_test_123"))
+      .rejects.toBeInstanceOf(StripeCheckoutResponseError);
+  });
+});
+
+describe("StripeCheckoutSessionCanceller", () => {
+  const intentId = purchaseIntentId("12345678-abcd-4000-8000-123456789012");
+  function session(status: string | null, overrides: Partial<{ id: string; client_reference_id: string | null; livemode: boolean }> = {}) {
+    return { id: "cs_test_123", client_reference_id: intentId, status, livemode: false, ...overrides };
+  }
+  function client(expire: () => Promise<ReturnType<typeof session>>, retrieve?: () => Promise<ReturnType<typeof session>>) {
+    return {
+      expire: vi.fn<StripeCheckoutExpiryClient["expire"]>(expire),
+      retrieve: vi.fn<StripeCheckoutExpiryClient["retrieve"]>(retrieve ?? (() => Promise.reject(new Error("unused")))),
+    };
+  }
+
+  it("closes an open session once Stripe confirms the expiry", async () => {
+    const sessions = client(async () => session("expired"));
+    await expect(new StripeCheckoutSessionCanceller(stripeConfig(), sessions).expire("cs_test_123", intentId)).resolves.toBe("EXPIRED");
+    expect(sessions.expire).toHaveBeenCalledExactlyOnceWith("cs_test_123");
+    expect(sessions.retrieve).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { name: "a retry after expiry", expire: () => Promise.reject(new Error("Only Checkout Sessions with status open can be expired")) },
+    { name: "an ambiguous timeout", expire: () => Promise.reject(new Error("timeout")) },
+    { name: "an unexpected open response", expire: async () => session("open") },
+  ])("settles $name by authoritative retrieval", async ({ expire }) => {
+    const sessions = client(expire, async () => session("expired"));
+    await expect(new StripeCheckoutSessionCanceller(stripeConfig(), sessions).expire("cs_test_123", intentId)).resolves.toBe("EXPIRED");
+    expect(sessions.retrieve).toHaveBeenCalledExactlyOnceWith("cs_test_123");
+  });
+
+  it("reports a session the customer already completed instead of cancelling it", async () => {
+    const sessions = client(() => Promise.reject(new Error("not open")), async () => session("complete"));
+    await expect(new StripeCheckoutSessionCanceller(stripeConfig(), sessions).expire("cs_test_123", intentId)).resolves.toBe("COMPLETED");
+  });
+
+  it("surfaces Stripe's refusal to close a session it still reports as open", async () => {
+    const refusal = new Error("Stripe permission failure");
+    const sessions = client(() => Promise.reject(refusal), async () => session("open"));
+    await expect(new StripeCheckoutSessionCanceller(stripeConfig(), sessions).expire("cs_test_123", intentId)).rejects.toBe(refusal);
+  });
+
+  it.each([
+    { name: "unreadable after an ambiguous expiry", expire: () => Promise.reject(new Error("timeout")),
+      retrieve: () => Promise.reject(new Error("private network detail")) },
+    { name: "still open after an accepted expiry request", expire: async () => session("open"), retrieve: async () => session("open") },
+  ])("reports an unconfirmed cancellation when the session is $name", async ({ expire, retrieve }) => {
+    const sessions = client(expire, retrieve);
+    await expect(new StripeCheckoutSessionCanceller(stripeConfig(), sessions).expire("cs_test_123", intentId))
+      .rejects.toBeInstanceOf(PurchaseCancellationUnconfirmedError);
+  });
+
+  it.each([
+    { client_reference_id: "87654321-abcd-4000-8000-123456789012" },
+    { client_reference_id: null },
+    { livemode: true },
+    { id: "cs_test_other" },
+  ])("rejects a session that does not belong to this purchase or mode: %j", async (overrides) => {
+    const expired = client(async () => session("expired", overrides));
+    await expect(new StripeCheckoutSessionCanceller(stripeConfig(), expired).expire("cs_test_123", intentId))
+      .rejects.toBeInstanceOf(StripeCheckoutResponseError);
+    expect(expired.retrieve).not.toHaveBeenCalled();
+    const retrieved = client(() => Promise.reject(new Error("not open")), async () => session("expired", overrides));
+    await expect(new StripeCheckoutSessionCanceller(stripeConfig(), retrieved).expire("cs_test_123", intentId))
       .rejects.toBeInstanceOf(StripeCheckoutResponseError);
   });
 });
