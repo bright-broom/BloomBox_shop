@@ -20,7 +20,7 @@
 | 項目 | 確認済み | 残る境界・根拠 |
 | --- | --- | --- |
 | 顧客アカウント | Googleログイン、本人の履歴・詳細、プロフィール参照、ログアウト、所有権検証 | 実Google2顧客＋合成注文で相互非表示を確認。ブラウザー購入・実Stripeを通した試験ではない。[2顧客記録](CUSTOMER_ORDER_ISOLATION_VERIFICATION.md) |
-| ログイン導線 | 専用の顧客/管理者ログイン、認証後の戻り先、管理各ページ入口、独立ログアウトを実装 | Chromium/WebKit・390/1280pxで経路を検証後、3025番で実Google2顧客の本人画面・相互非表示・ログアウト、管理者認証を確認。[実接続](CUSTOMER_GOOGLE_3025_VERIFICATION.md) |
+| ログイン導線 | 専用の顧客/管理者ログイン、認証後の戻り先、管理各ページ入口、独立ログアウトを実装 | Chromium/WebKit・390/1280px、[3025実接続](CUSTOMER_GOOGLE_3025_VERIFICATION.md)に加え、公開Vercel HTTPSでGoogle2顧客の本人画面を確認。[公開接続](CUSTOMER_GOOGLE_VERCEL_VERIFICATION.md)。Google一般公開・公開先の運営者接続は別 |
 | Googleの失敗・復旧 | 同意キャンセル、DB障害・復旧、再ログイン、セッション版失効、運営者認証との分離をローカル確認 | 本番HTTPS等は別検証。[顧客接続](CUSTOMER_GOOGLE_CONNECTION_VERIFICATION.md) |
 | 購入者紐付け | サーバー認証の顧客IDを購入時に固定し、注文へ引継ぎ。別顧客の再送・メールによる後付け所有権を拒否 | 実Stripe購入での接続待ち。[顧客紐付け](PURCHASE_CUSTOMER_BINDING.md) |
 | 商品・在庫管理 | PostgreSQL参照、登録・編集・公開・補充・訂正・履歴・権限。実Google＋隔離DBで競合・失効も確認 | 正式な画像・商品・在庫・本番接続は未確認。[管理機能](NATIVE_CATALOG_MANAGEMENT.md)、[接続記録](NATIVE_CATALOG_CONNECTION_VERIFICATION.md) |
@@ -66,7 +66,7 @@
 | P0-19 | 商用UI・アクセシビリティ | 直近48表示条件等は確認済み。実機と商用状態は未確認 | 実機Safariの端の挙動・キーボード、PC/スマホ、200%拡大、キーボード操作・読み上げ、空/エラー/処理中/取消/発送/返金を確認。[画面記録](../design/VERIFICATION.md) |
 | P0-20 | 監視・復旧・当番 | Smoke/Worker Incident/構造化エラーあり。運用証跡待ち | 決済引継ぎ失敗、署名失敗、DB、Inbox滞留/恒久失敗を検知し担当者へ連絡。再処理、DB復元、切り戻し、取引照合、遅延通知の処理を演習 |
 | P0-21 | 公開判定と実配備 | 未承認。証跡8項目未完了、Production Release実行0件 | 下表の証跡を対象SHAへ紐付け、必要な実装/設定/承認後に本番コードの受付停止を扱う。`check:release`、承認、対象SHAの配備と公開後Smokeを記録。[RELEASE](RELEASE.md) |
-| P0-22 | Google本番認証 | 顧客2名・運営者のローカル実接続は確認済み。本番設定/検証待ち | 顧客/運営者別のOAuth・秘密値・Cookie、固定HTTPS callback、公開範囲、担当者対応と期限を設定。初回/再ログイン/同時利用、自然な期限切れ、停止/失効、ログアウト/別タブ、同意拒否・偽造callback・Google/DB障害・no-store・トークン非露出を検証 |
+| P0-22 | Google本番認証 | ローカル顧客2名・運営者に加え、2026-09-14公開Vercel HTTPSへ顧客認証・専用Neon DBを接続。[公開証跡](CUSTOMER_GOOGLE_VERCEL_VERIFICATION.md)。一般公開は未完 | Googleはテスト中・2名のまま。Branding/正式公開範囲と運営者の公開接続・権限を確定。自然な期限切れ、停止/失効、同意拒否・偽造callback・Google/DB障害、公開DBの復旧、トークン非露出を公開対象で検証。販売停止を維持 |
 | P0-23 | M/L実物・包装・配送品質 | 事業判断と実物検証待ち | 箱寸法・重量、花材/本数/量/代替、固定/保水/鮮度保持、資材/印刷/色/許諾済み写真、調達ロット/納期を確定。試作配送で品質・破損・原価を確認。案画像を実写として表示しない |
 | P0-24 | 正式画像の登録・配信 | 自作管理はUnsplashのHTTPS URLのみ許可。実装/設定待ち | 自社画像の保管先・配信・管理権限を決め、検証とNext画像設定を整合。M/Lの正式画像を登録・表示できることを確認。任意URLを無条件に許可しない |
 
