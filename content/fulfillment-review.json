@@ -67,6 +67,7 @@
     "SHIPPED": "発送済み",
     "DELIVERED": "配達済み",
     "CANCELLED": "取消済み",
-    "RETURNED": "返品済み"
+    "RETURNED": "返品済み",
+    "ON_HOLD": "保留中"
   }
 }

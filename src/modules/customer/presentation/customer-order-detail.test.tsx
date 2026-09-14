@@ -11,7 +11,7 @@ vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("NOT_FOUND
 const order: CustomerOrderDetail = { id: "sample", name: "#100", orderedAt: "2026-09-10T22:00:00Z",
   totalYen: 7500, subtotalYen: 8000, taxYen: 0, shippingYen: 0, discountYen: 500,
   payment: "PARTIALLY_REFUNDED", fulfillment: "UNKNOWN", cancelled: false,
-  items: [{ name: "<script>snapshot</script>", quantity: 2, unitYen: 4000, totalYen: 7500 }] };
+  items: [{ name: "<script>snapshot</script>", quantity: 2, unitYen: 4000, totalYen: 7500 }], shipment: null };
 afterEach(() => { vi.unstubAllEnvs(); vi.resetAllMocks(); });
 describe("customer order detail presentation", () => {
   it("renders escaped purchase snapshots and original totals without treating refunds as the net paid amount", () => {
