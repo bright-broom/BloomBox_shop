@@ -16,6 +16,7 @@ import { PostgresPurchaseIntentRepository } from "@/modules/checkout/infrastruct
 import { PostgresCheckoutBuyerWriter } from "@/modules/customer/infrastructure/postgres-checkout-buyer-writer";
 import { StripeCommerceEventProcessor } from "@/modules/payment/infrastructure/stripe-commerce-event-processor";
 import { StripeUnrecordedCheckoutRecovery, type StripeCheckoutSessionFinder } from "@/modules/payment/infrastructure/stripe-unrecorded-checkout-recovery";
+import { PostgresCommerceWorkerAttention } from "@/modules/payment/infrastructure/postgres-commerce-worker-attention";
 import { PostgresDataRetentionJob } from "@/shared/infrastructure/database/data-retention-job";
 import { AesGcmDataProtector } from "@/shared/infrastructure/security/aes-gcm-data-protector";
 import { InsufficientInventoryError } from "../public";
@@ -309,6 +310,10 @@ describeDatabase("native inventory reservations", () => {
     expect(lookups).not.toContain(paidIntent.id);
     expect(await releases(lostIntent.id)).toHaveLength(1);
     expect(await audits(paidIntent.id, "checkout.unrecorded_session.review_required")).toHaveLength(1);
+    // The unresolved review keeps the worker incident open on every later run, not only the run that found it.
+    const unresolved = await new PostgresCommerceWorkerAttention(sql).execute();
+    expect(unresolved.unrecordedCheckoutsAwaitingReview).toBeGreaterThanOrEqual(1);
+    expect(unresolved.requiresAttention).toBe(true);
     await create.execute(input(lost));
     expect(await balance(lost)).toEqual({ on_hand: 1, reserved: 1 });
   });

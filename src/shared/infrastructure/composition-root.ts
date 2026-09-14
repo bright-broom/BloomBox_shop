@@ -48,6 +48,7 @@ import {
   StripeSdkCheckoutSessionFinder,
   StripeUnrecordedCheckoutRecovery,
 } from "@/modules/payment/infrastructure/stripe-unrecorded-checkout-recovery";
+import { PostgresCommerceWorkerAttention } from "@/modules/payment/infrastructure/postgres-commerce-worker-attention";
 import { PostgresDataRetentionJob } from "./database/data-retention-job";
 import { GetOrderStatus, type OrderStatusQuery } from "@/modules/order/public";
 import { PostgresOrderStatusQuery } from "@/modules/order/infrastructure/postgres-order-status-query";
@@ -209,6 +210,13 @@ export function getStripeUnrecordedCheckoutRecovery(): StripeUnrecordedCheckoutR
     (tx) => new PostgresInventoryReservations(tx),
   );
   return stripeUnrecordedCheckoutRecovery;
+}
+
+export function getCommerceWorkerAttention(): PostgresCommerceWorkerAttention {
+  if (loadRuntimeMode() !== "production") {
+    throw new Error("Commerce worker attention is disabled");
+  }
+  return new PostgresCommerceWorkerAttention(getWorkerDatabaseClient());
 }
 
 /** Capture-only receiver; deliberately no Shopify processor is composed into the worker. */
