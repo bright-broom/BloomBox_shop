@@ -207,3 +207,11 @@ describe("production cart removal cancels the prepared purchase first", () => {
     expect(readRecoverableCart(storage)).toBeNull();
   });
 });
+
+it.each([true, false])("says a replaced completed checkout was not cancelled only when told so: %s", (previousOrderKept) => {
+  harness.cursor = 0;
+  const tree = CartPage({ added: true, checkoutCancelled: false, previewMode: false, catalogPrices: [], previousOrderKept });
+  const notice = elements(tree).some((item) => item.role === "status" && item.children === giftExperienceContent.cart.previousOrderKeptNotice);
+  expect(notice).toBe(previousOrderKept);
+  expect(readRecoverableCart(storage)).not.toBeNull();
+});
