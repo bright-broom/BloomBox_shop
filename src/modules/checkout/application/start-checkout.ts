@@ -28,6 +28,22 @@ export class CheckoutWindowExpiredError extends Error {
   }
 }
 
+/** The purchase this request prepared ended without payment (expired, cancelled, or failed). A new request may start again. */
+export class PurchaseCheckoutClosedError extends Error {
+  constructor() {
+    super("前回の購入手続きは終了しています。");
+    this.name = "PurchaseCheckoutClosedError";
+  }
+}
+
+/** Checkout for this request already finished. Starting again would risk a duplicate order. */
+export class PurchaseCheckoutCompletedError extends Error {
+  constructor() {
+    super("このご注文のお支払い手続きはすでに完了しています。");
+    this.name = "PurchaseCheckoutCompletedError";
+  }
+}
+
 export class CheckoutProviderMismatchError extends Error {
   constructor() {
     super("Checkout provider returned an inconsistent reference");
@@ -63,6 +79,10 @@ export class StartCheckout {
       return existing;
     }
 
+    // The request ID is reused by the same cart. An ended purchase is not a fault: tell the caller whether
+    // a new request may start or whether checkout already finished and must not be repeated.
+    if (intent.status === "CONVERTED") throw new PurchaseCheckoutCompletedError();
+    if (intent.status === "EXPIRED" || intent.status === "ABANDONED") throw new PurchaseCheckoutClosedError();
     if (intent.status !== "READY_FOR_CHECKOUT") throw new PurchaseIntentNotReadyError();
     const occurredAt = this.now();
     const minimumExpiry = occurredAt.getTime() + MINIMUM_CHECKOUT_WINDOW_MINUTES * 60 * 1000;

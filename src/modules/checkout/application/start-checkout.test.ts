@@ -9,7 +9,12 @@ import {
 import { giftMessage, recipientName } from "../domain/purchase-intent-policy";
 import { InMemoryPurchaseIntentRepository } from "../infrastructure/in-memory-purchase-intent-repository";
 import { CheckoutPreparationUnavailableError, type CheckoutSessionProvider } from "./checkout-session-provider";
-import { CheckoutProviderMismatchError, StartCheckout } from "./start-checkout";
+import {
+  CheckoutProviderMismatchError,
+  PurchaseCheckoutClosedError,
+  PurchaseCheckoutCompletedError,
+  StartCheckout,
+} from "./start-checkout";
 import { CheckoutPausedError } from "./checkout-paused-error";
 
 describe("StartCheckout", () => {
@@ -161,6 +166,39 @@ describe("StartCheckout", () => {
       .rejects.toBeInstanceOf(CheckoutProviderMismatchError);
     expect(provider.create).toHaveBeenCalledOnce();
     expect((await repository.findById(intent.id))?.status).toBe("READY_FOR_CHECKOUT");
+  });
+
+  it.each([
+    { status: "EXPIRED" as const, error: PurchaseCheckoutClosedError },
+    { status: "ABANDONED" as const, error: PurchaseCheckoutClosedError },
+    { status: "CONVERTED" as const, error: PurchaseCheckoutCompletedError },
+  ])("reports an ended $status purchase without contacting the provider", async ({ status, error }) => {
+    const repository = new InMemoryPurchaseIntentRepository();
+    const intent = createIntent();
+    await repository.save(intent);
+    if (status === "CONVERTED") {
+      intent.recordCheckoutCreated({ provider: "STRIPE", externalCheckoutId: "cs_test_123",
+        providerApiVersion: "2026-07-29.dahlia", occurredAt: new Date("2026-08-21T00:05:00.000Z") });
+    }
+    intent.transitionTo(status);
+    const provider = createProvider(intent.id);
+    await expect(new StartCheckout(repository, provider, () => new Date("2026-08-21T00:10:00.000Z")).execute(intent.id))
+      .rejects.toBeInstanceOf(error);
+    expect(provider.create).not.toHaveBeenCalled();
+    expect(provider.retrieve).not.toHaveBeenCalled();
+  });
+
+  it("lets the provider report an issued session that ended before its verified event was processed", async () => {
+    const repository = new InMemoryPurchaseIntentRepository();
+    const intent = createIntent();
+    await repository.save(intent);
+    intent.recordCheckoutCreated({ provider: "STRIPE", externalCheckoutId: "cs_test_123",
+      providerApiVersion: "2026-07-29.dahlia", occurredAt: new Date("2026-08-21T00:05:00.000Z") });
+    const provider = createProvider(intent.id);
+    provider.retrieve.mockRejectedValueOnce(new PurchaseCheckoutClosedError());
+    await expect(new StartCheckout(repository, provider).execute(intent.id)).rejects.toBeInstanceOf(PurchaseCheckoutClosedError);
+    expect(provider.create).not.toHaveBeenCalled();
+    expect((await repository.findById(intent.id))?.status).toBe("CHECKOUT_CREATED");
   });
 });
 

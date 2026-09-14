@@ -7,6 +7,7 @@ import { cancelPurchaseIntentAction, createPurchaseIntentAction } from "@/module
 import {
   readRecoverableCart,
   removeCart,
+  storeCart,
   storePreparedPreviewDraft,
   CartChangedError,
   type BrowserCartItem,
@@ -56,8 +57,21 @@ export function CartPage({
         recordPreviewMetric({ name: "begin_checkout", requestId: result.draft.requestId });
         router.push("/checkout/test");
       }
+      const submittedRequestId = formData.get("requestId");
+      if ((result.restart || result.completed) && typeof submittedRequestId === "string") {
+        if (result.restart) {
+          // The prepared purchase ended without payment. Keep the gift, but let the next attempt start a new purchase.
+          const current = readRecoverableCart(window.sessionStorage);
+          if (current) storeCart(window.sessionStorage, { ...current, requestId: crypto.randomUUID() }, submittedRequestId);
+        } else {
+          // Checkout already finished for this cart. Clear it so that it cannot start a duplicate order.
+          setRemovalNotice(giftExperienceContent.cart.orderAlreadyCompleted);
+          removeCart(window.sessionStorage, submittedRequestId);
+        }
+      }
       return result;
     } catch (error) {
+      setRemovalNotice(null);
       return { error: error instanceof CartChangedError ? error.message : "購入手続きを進められませんでした。入力内容はカートに残っています。同じ操作を再試行してください。" };
     }
   }, {});

@@ -74,3 +74,24 @@ The cart catches both sessionStorage property denial and removeItem exceptions, 
 Verification: four storage fault cases reproduced failures before the fix. Eight added regression cases cover all four deletion positions, retry and repeated cleanup, approval invalidation, subscriber notification, unchanged receipt data, property denial, generic feedback and the pending guard. `pnpm check:ci` passed: 783 tests passed, 138 external/DB-dependent tests skipped; static checks and production build passed. Local Chrome confirmed M gift → JPY 5,000 cart → remove → empty cart and header count zero. Storage fault injection and pending behavior were verified in tests, not by changing real browser settings. The new error state has not been visually checked on mobile; no real payment or Shopify E2E was performed.
 
 Rollback: revert this focused removal change. Storage v1, environment variables and database schemas are unchanged. Data already removed cannot be restored by rollback. The initial-read recovery change remains a prerequisite when these changes are reviewed as stacked PRs.
+
+## 終了済みの購入からの再開 — 2026-09-14
+
+本番経路では、カートの要求IDが購入準備のIDになり、同じIDの再送は保存済みの購入準備を返します。そのため、次の場合に「購入手続きへ」を押すと、決済を開始できずに想定外エラーとエラーIDだけが表示されていました。
+
+- Stripeの決済画面から戻ったまま期限が切れた。
+- カートを取り消した後、保存に失敗した。
+- 支払い完了後もカートが残っていた。
+
+決済開始は、次の2つを型付きの結果として区別します。
+
+- **終了済み**：期限切れ・取消・支払失敗のいずれか、決済期限の直前、またはStripe上で失効済みの決済画面。カートはお届け内容を保ったまま要求IDだけを新しくし、もう一度押すよう案内する。次の操作は、最新の在庫と価格で新しい購入準備を作る。
+- **支払手続き完了済み**：注文確定済み、またはStripe上で完了済みの決済画面。重複注文を防ぐためカートを空にし、理由を表示する。
+
+どちらも障害ではないため、エラーとしては記録しません。同じ要求IDが別の内容で使われた場合も、業務上の案内として返します。処理中に別タブがカートを置き換えていた場合は、書き換えも削除もしません。在庫の解放は、引き続き署名検証済みの期限切れ通知だけで行います。
+
+Stripe上で失効していても期限切れ通知の処理が遅れている間は、前の予約が数分残ることがあります。この間に新しい購入準備を作ると、同じ顧客の予約が一時的に2つになります。前の予約は通知の処理で解放されます。
+
+検証：決済開始、Stripeの再取得、サーバーアクション、カートの単体試験を追加しました。実Stripeでの通し確認は、他の決済検証と同じく未実施です。
+
+戻し方：この変更をrevertすると、終了済みの購入に紐付いたカートは再び想定外エラーになります。DB、環境変数、保存形式v1は変わりません。
