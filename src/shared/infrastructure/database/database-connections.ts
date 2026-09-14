@@ -1,4 +1,4 @@
-import { loadCustomerSupportDatabaseConfig, loadCatalogManagerDatabaseConfig, loadDatabaseConfig, loadWorkerDatabaseConfig, loadOperatorDatabaseConfig, loadPermissionManagerDatabaseConfig } from "../config/database-config";
+import { loadCustomerSupportDatabaseConfig, loadCatalogManagerDatabaseConfig, loadDatabaseConfig, loadWorkerDatabaseConfig, loadOperatorDatabaseConfig, loadPermissionManagerDatabaseConfig, loadNativeFulfillmentDatabaseConfig } from "../config/database-config";
 import { createPostgresClient, type DatabaseClient } from "./postgres-client";
 
 let applicationClient: DatabaseClient | undefined;
@@ -36,4 +36,10 @@ let customerSupportClient: DatabaseClient | undefined;
 export function getCustomerSupportDatabaseClient(): DatabaseClient {
   customerSupportClient ??= createPostgresClient(loadCustomerSupportDatabaseConfig());
   return customerSupportClient;
+}
+
+let nativeFulfillmentClient: DatabaseClient | undefined;
+export function getNativeFulfillmentDatabaseClient(): DatabaseClient {
+  nativeFulfillmentClient ??= createPostgresClient(loadNativeFulfillmentDatabaseConfig());
+  return nativeFulfillmentClient;
 }

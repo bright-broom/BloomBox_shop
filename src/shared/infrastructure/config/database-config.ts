@@ -67,3 +67,7 @@ export function loadCatalogManagerDatabaseConfig(environment: Readonly<Record<st
 export function loadCustomerSupportDatabaseConfig(environment: Readonly<Record<string, string | undefined>> = process.env): DatabaseConfig {
   return loadDatabaseConfig({ ...environment, DATABASE_URL: environment.DATABASE_CUSTOMER_SUPPORT_URL });
 }
+
+export function loadNativeFulfillmentDatabaseConfig(environment: Readonly<Record<string, string | undefined>> = process.env): DatabaseConfig {
+  return loadDatabaseConfig({ ...environment, DATABASE_URL: environment.DATABASE_NATIVE_FULFILLMENT_URL });
+}

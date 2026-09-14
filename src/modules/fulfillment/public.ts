@@ -61,3 +61,20 @@ export { PERMISSION_REVOCATION_REASONS, type PermissionRevocationReason } from "
 export { OPERATOR_PERMISSION_PAGE_SIZE, type OperatorPermissionListRequest, type OperatorPermissionList,
   type OperatorPermissionQuery } from "./application/read-operator-permissions";
 export { type PermissionManagementPage, type PermissionManagementState } from "./presentation/permission-management-state";
+
+// Native (Stripe) order fulfillment operations. ADR 0015.
+export {
+  NATIVE_CARRIER_CODES, NATIVE_FULFILLMENT_ACTIONS, NATIVE_FULFILLMENT_CANCEL_REASONS, NATIVE_FULFILLMENT_ERROR_CODES,
+  NATIVE_FULFILLMENT_HOLD_REASONS, NativeFulfillmentError, TRACKING_NUMBER_MAX_LENGTH, TRACKING_NUMBER_MIN_LENGTH,
+  type NativeCarrierCode, type NativeFulfillmentAction, type NativeFulfillmentCancelReason, type NativeFulfillmentCommand,
+  type NativeFulfillmentDecision, type NativeFulfillmentErrorCode, type NativeFulfillmentFacts, type NativeFulfillmentHoldReason,
+  type NativeShipmentEffect,
+} from "./domain/native-fulfillment";
+export { decideNativeFulfillment, normalizeTrackingNumber } from "./domain/native-fulfillment-policy";
+export {
+  NATIVE_FULFILLMENT_HISTORY_LIMIT, NATIVE_FULFILLMENT_PAGE_SIZE,
+  type NativeFulfillmentActor, type NativeFulfillmentChange, type NativeFulfillmentDestination, type NativeFulfillmentDetail,
+  type NativeFulfillmentHistoryEntry, type NativeFulfillmentListQuery, type NativeFulfillmentPage, type NativeFulfillmentReceipt,
+  type NativeFulfillmentRecordedChange, type NativeFulfillmentStore, type NativeFulfillmentSummary, type NativeShipment,
+} from "./application/manage-native-fulfillment";
+export { ApplyNativeFulfillmentCommand } from "./application/apply-native-fulfillment-command";
