@@ -30,6 +30,10 @@
 
 根拠：[2顧客の表示分離](CUSTOMER_ORDER_ISOLATION_VERIFICATION.md)、[商品管理接続](NATIVE_CATALOG_CONNECTION_VERIFICATION.md)、[在庫](NATIVE_INVENTORY.md)、[送料](PURCHASE_SHIPPING.md)、[画面検証](../design/VERIFICATION.md)。古い各機能文書の「未確認」は後続の検証記録と照合する。
 
+## 会員ランクと購入履歴（2026-09-14）
+
+ユーザーはランク別自動割引を選択済み。[ADR 0013](../architecture/adr/0013-customer-rank-discounts.md) と [検証・導入記録](CUSTOMER_LOYALTY.md) を参照。履歴の商品表示、全件の確定商品購入実績、0/2/3/5%のランク先行案、割引固定、Stripe照合を実装。0025 migrationが必要。実Google/Stripeの割引E2Eと料率/条件の確定は残る。紹介Test Modeとは別で、本番受付停止を維持する。
+
 ## 本番販売は停止中
 
 - [activation設定](../../config/production-commerce-activation.json) は `blocked`、証跡8項目は未完了。[案内コンテンツ](../../content/storefront.json) は `draft`。

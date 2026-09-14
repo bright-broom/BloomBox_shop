@@ -1,3 +1,4 @@
+import { restoreLoyaltyQuote } from "@/modules/customer/public";
 import { InventoryUnavailableError, InsufficientInventoryError, type InventoryReservations } from "@/modules/inventory/public";
 import { PurchaseCancellationUnavailableError } from "../application/cancel-purchase-intent";
 import { randomUUID } from "node:crypto";
@@ -30,6 +31,8 @@ const persistedIntentSchema = z.object({
   currency: z.literal("JPY"),
   subtotal_minor: z.union([z.string(), z.number(), z.bigint()]),
   shipping_minor: z.union([z.string(), z.number(), z.bigint()]).nullable().default(null),
+  loyalty_snapshot: z.unknown().default(null),
+  loyalty_discount_minor: z.coerce.number().int().nonnegative().safe().default(0),
   delivery_date: z.string(),
   pii_key_id: z.string().min(1).nullable(),
   recipient_ciphertext: z.instanceof(Buffer).nullable(),
@@ -87,12 +90,12 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
         }
         await transaction`
           INSERT INTO bloombox.purchase_intents (
-            id, display_id, status, currency, subtotal_minor, shipping_minor, delivery_date, customer_id, customer_version,
+            id, display_id, status, currency, subtotal_minor, shipping_minor, loyalty_snapshot, loyalty_discount_minor, delivery_date, customer_id, customer_version,
             pii_key_id, recipient_ciphertext, gift_message_ciphertext,
             version, created_at, updated_at, expires_at, pii_retention_expires_at
           ) VALUES (
             ${intent.id}, ${intent.displayId}, ${intent.status}, ${intent.item.subtotal.currency},
-            ${intent.item.subtotal.amount}, ${intent.shippingAmount?.amount ?? null}, ${intent.recipient.deliveryDate}, ${intent.customer?.customerId ?? null}, ${intent.customer?.version ?? null}, ${recipient.keyId},
+            ${intent.item.subtotal.amount}, ${intent.shippingAmount?.amount ?? null}, ${intent.loyalty ? transaction.json(intent.loyalty) : null}, ${intent.loyalty?.discountYen ?? 0}, ${intent.recipient.deliveryDate}, ${intent.customer?.customerId ?? null}, ${intent.customer?.version ?? null}, ${recipient.keyId},
             ${recipient.ciphertext}, ${giftMessagePayload.ciphertext}, 1,
             ${intent.createdAt}, ${intent.createdAt}, ${intent.expiresAt},
             ${intent.piiRetentionExpiresAt}
@@ -143,6 +146,8 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
         intent.currency,
         intent.subtotal_minor,
         intent.shipping_minor,
+        intent.loyalty_snapshot,
+        intent.loyalty_discount_minor,
         intent.delivery_date::text,
         intent.pii_key_id,
         intent.recipient_ciphertext,
@@ -188,7 +193,10 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
       giftMessageContext(id),
     );
 
+    const loyalty = row.data.loyalty_snapshot === null ? null : restoreLoyaltyQuote(row.data.loyalty_snapshot, toSafeInteger(row.data.subtotal_minor));
+    if ((loyalty?.discountYen ?? 0) !== row.data.loyalty_discount_minor) throw new PurchaseIntentPersistenceError();
     return PurchaseIntent.restore({
+      loyalty,
       id: purchaseIntentId(row.data.id),
       displayId: row.data.display_id,
       status: row.data.status,

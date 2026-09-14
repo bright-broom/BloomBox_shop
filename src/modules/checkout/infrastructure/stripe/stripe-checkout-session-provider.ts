@@ -84,7 +84,7 @@ export class StripeCheckoutSessionProvider implements CheckoutSessionProvider {
       externalProductReference: intent.item.externalProductReference,
       productName: intent.item.productName,
       quantity: intent.item.quantity,
-      unitAmount: intent.item.unitPriceSnapshot.amount,
+      unitAmount: intent.item.unitPriceSnapshot.amount - (intent.loyalty?.discountYen ?? 0),
       shippingAmount: intent.shippingAmount?.amount,
       currency: intent.item.unitPriceSnapshot.currency,
       expiresAt: intent.expiresAt,

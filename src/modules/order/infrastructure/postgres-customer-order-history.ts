@@ -7,6 +7,7 @@ const cursorSchema = z.object({ createdAt: z.iso.datetime(), id: z.uuid() }).str
 const rowSchema = z.object({ id: z.uuid(), display_id: z.string().min(1).max(100), created_at: z.string(),
   currency: z.literal("JPY"), total_minor: z.coerce.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   status: z.enum(["PENDING_CONFIRMATION", "CONFIRMED", "CANCELLED", "CLOSED"]),
+  items: z.array(z.object({ name: z.string().min(1), quantity: z.number().int().positive() })).default([]),
   payment_states: z.array(z.string()).nullable(), fulfillment_states: z.array(z.string()).nullable() });
 const yen = z.coerce.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const detailSchema = rowSchema.extend({ subtotal_minor: yen, tax_minor: yen, shipping_minor: yen, discount_minor: yen,
@@ -48,7 +49,9 @@ export class PostgresCustomerOrderHistory implements CustomerOrderHistoryQuery, 
       const cursor = after === null ? null : cursorSchema.parse(JSON.parse(Buffer.from(after, "base64url").toString("utf8")));
       const rows = await this.sql`SELECT orders.id, orders.display_id, orders.currency, orders.total_minor, orders.status,
           to_char(orders.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
-          payment.states AS payment_states, fulfillment.states AS fulfillment_states
+          payment.states AS payment_states, fulfillment.states AS fulfillment_states,
+          coalesce((SELECT jsonb_agg(jsonb_build_object('name', item.product_name_snapshot, 'quantity', item.quantity)
+            ORDER BY item.position) FROM bloombox.order_items item WHERE item.order_id = orders.id), '[]'::jsonb) AS items
         FROM bloombox.orders orders JOIN bloombox.buyers buyer ON buyer.id = orders.buyer_id
         JOIN bloombox.customer_accounts customer ON customer.id = buyer.customer_id AND customer.status = 'ACTIVE'
         LEFT JOIN LATERAL (SELECT array_agg(DISTINCT status) AS states FROM bloombox.payments WHERE order_id = orders.id) payment ON TRUE
@@ -60,7 +63,7 @@ export class PostgresCustomerOrderHistory implements CustomerOrderHistoryQuery, 
       const page = values.slice(0, 10);
       const last = page.at(-1);
       return { orders: page.map((row) => ({ id: row.id, name: row.display_id, orderedAt: cursorSchema.shape.createdAt.parse(row.created_at),
-        totalYen: row.total_minor, cancelled: row.status === "CANCELLED",
+        totalYen: row.total_minor, items: row.items, cancelled: row.status === "CANCELLED",
         payment: onlyState(row.payment_states), fulfillment: onlyState(row.fulfillment_states) })),
         nextCursor: values.length > 10 && last ? Buffer.from(JSON.stringify({ createdAt: last.created_at, id: last.id })).toString("base64url") : null };
     } catch { throw new CustomerOrderHistoryUnavailableError(); }

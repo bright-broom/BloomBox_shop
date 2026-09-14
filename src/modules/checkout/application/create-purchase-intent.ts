@@ -1,3 +1,5 @@
+import { quoteLoyalty, LoyaltyUnavailableError } from "@/modules/customer/public";
+import type { CustomerPurchasePerformance } from "@/modules/order/public";
 import { anonymousPurchaseCustomer, type CurrentPurchaseCustomer } from "./current-purchase-customer";
 import { purchaseCustomer, assertPurchaseCustomer, type PurchaseCustomer } from "../domain/purchase-customer";
 import { productId, type ProductRepository } from "@/modules/catalog/public";
@@ -44,6 +46,7 @@ export class CreatePurchaseIntent {
     private readonly now: () => Date = () => new Date(),
     private readonly acceptsNewCheckout: () => boolean = () => true,
     private readonly currentCustomer: CurrentPurchaseCustomer = anonymousPurchaseCustomer,
+    private readonly performance?: CustomerPurchasePerformance,
   ) {}
 
   async execute(input: CreatePurchaseIntentInput): Promise<PurchaseIntent> {
@@ -73,6 +76,13 @@ export class CreatePurchaseIntent {
 
     const createdAt = this.now();
     assertAvailableDeliveryDate(input.deliveryDate, createdAt);
+    const subtotal = multiplyMoney(product.price, normalizedQuantity);
+    let loyalty = null;
+    if (customer && product.id.startsWith("native_")) {
+      if (!this.performance) throw new LoyaltyUnavailableError();
+      try { loyalty = quoteLoyalty(await this.performance.readEligibleSpend(customer.customerId), subtotal.amount); }
+      catch { throw new LoyaltyUnavailableError(); }
+    }
     const intent = PurchaseIntent.create({
       id,
       displayId: createDisplayId(createdAt, id),
@@ -82,7 +92,7 @@ export class CreatePurchaseIntent {
         productName: product.name,
         quantity: normalizedQuantity,
         unitPriceSnapshot: product.price,
-        subtotal: multiplyMoney(product.price, normalizedQuantity),
+        subtotal,
       },
       recipient: {
         name: normalizedRecipientName,
@@ -91,6 +101,7 @@ export class CreatePurchaseIntent {
       giftMessage: normalizedGiftMessage,
       createdAt,
       customer,
+      loyalty,
       shippingAmount: shippingAmount === undefined ? null : quotePurchaseShipping(shippingAmount, normalizedQuantity),
     });
 

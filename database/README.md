@@ -68,3 +68,7 @@ Migration 0021 adds Inventory-owned stock, reservations and movement history. Ap
 ### 0022: 自作商品・在庫の運営管理
 
 `0022_native_catalog_management.sql` と `roles.sql` で、期限付きの管理権限、商品変更履歴、在庫補充・訂正履歴、専用ロールを追加します。`DATABASE_CATALOG_MANAGER_URL` は `bloombox_catalog_manager` を付与した専用ログインを使用し、オーナー・通常アプリ・決済ワーカーの接続を流用しません。権限や商品・数量の初期値を自動登録しません。手順と復旧は [商品・在庫管理](../docs/operations/NATIVE_CATALOG_MANAGEMENT.md) を参照してください。
+
+### 0025: 会員割引の購入時スナップショット
+
+`0025_customer_loyalty_snapshot.sql` は `purchase_intents.loyalty_snapshot`（JSON: version/tier/eligibleSpendYen/basisPoints/discountYen）と `loyalty_discount_minor`（bigint）を追加。NULL/0は既存取引または割引対象外で、実績不足と障害を同一視しません。v1規則・本人紐付け・送料確定・額の整合性を制約で確認し、保存後はトリガーで変更禁止。ロール追加なし。実績はOrder側の読み取りから計算し、ポイント財布や別の集計テーブルは作りません。アプリ/worker配備より前に適用し、戻す際も割引済み取引を処理できるworkerとmigrationを保持します。[運用・検証](../docs/operations/CUSTOMER_LOYALTY.md)。

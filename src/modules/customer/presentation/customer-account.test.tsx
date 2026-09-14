@@ -3,12 +3,21 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { CustomerAccountPanel } from "@/ui/customer-account";
 import { customerAccountContent as copy } from "@/shared/infrastructure/content/customer-account-content";
 import AccountPreview from "@/app/preview/account/page";
+import { loyaltyProgress } from "../public";
 import type { CustomerAccount } from "../public";
 vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("NOT_FOUND"); } }));
 const account: CustomerAccount = { name: "Synthetic customer", email: "sample@example.test", nextCursor: "next/page=",
   orders: [{ id: "sample", name: "#100", orderedAt: "2026-09-10T22:00:00Z", totalYen: 5000, payment: "PAID", fulfillment: "UNFULFILLED", cancelled: false }] };
 afterEach(() => vi.unstubAllEnvs());
 describe("native customer account presentation", () => {
+  it("shows the current benefit and accessible progress, with no invented benefit on failure", () => {
+    const html = renderToStaticMarkup(<CustomerAccountPanel state={{ status: "ready", account, loyalty: { status: "ready", progress: loyaltyProgress(12000) } }} />);
+    for (const value of ["SPROUT", "18,000", "<progress", "aria-current=\"step\"", copy.loyalty.pilot]) expect(html).toContain(value);
+    const top = renderToStaticMarkup(<CustomerAccountPanel state={{ status: "ready", account, loyalty: { status: "ready", progress: loyaltyProgress(60000) } }} />);
+    expect(top).toContain(copy.loyalty.topRank);
+    const unavailable = renderToStaticMarkup(<CustomerAccountPanel state={{ status: "ready", account, loyalty: { status: "unavailable" } }} />);
+    expect(unavailable).toContain(copy.loyalty.unavailable); expect(unavailable).toContain("#100"); expect(unavailable).not.toContain("<progress");
+  });
   it("renders order and profile data, Japan dates, and a cursor-only pagination link", () => {
     const html = renderToStaticMarkup(<CustomerAccountPanel state={{ status: "ready", account }} />);
     for (const expected of ["#100", "5,000", "2026/09/11", "sample@example.test", "お支払い済み", "未発送", "/account?after=next%2Fpage%3D"]) expect(html).toContain(expected);

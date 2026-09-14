@@ -41,6 +41,10 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "no-referrer" },
         ],
       },
+      { source: "/cart", headers: [
+        { key: "Cache-Control", value: "private, no-store, max-age=0" },
+        { key: "Referrer-Policy", value: "same-origin" },
+      ] },
       ...["/operations/:path*", "/api/operator-auth/:path*"].map((source) => ({ source, headers: [
         { key: "Content-Security-Policy", value: "base-uri 'self'; form-action 'self' https://accounts.google.com; frame-ancestors 'none'; object-src 'none'" },
         { key: "Cache-Control", value: "private, no-store, max-age=0" },

@@ -1,3 +1,4 @@
+import { CustomerLoyaltyPanel } from "./customer-loyalty";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import type { CustomerAccountState } from "@/shared/infrastructure/customer-account";
@@ -12,9 +13,11 @@ export function CustomerAccountPanel({ state, controls, loginError = false, prev
     {preview ? <aside className="account-notice"><strong>{copy.previewTitle}</strong><p>{copy.previewNote}</p></aside> : null}
     <div className="account-layout">
       <nav className="account-navigation" aria-label={copy.title}>
+        {state.status === "ready" && state.loyalty ? <a href="#account-loyalty">{copy.loyalty.eyebrow}</a> : null}
         <a href="#account-orders">{copy.ordersTitle}</a><a href="#account-profile">{copy.profileTitle}</a><a href="#account-support">{copy.support}</a>
       </nav>
       <div className="account-content">
+        {state.status === "ready" && state.loyalty ? <CustomerLoyaltyPanel state={state.loyalty} /> : null}
         {state.status !== "ready" ? <section className="account-welcome" id="account-orders">
           <h2>{state.status === "disabled" ? copy.disabledTitle : copy.loginTitle}</h2>
           <p>{state.status === "disabled" ? copy.disabledNote : copy.loginNote}</p>
@@ -30,6 +33,7 @@ export function CustomerAccountPanel({ state, controls, loginError = false, prev
             : <><ol className="account-order-list">{state.account.orders.map((order) => <li key={order.id}>
               <div className="account-order-heading"><h3>{copy.orderNumber} {order.name}</h3>
                 <time dateTime={order.orderedAt}>{new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", dateStyle: "medium" }).format(new Date(order.orderedAt))}</time></div>
+              {order.items?.length ? <ul className="account-order-products">{order.items.map((item, index) => <li key={index}>{item.name} × {item.quantity}</li>)}</ul> : null}
               {order.cancelled ? <p className="account-status">{copy.cancelled}</p> : null}
               <dl className="account-order-facts"><div><dt>{copy.total}</dt><dd>{formatMoney(money(order.totalYen))}</dd></div>
                 <div><dt>{copy.payment}</dt><dd>{Object.hasOwn(copy.payments, order.payment) ? copy.payments[order.payment] : copy.payments.UNKNOWN}</dd></div>
