@@ -23,6 +23,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_catalog_manager') THEN
     CREATE ROLE bloombox_catalog_manager NOLOGIN;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_customer_support') THEN
+    CREATE ROLE bloombox_customer_support NOLOGIN;
+  END IF;
 END
 $$;
 
@@ -164,3 +167,13 @@ GRANT SELECT ON bloombox.inventory_stock TO bloombox_catalog_manager;
 GRANT INSERT (product_id, on_hand) ON bloombox.inventory_stock TO bloombox_catalog_manager;
 GRANT UPDATE (on_hand, version) ON bloombox.inventory_stock TO bloombox_catalog_manager;
 GRANT SELECT, INSERT ON bloombox.catalog_changes, bloombox.inventory_adjustments TO bloombox_catalog_manager;
+
+-- Support can inspect customer/account and order summaries, never identity or recipient payloads.
+GRANT USAGE ON SCHEMA bloombox TO bloombox_customer_support;
+GRANT EXECUTE ON FUNCTION bloombox.lock_customer_support_operator(uuid) TO bloombox_customer_support;
+GRANT SELECT (id, status, created_at) ON bloombox.customer_accounts TO bloombox_customer_support;
+GRANT SELECT (id, customer_id) ON bloombox.buyers TO bloombox_customer_support;
+GRANT SELECT (id, display_id, buyer_id, status, commerce_provider, currency, total_minor, created_at)
+  ON bloombox.orders TO bloombox_customer_support;
+GRANT SELECT (order_id, status) ON bloombox.payments, bloombox.fulfillments TO bloombox_customer_support;
+GRANT INSERT ON bloombox.customer_support_accesses TO bloombox_customer_support;

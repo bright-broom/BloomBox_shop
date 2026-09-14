@@ -582,3 +582,8 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
 .catalog-management-card summary { cursor: pointer; padding-block: var(--space-4); }
 .catalog-stock-summary { display: flex; flex-wrap: wrap; gap: var(--space-6); }
 .catalog-stock-summary dd { margin: 0; font-weight: 600; }
+
+.customer-management-page { max-width: var(--reading-max); }
+.customer-management-search { display: grid; gap: var(--space-5); margin-block: var(--space-6); }
+.customer-management-search input, .customer-management-search select { width: 100%; min-width: 0; }
+.customer-management-id { overflow-wrap: anywhere; font-size: var(--text-body); }
