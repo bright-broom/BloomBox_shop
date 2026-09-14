@@ -403,16 +403,30 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
         WHERE intent.id = ${purchaseIntentId} FOR UPDATE OF intent`;
       const row = rows[0];
       if (!row) throw new StripeCommerceEventDependencyError();
-      if (row.commerce_provider !== "STRIPE" || row.external_checkout_id !== event.externalObjectId) throw new InvalidStripeCommerceEventError();
-      if (row.status === status || row.status === "CONVERTED") return;
-      if (row.status !== "CHECKOUT_CREATED") throw new InvalidStripeCommerceEventError();
+      if (row.commerce_provider !== "STRIPE") throw new InvalidStripeCommerceEventError();
+      const unrecordedCheckout = row.external_checkout_id === null;
+      if (unrecordedCheckout) {
+        // Stripe was selected before the network call, but the creation response was lost, so no session ID was saved.
+        // The checkout URL never reached the customer, so only expiry can end such a session. A signed expiry event for
+        // a session carrying this purchase reference is Stripe's authoritative evidence that it ended unpaid (ADR 0010).
+        // Payment and payment-failure events still require the saved session ID.
+        if (status !== "EXPIRED") throw new InvalidStripeCommerceEventError();
+        if (row.status === "EXPIRED") return;
+        if (row.status !== "READY_FOR_CHECKOUT") throw new InvalidStripeCommerceEventError();
+      } else {
+        if (row.external_checkout_id !== event.externalObjectId) throw new InvalidStripeCommerceEventError();
+        if (row.status === status || row.status === "CONVERTED") return;
+        if (row.status !== "CHECKOUT_CREATED") throw new InvalidStripeCommerceEventError();
+      }
       if (String(row.catalog_product_id).startsWith("native_")) {
         if (!this.inventory) throw new InventoryUnavailableError();
         await this.inventory(transaction).release(purchaseIntentId, status === "EXPIRED" ? "CHECKOUT_EXPIRED" : "PAYMENT_FAILED", event.occurredAt);
       }
+      // An unrecorded checkout keeps its reference columns empty, which the checkout-field constraint allows for EXPIRED.
       await transaction`UPDATE bloombox.purchase_intents SET status = ${status}, version = version + 1, updated_at = ${event.occurredAt}
         WHERE id = ${purchaseIntentId}`;
-      await insertAudit(transaction, this.createId(), event, `checkout.${status.toLowerCase()}`, purchaseIntentId);
+      await insertAudit(transaction, this.createId(), event,
+        unrecordedCheckout ? "checkout.expired.unrecorded_session" : `checkout.${status.toLowerCase()}`, purchaseIntentId);
     });
   }
 

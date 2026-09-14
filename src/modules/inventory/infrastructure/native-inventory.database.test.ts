@@ -222,6 +222,37 @@ describeDatabase("native inventory reservations", () => {
     expect(await balance(id)).toEqual({ on_hand: 1, reserved: 0 });
   });
 
+  it("releases a checkout whose creation result was lost only on Stripe's verified expiry event for that purchase", async () => {
+    const id = await stock(1), intent = await create.execute(input(id));
+    // Stripe was selected before the call; the session may exist, but its ID was never saved.
+    await repo.claimCommerceProvider(intent.id, "STRIPE");
+    const checkoutId = `cs_test_${intent.id.replaceAll("-", "")}`;
+    const expired = {
+      provider: "STRIPE" as const, providerAccountId: "acct_example", externalEventId: `evt_${randomUUID()}`,
+      eventType: "checkout.session.expired", externalObjectId: checkoutId, apiVersion: "test", occurredAt: now(),
+      payload: { objectType: "checkout_session", id: checkoutId, purchaseIntentId: intent.id, paymentIntentId: null,
+        paymentStatus: "unpaid", checkoutStatus: "expired", amountTotal: intent.item.subtotal.amount, amountSubtotal: intent.item.subtotal.amount,
+        currency: "jpy", totalDetails: { amount_discount: 0, amount_shipping: 0, amount_tax: 0 }, customerId: null, customerDetails: null, collectedInformation: null },
+    };
+    await expect(processor.process({ ...expired, externalEventId: `evt_${randomUUID()}`, eventType: "checkout.session.async_payment_failed",
+      payload: { ...expired.payload, checkoutStatus: "complete" } })).rejects.toThrow();
+    await expect(processor.process({ ...expired, externalEventId: `evt_${randomUUID()}`, eventType: "checkout.session.completed",
+      payload: { ...expired.payload, paymentStatus: "paid", checkoutStatus: "complete", paymentIntentId: `pi_${intent.id}` } })).rejects.toThrow();
+    const unassigned = await create.execute(input(await stock(1)));
+    await expect(processor.process({ ...expired, externalEventId: `evt_${randomUUID()}`,
+      payload: { ...expired.payload, purchaseIntentId: unassigned.id } })).rejects.toThrow();
+    expect(await balance(id)).toEqual({ on_hand: 1, reserved: 1 });
+    expect((await repo.findById(intent.id))?.status).toBe("READY_FOR_CHECKOUT");
+
+    await Promise.all([processor.process(expired), processor.process({ ...expired, externalEventId: `evt_${randomUUID()}` })]);
+    expect(await balance(id)).toEqual({ on_hand: 1, reserved: 0 });
+    expect((await repo.findById(intent.id))?.status).toBe("EXPIRED");
+    expect(await sql`SELECT id FROM bloombox.inventory_movements WHERE purchase_intent_id = ${intent.id} AND kind = 'RELEASED'`).toHaveLength(1);
+    expect(await sql`SELECT id FROM bloombox.audit_logs WHERE resource_id = ${intent.id} AND action = 'checkout.expired.unrecorded_session'`).toHaveLength(1);
+    await create.execute(input(id));
+    expect(await balance(id)).toEqual({ on_hand: 1, reserved: 1 });
+  });
+
   it("closes an issued checkout on customer cancellation but releases only on the verified expiry event", async () => {
     const id = await stock(1), intent = await create.execute(input(id)), expired = await event(intent, "checkout.session.expired");
     const expire = vi.fn<CheckoutSessionCanceller["expire"]>().mockResolvedValue("EXPIRED");
