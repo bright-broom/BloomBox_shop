@@ -11,16 +11,24 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-
-export const metadata: Metadata = { robots: { index: false, follow: false } };
+import { cache } from "react";
 
 type GiftPageProps = {
   params: Promise<{ productId: string }>;
 };
 
+const getGiftProduct = cache((rawProductId: string) => application.getProduct.byId(productId(rawProductId)));
+
+export async function generateMetadata({ params }: GiftPageProps): Promise<Metadata> {
+  const { productId: rawProductId } = await params;
+  const product = await getGiftProduct(rawProductId);
+  // Each purchase step needs its own title; the site default gave this page the same title as the home page.
+  return { title: product ? `${product.name}のギフト設定` : "ギフトの設定", robots: { index: false, follow: false } };
+}
+
 export default async function GiftPage({ params }: GiftPageProps) {
   const { productId: rawProductId } = await params;
-  const product = await application.getProduct.byId(productId(rawProductId));
+  const product = await getGiftProduct(rawProductId);
   if (!product) notFound();
   const sizeProducts = product.previewOffer ? (await application.listProducts.execute()).filter((candidate) => candidate.previewOffer?.family === product.previewOffer?.family) : [];
   const sizeOptions = sizeProducts.map((candidate) => ({ id: candidate.id, name: candidate.name, size: candidate.previewOffer!.size, price: candidate.price, shippingAmount: candidate.previewOffer!.shippingAmount }));

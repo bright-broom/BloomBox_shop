@@ -49,12 +49,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="ja">
       <body className={sans.variable}>
         <a className="skip-link" href="#main-content">本文へ移動</a>
-        <div className="service-bar" aria-label="BloomBox のサービス情報">
+        {/* A labelled landmark, so the service and preview notice is reachable by landmark navigation. */}
+        <aside className="service-bar" aria-label="BloomBox のサービス情報">
           {(loadRuntimeMode() === "preview"
             ? [siteContent.previewServiceMessage, ...siteContent.serviceMessages.slice(1)]
             : siteContent.serviceMessages
           ).map((message) => <span key={message}>{message}</span>)}
-        </div>
+        </aside>
         <header className="site-header">
           <Link className="brand" href="/" aria-label="BloomBox ホーム">
             <span>{siteContent.brandName}</span>
@@ -82,7 +83,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </Link>
           </div>
         </header>
-        <main id="main-content">{children}</main>
+        {/* tabIndex -1 lets the skip link move focus into the content, not just scroll, including in Safari. */}
+        <main id="main-content" tabIndex={-1}>{children}</main>
         <footer className="site-footer">
           <div>
             <Link className="brand brand-light" href="/">

@@ -84,6 +84,8 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .skip-link { position: fixed; z-index: 100; top: var(--space-3); left: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--paper); border: 1px solid var(--ink); transform: translateY(-160%); }
 .skip-link:focus { transform: translateY(0); }
+/* The skip link moves focus into main; the whole content region should not draw a focus ring. */
+main[tabindex="-1"]:focus { outline: none; }
 .section-shell { width: 100%; max-width: var(--page-max); margin-inline: auto; padding-inline: var(--page-gutter); }
 .eyebrow { margin: 0 0 var(--space-4); font-size: var(--text-meta); font-weight: 500; line-height: 1.5; letter-spacing: .12em; text-transform: uppercase; }
 .primary-button, .secondary-button, .header-cta { min-height: var(--control-height); padding: var(--space-3) var(--space-5); display: inline-flex; align-items: center; justify-content: center; gap: var(--space-5); border: 1px solid transparent; border-radius: var(--radius-pill); font-size: var(--text-small); font-weight: 500; line-height: 1.5; text-align: center; cursor: pointer; transition: background var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast); }
