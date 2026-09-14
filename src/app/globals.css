@@ -48,6 +48,10 @@
   --space-8: 64px;
   --space-section: 120px;
   --ratio-golden: 1.618;
+  --account-gap: var(--space-5);
+  --account-inset: calc(var(--account-gap) / var(--ratio-golden));
+  --account-section-space: calc(var(--account-gap) * var(--ratio-golden));
+  --account-main-column: 1.618fr;
   --package-note-space-before: var(--space-5);
   --package-note-space-after: calc(var(--package-note-space-before) * var(--ratio-golden));
   --page-gutter: 48px;
@@ -564,6 +568,104 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
 .account-notice { padding: var(--space-5); background: var(--surface); margin-bottom: var(--space-7); }
 .account-notice p { margin-bottom: 0; }
 .account-status { color: var(--ink-soft); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.account-icon { width: 20px; height: 20px; flex: 0 0 auto; vertical-align: middle; }
+.account-dashboard { padding-block: var(--account-section-space); }
+.account-dashboard .account-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--account-gap); }
+.account-dashboard .account-heading .eyebrow { margin: 0 0 var(--space-2); }
+.account-dashboard .account-heading h1 { font-size: var(--text-section); margin: 0; }
+.account-dashboard .account-heading .secondary-button { gap: var(--space-3); }
+.account-dashboard .account-layout { display: block; }
+.account-dashboard .account-navigation { flex-direction: row; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--account-gap); padding-bottom: var(--account-inset); border-bottom: 1px solid var(--line); }
+.account-dashboard .account-navigation a { gap: var(--space-2); padding: var(--space-2) var(--space-4); border-radius: var(--radius-pill); font-size: var(--text-small); }
+.account-dashboard .account-navigation a:hover { background: var(--surface); color: var(--accent-ink); }
+.account-dashboard .account-content { display: grid; grid-template-columns: minmax(0, var(--account-main-column)) minmax(0, 1fr); grid-template-areas: "loyalty aside" "orders orders"; gap: var(--account-gap); align-items: start; }
+.account-dashboard .account-content > section, .account-dashboard .account-profile { min-width: 0; padding: var(--account-gap); border: 1px solid var(--line); border-radius: var(--radius-panel); }
+.account-dashboard .account-loyalty { grid-area: loyalty; }
+.account-dashboard .account-content-no-loyalty { grid-template-areas: "orders aside"; }
+.account-dashboard .account-orders, .account-dashboard .account-welcome { grid-area: orders; }
+.account-dashboard .account-aside { grid-area: aside; min-width: 0; display: grid; gap: var(--account-inset); }
+.account-dashboard .account-content h2 { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-body); margin: 0 0 var(--account-inset); }
+.account-dashboard .account-content h2 > .account-icon { color: var(--accent); }
+.account-dashboard .account-section-heading { margin: 0; }
+.account-dashboard .account-section-heading h2 { letter-spacing: .02em; }
+.account-dashboard .loyalty-card { padding: var(--account-gap); }
+.account-dashboard .loyalty-rank { display: flex; align-items: center; gap: var(--account-inset); min-width: 0; }
+.account-dashboard .loyalty-emblem { display: grid; place-items: center; width: var(--control-height); height: var(--control-height); border: 1px solid currentColor; border-radius: var(--radius-pill); flex: 0 0 auto; }
+.account-dashboard .loyalty-emblem .account-icon { width: 28px; height: 28px; }
+.account-dashboard .loyalty-current { align-items: center; gap: var(--space-3); }
+.account-dashboard .account-content .loyalty-current h3, .account-dashboard .loyalty-rate strong { font-size: var(--text-section); }
+.account-dashboard .loyalty-rate { text-align: right; }
+.account-dashboard .loyalty-rate p { margin: 0; }
+.account-dashboard .loyalty-spend { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); border-top: 1px solid currentColor; padding-top: var(--account-inset); margin: var(--account-inset) 0; font-size: var(--text-small); }
+.account-dashboard #loyalty-progress-label { margin: 0 0 var(--space-3); font-size: var(--text-small); }
+.account-dashboard .loyalty-terms summary, .account-dashboard .account-profile-help summary { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--control-height); font-size: var(--text-small); cursor: pointer; list-style: none; }
+.account-dashboard summary::-webkit-details-marker { display: none; }
+.account-dashboard .loyalty-terms summary span { display: flex; align-items: center; gap: var(--space-2); }
+.account-dashboard details[open] > summary > .account-icon:last-child { transform: rotate(180deg); }
+.account-dashboard .loyalty-tiers { gap: var(--space-2); margin: 0 0 var(--space-4); }
+.account-dashboard .loyalty-tiers li { padding: var(--space-3); }
+.account-dashboard .loyalty-pilot { display: flex; gap: var(--space-2); margin: 0; font-size: var(--text-meta); color: var(--ink-soft); }
+.account-dashboard .loyalty-pilot .account-icon { width: 16px; height: 16px; margin-top: var(--space-1); }
+.account-dashboard .account-profile dl { gap: var(--account-inset); margin: var(--space-5) 0; }
+.account-dashboard .account-profile dl > div { display: flex; align-items: baseline; gap: var(--space-3); }
+.account-dashboard .account-profile dd { margin: 0; min-width: 0; }
+.account-dashboard .account-profile dl > div:first-child dd { font-size: var(--text-label); font-weight: 500; }
+.account-dashboard .account-profile dl > div:last-child dd { font-size: var(--text-small); }
+.account-dashboard .account-session { display: flex; align-items: center; gap: var(--space-3); }
+.account-dashboard .account-session form { margin: 0; }
+.account-dashboard .account-session .secondary-button { min-height: var(--control-height); padding: var(--space-2) var(--space-4); }
+.account-dashboard .account-profile-help { margin-top: var(--space-3); border-top: 1px solid var(--line); color: var(--ink-soft); }
+.account-dashboard .account-profile-help summary span { flex: 1; }
+.account-dashboard .account-profile-help p { margin: var(--space-2) 0; font-size: var(--text-small); }
+.account-dashboard .account-support > a { display: flex; align-items: center; gap: var(--space-3); padding: var(--account-inset) var(--account-gap); border-radius: var(--radius-panel); background: var(--surface); }
+.account-dashboard .account-support > a:hover { color: var(--accent-hover); }
+.account-dashboard .account-support > a > span:nth-child(2) { flex: 1; min-width: 0; }
+.account-dashboard .account-support small { display: block; color: var(--ink-soft); font-size: var(--text-meta); }
+.account-dashboard .account-support-icon .account-icon { width: 28px; height: 28px; color: var(--accent); }
+.account-dashboard .account-empty { display: flex; align-items: center; gap: var(--account-gap); padding: var(--account-gap); border-radius: var(--radius-card); }
+.account-dashboard .account-empty > div { flex: 1; }
+.account-dashboard .account-empty p { margin: var(--space-2) 0 0; color: var(--ink-soft); font-size: var(--text-small); }
+.account-dashboard .account-empty-icon .account-icon { width: 32px; height: 32px; color: var(--accent); }
+.account-dashboard .account-icon-button { display: inline-flex; align-items: center; justify-content: center; width: var(--control-height); min-height: var(--control-height); border: 1px solid var(--line); border-radius: var(--radius-pill); }
+.account-dashboard .account-icon-button:hover { color: var(--accent-ink); background: var(--surface); }
+.account-dashboard .account-order-list { margin: 0; }
+.account-dashboard .account-order-list > li { position: relative; padding: var(--account-inset) calc(var(--control-height) + var(--space-4)) var(--account-inset) 0; }
+.account-dashboard .account-order-list > li:first-child { padding-top: 0; }
+.account-dashboard .account-order-products { margin: var(--space-2) 0; font-size: var(--text-small); }
+.account-dashboard .account-order-facts { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--account-gap); margin: var(--space-3) 0 0; align-items: center; }
+.account-dashboard .account-order-facts > div { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-small); }
+.account-dashboard .account-order-facts dd { margin: 0; }
+.account-dashboard .account-order-facts > div:first-child dd { font-weight: 600; }
+.account-dashboard .account-order-open { position: absolute; right: 0; top: var(--account-inset); }
+.account-dashboard .account-order-list > li:first-child .account-order-open { top: 0; }
+.account-dashboard .account-orders > .form-hint { margin-bottom: 0; }
+.account-dashboard .account-notice { padding: var(--account-inset); margin-bottom: var(--account-gap); font-size: var(--text-small); }
+@media (max-width: 959px) {
+  .account-dashboard .account-content { grid-template-columns: minmax(0, 1fr); grid-template-areas: "loyalty" "orders" "aside"; }
+  .account-dashboard .account-content-no-loyalty { grid-template-areas: "orders" "aside"; }
+  .account-dashboard .account-empty { flex-wrap: wrap; gap: var(--account-inset); }
+}
+@media (max-width: 767px) {
+  .account-page.account-dashboard { padding-block: var(--account-gap); }
+  .account-dashboard .account-heading { margin-bottom: var(--account-inset); }
+  .account-dashboard .account-heading > .secondary-button { display: none; }
+  .account-dashboard .account-navigation { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-1); padding-bottom: var(--space-2); }
+  .account-dashboard .account-navigation a { flex-direction: column; justify-content: center; padding: var(--space-2) var(--space-1); gap: var(--space-1); font-size: var(--text-meta); text-align: center; }
+  .account-dashboard .account-content > section, .account-dashboard .account-profile { padding: var(--account-inset); }
+  .account-dashboard .loyalty-card { padding: var(--account-inset); }
+  .account-dashboard .account-content .loyalty-current h3, .account-dashboard .loyalty-rate strong { font-size: var(--text-label); }
+  .account-dashboard .loyalty-current { gap: var(--space-1); }
+  .account-dashboard .loyalty-emblem { width: 24px; height: 24px; border: 0; }
+  .account-dashboard .loyalty-emblem .account-icon { width: 24px; height: 24px; }
+  .account-dashboard .loyalty-rank p { font-size: var(--text-meta); }
+  .account-dashboard .loyalty-rank { gap: var(--space-1); }
+  .account-dashboard .loyalty-rate p { font-size: var(--text-meta); }
+  .account-dashboard .account-empty .primary-button { width: 100%; }
+  .account-dashboard .account-order-heading { gap: var(--space-2); flex-direction: column; }
+  .account-dashboard .account-order-facts { gap: var(--space-2); flex-direction: column; align-items: flex-start; }
+  .account-dashboard .loyalty-tiers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 760px) {
   .account-page { padding-block: var(--space-7) var(--space-8); }
   .account-heading { margin-bottom: var(--space-7); }
