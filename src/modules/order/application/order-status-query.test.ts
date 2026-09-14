@@ -7,6 +7,8 @@ import {
   type OrderStatusRecord,
 } from "./order-status-query";
 
+const purchaseIntentId = "12345678-abcd-4000-8000-123456789012";
+
 describe("GetOrderStatus", () => {
   it("maps payment and fulfillment facts without exposing personal data", async () => {
     const useCase = new GetOrderStatus(query({
@@ -22,6 +24,8 @@ describe("GetOrderStatus", () => {
     await expect(useCase.execute("cs_test_12345678")).resolves.toEqual({
       progress: "SHIPPED",
       displayId: "BB-20260821-123456",
+      purchaseIntentId,
+      orderCreated: true,
       productId: "prod_sora_01",
       productName: "空の余白",
       quantity: 1,
@@ -38,6 +42,8 @@ describe("GetOrderStatus", () => {
     await expect(useCase.execute("cs_test_12345678")).resolves.toMatchObject({
       progress: "PROCESSING",
       displayId: "BBI-20260821-1234",
+      purchaseIntentId,
+      orderCreated: false,
     });
   });
 
@@ -50,7 +56,13 @@ describe("GetOrderStatus", () => {
   ) => {
     const useCase = new GetOrderStatus(query({ purchaseIntentStatus }));
 
-    await expect(useCase.execute("cs_test_12345678")).resolves.toMatchObject({ progress });
+    await expect(useCase.execute("cs_test_12345678")).resolves.toMatchObject({ progress, orderCreated: false });
+  });
+
+  it.each(["PENDING_CONFIRMATION", "CANCELLED", "CLOSED"])("reports an existing %s order as created", async (orderStatus) => {
+    const useCase = new GetOrderStatus(query({ purchaseIntentStatus: "CONVERTED", orderStatus }));
+
+    await expect(useCase.execute("cs_test_12345678")).resolves.toMatchObject({ orderCreated: true });
   });
 
   it("reports partial refunds independently of order fulfillment", async () => {
@@ -77,6 +89,7 @@ describe("GetOrderStatus", () => {
 function query(overrides: Partial<OrderStatusRecord> = {}): OrderStatusQuery {
   return {
     findByCheckoutReference: async () => ({
+      purchaseIntentId,
       purchaseIntentStatus: "CHECKOUT_CREATED",
       purchaseIntentDisplayId: "BBI-20260821-1234",
       productId: "prod_sora_01",

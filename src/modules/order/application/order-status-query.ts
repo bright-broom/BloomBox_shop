@@ -17,6 +17,7 @@ export type OrderProgress =
   | "ATTENTION";
 
 export type OrderStatusRecord = Readonly<{
+  purchaseIntentId: string;
   purchaseIntentStatus: string;
   purchaseIntentDisplayId: string;
   orderDisplayId?: string;
@@ -35,6 +36,10 @@ export type OrderStatusRecord = Readonly<{
 export type PublicOrderStatus = Readonly<{
   progress: OrderProgress;
   displayId: string;
+  /** The checkout's purchase reference. The browser cart that started it uses the same value as its request ID. */
+  purchaseIntentId: string;
+  /** An order exists for this checkout, so the cart that started it must not start another purchase. */
+  orderCreated: boolean;
   productId: string;
   productName: string;
   quantity: number;
@@ -67,6 +72,8 @@ export class GetOrderStatus {
     return {
       progress: resolveProgress(record),
       displayId: record.orderDisplayId ?? record.purchaseIntentDisplayId,
+      purchaseIntentId: record.purchaseIntentId,
+      orderCreated: record.orderStatus !== undefined,
       productId: record.productId,
       productName: record.productName,
       quantity: record.quantity,
