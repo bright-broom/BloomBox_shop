@@ -20,6 +20,7 @@
 | 項目 | 確認済み | 残る境界・根拠 |
 | --- | --- | --- |
 | 顧客アカウント | Googleログイン、本人の履歴・詳細、プロフィール参照、ログアウト、所有権検証 | 実Google2顧客＋合成注文で相互非表示を確認。ブラウザー購入・実Stripeを通した試験ではない。[2顧客記録](CUSTOMER_ORDER_ISOLATION_VERIFICATION.md) |
+| ログイン導線 | 専用の顧客/管理者ログイン、認証後の戻り先、管理各ページ入口、独立ログアウトを実装 | Chromium/WebKit・390/1280pxで隔離DBと合成セッションを検証。実Googleの新しいローカル接続先は設定調整待ち。[経路](AUTH_ROUTING.md) |
 | Googleの失敗・復旧 | 同意キャンセル、DB障害・復旧、再ログイン、セッション版失効、運営者認証との分離をローカル確認 | 本番HTTPS等は別検証。[顧客接続](CUSTOMER_GOOGLE_CONNECTION_VERIFICATION.md) |
 | 購入者紐付け | サーバー認証の顧客IDを購入時に固定し、注文へ引継ぎ。別顧客の再送・メールによる後付け所有権を拒否 | 実Stripe購入での接続待ち。[顧客紐付け](PURCHASE_CUSTOMER_BINDING.md) |
 | 商品・在庫管理 | PostgreSQL参照、登録・編集・公開・補充・訂正・履歴・権限。実Google＋隔離DBで競合・失効も確認 | 正式な画像・商品・在庫・本番接続は未確認。[管理機能](NATIVE_CATALOG_MANAGEMENT.md)、[接続記録](NATIVE_CATALOG_CONNECTION_VERIFICATION.md) |

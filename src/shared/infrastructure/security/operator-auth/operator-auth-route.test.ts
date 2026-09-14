@@ -104,7 +104,7 @@ describe("operator Auth.js boundary", () => {
     expect(redirect.searchParams.get("code_challenge_method")).toBe("S256");
     expect(cookieHeader(response)).toContain("bloombox.operator-state");
     const callback = await GET(request("callback/google?code=untrusted&state=wrong", { headers: { cookie: cookieHeader(response) } }));
-    expect(callback.headers.get("location")).toContain("/operations?error=");
+    expect(callback.headers.get("location")).toContain("/operations/login?error=");
     expect(cookieHeader(callback)).not.toContain(`${cookieName}=`);
     expect(fetcher.mock.calls.every(([url]) => String(url).includes(".well-known"))).toBe(true);
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toMatch(/untrusted|synthetic-google-secret|operator@example/);
@@ -133,7 +133,7 @@ describe("operator Auth.js boundary", () => {
     const state = authorization.searchParams.get("state") ?? "";
     const callback = await GET(request(`callback/google?${new URLSearchParams({ code: "synthetic-code", state })}`, { headers: { cookie: browserCookies(csrf, start) } }));
     if (variant !== "valid") {
-      expect(callback.headers.get("location")).toContain("/operations?error=");
+      expect(callback.headers.get("location")).toContain("/operations/login?error=");
       expect(cookieHeader(callback)).not.toContain(`${cookieName}=`);
       return;
     }

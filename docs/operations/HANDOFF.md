@@ -34,6 +34,10 @@
 
 ユーザーはランク別自動割引を選択済み。[ADR 0013](../architecture/adr/0013-customer-rank-discounts.md) と [検証・導入記録](CUSTOMER_LOYALTY.md) を参照。履歴の商品表示、全件の確定商品購入実績、0/2/3/5%のランク先行案、割引固定、Stripe照合を実装。0025 migrationが必要。実Google/Stripeの割引E2Eと料率/条件の確定は残る。紹介Test Modeとは別で、本番受付停止を維持する。
 
+## トップからのログイン導線（2026-09-14）
+
+顧客は `/account/login`、管理者は `/operations/login` に入口を分離。認証済みなら本人の `/account` または権限確認付き管理画面へ進む。[経路と検証記録](AUTH_ROUTING.md) を参照。`/preview/account` は架空のデザイン確認画面であり、実認証済みのマイページではない。ローカルのポートを変える場合はOAuthの戻り先とサーバー設定の両方をそろえる。
+
 ## 本番販売は停止中
 
 - [activation設定](../../config/production-commerce-activation.json) は `blocked`、証跡8項目は未完了。[案内コンテンツ](../../content/storefront.json) は `draft`。

@@ -1,3 +1,4 @@
+import { requireOperatorLogin } from "@/shared/infrastructure/security/auth-entry";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { randomUUID } from "node:crypto";
@@ -11,6 +12,7 @@ import { saveCatalogManagement } from "./actions";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {title:copy.title, robots:{index:false, follow:false}};
 export default async function CatalogManagement({searchParams}:{searchParams:Promise<{after?:string|string[]}>}) {
+  await requireOperatorLogin("/operations/catalog");
   const input = z.object({after:z.uuid().optional()}).strict().safeParse(await searchParams);
   const state = input.success ? await load(input.data.after) : {page:null, error:copy.messages.INVALID};
   return <section className="section-shell content-page catalog-management-page">

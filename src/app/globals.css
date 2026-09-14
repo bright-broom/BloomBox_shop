@@ -616,3 +616,22 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
   .loyalty-card { padding: var(--space-5); }
   .loyalty-tiers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.login-page { max-width: 760px; padding-block: var(--space-8) var(--space-section); }
+.login-page header { margin-bottom: var(--space-7); }
+.login-page h1 { font-size: var(--text-page); margin: 0 0 var(--space-4); }
+.login-page h2 { font-size: var(--text-label); }
+.login-page header > p:last-child, .login-card p, .login-card li { color: var(--ink-soft); }
+.login-card { padding: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-panel); }
+.login-card form { margin-block: var(--space-5); }
+.login-card code { overflow-wrap: anywhere; }
+.login-card ul { padding-left: var(--space-5); margin-bottom: var(--space-6); }
+.login-preview { margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--line); }
+.login-preview h3 { font-size: var(--text-body); }
+.login-preview p { font-size: var(--text-small); }
+.login-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-5); margin-top: var(--space-5); }
+.operations-destinations { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); margin-block: var(--space-6); }
+.operations-destinations a { border: 1px solid var(--line); border-radius: var(--radius-card); padding: var(--space-5); }
+.operations-destinations h2 { font-size: var(--text-label); }
+.operations-destinations p { color: var(--ink-soft); }
+@media (max-width: 640px) { .operations-destinations { grid-template-columns: minmax(0, 1fr); } .login-card { padding: var(--space-5); } }

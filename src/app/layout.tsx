@@ -69,6 +69,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <Link href="/faq">よくあるご質問</Link>
             <Link href="/account" prefetch={false}>{customerAccountContent.title}</Link>
             <Link href="/cart">カート</Link>
+            <Link href="/operations" prefetch={false}>{customerAccountContent.entry.operator}</Link>
           </MobileNavigation>
           <div className="header-actions">
             <HeaderCartLink />
@@ -104,6 +105,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                 <Link href="/privacy">プライバシー</Link>
                 <Link href="/terms">利用規約</Link>
                 <Link href="/commercial-transactions">特定商取引法に基づく表記</Link>
+                <Link href="/operations" prefetch={false}>{customerAccountContent.entry.operator}</Link>
               </nav>
             </div>
             <div className="footer-note">

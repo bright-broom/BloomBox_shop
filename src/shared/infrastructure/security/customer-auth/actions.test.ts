@@ -14,18 +14,30 @@ describe("customer login server actions", () => {
   it("rejects missing or foreign origins before creating or deleting a session", async () => {
     for (const value of [null, "https://attacker.example"]) {
       mocks.headers.mockResolvedValue(new Headers(value ? { origin: value } : {}));
-      await expect(startCustomerLogin()).rejects.toThrow("redirect:/account?error=unavailable");
-      await expect(endCustomerLogin()).rejects.toThrow("redirect:/account?error=unavailable");
+      await expect(startCustomerLogin()).rejects.toThrow("redirect:/account/login?error=unavailable");
+      await expect(endCustomerLogin()).rejects.toThrow("redirect:/account/login?error=unavailable");
     }
     expect(mocks.signIn).not.toHaveBeenCalled(); expect(mocks.signOut).not.toHaveBeenCalled();
+  });
+  it("validates posted return destinations before calling the provider", async () => {
+    mocks.headers.mockResolvedValue(new Headers({ origin }));
+    for (const [destination, expected] of [
+      ["/account/orders/12345678-1234-4234-8234-123456789abc", "/account/orders/12345678-1234-4234-8234-123456789abc"],
+      ["https://attacker.example", "/account"],
+      ["/operations/catalog", "/account"],
+    ]) {
+      const form = new FormData(); form.set("next", destination);
+      await startCustomerLogin(form);
+      expect(mocks.signIn).toHaveBeenLastCalledWith("google", { redirectTo: expected });
+    }
   });
   it("uses fixed provider and destination and maps provider failures without exposing diagnostics", async () => {
     mocks.headers.mockResolvedValue(new Headers({ origin }));
     await startCustomerLogin(); await endCustomerLogin();
     expect(mocks.signIn).toHaveBeenCalledWith("google", { redirectTo: "/account" });
-    expect(mocks.signOut).toHaveBeenCalledWith({ redirectTo: "/account" });
+    expect(mocks.signOut).toHaveBeenCalledWith({ redirectTo: "/account/login" });
     mocks.signIn.mockRejectedValue(new AuthError("PRIVATE PROVIDER DETAILS"));
-    await expect(startCustomerLogin()).rejects.toThrow("redirect:/account?error=signin");
+    await expect(startCustomerLogin()).rejects.toThrow("redirect:/account/login?error=signin");
     const control = new Error("framework redirect control"); mocks.signIn.mockRejectedValue(control);
     await expect(startCustomerLogin()).rejects.toBe(control);
   });
