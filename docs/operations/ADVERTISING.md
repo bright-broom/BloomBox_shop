@@ -85,7 +85,7 @@ flowchart LR
 ## 実装検証（2026-09-14）
 
 - `pnpm check:ci`：型・lint・architecture・content/design検査、1,035件の通常テスト、build成功。
-- 隔離したローカルPostgreSQLでmigrationを二度適用し、広告DBテスト7件成功。重複binding、同時claim、lease再取得・古いworkerの拒否、暗号化/期限/撤回、アプリ/worker権限、確定ライブ注文の読み取り、購入開始後の広告クリックの除外を確認。
+- 隔離したローカルPostgreSQLでmigrationを二度適用し、全DBテスト216件（14ファイル、うち広告7件）成功。移行ファイルの固定リストも0026まで更新。重複binding、同時claim、lease再取得・古いworkerの拒否、暗号化/期限/撤回、アプリ/worker権限、確定ライブ注文の読み取り、購入開始後の広告クリックの除外を確認。
 - APIテストでOrigin・入力サイズ・JSON・不明フィールド・worker認証・初期無効化を検証。撤回とバックグラウンド通信の競合で勝手に再同意しないことを検証。
 - Google/Meta/WebhookのHTTP境界はモックで契約、秘匿、失敗応答、再送IDを確認。実媒体送信の証明ではない。
 - Chromeの320px/1440pxで横はみ出しなし、操作領域48px。UIプレビューで拒否→再設定→同意→再読込時の保持を確認。実機Safariとスクリーンリーダー実操作は未確認。
