@@ -1,17 +1,19 @@
 "use client";
 
 import {
-  completePreviewCheckout,
+  completePreparedPreviewCheckout,
   PREVIEW_PAYMENT_LAST_FOUR,
   readCart,
   readPreviewBuyer,
   readPreviewDraft,
   readPreviewReview,
+  PreviewCheckoutCleanupError,
   type BrowserCartItem,
   type PreviewDraft,
 } from "@/modules/checkout/presentation/browser-checkout-session";
 import { formatMoney, money } from "@/shared/domain/money";
 import Link from "next/link";
+import { CheckoutStorageUnavailable } from "@/ui/checkout-storage-unavailable";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { FlowerLoading } from "@/ui/flower-loading";
@@ -21,18 +23,18 @@ import {
   PreviewCheckoutUnavailable,
   TestModeBanner,
 } from "@/ui/preview-checkout-shared";
-import { useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
+import { CHECKOUT_SESSION_UNAVAILABLE, useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
 import { quotePreviewReferralAction, settlePreviewReferralAction, type PreviewReferralQuote } from "@/modules/checkout/presentation/preview-referral-actions";
 import { referralContent as referralCopy, referralCopy as formatReferralCopy } from "@/shared/infrastructure/content/referral-content";
 
 export function PreviewPayment({ enabled }: { enabled: boolean }) {
   const router = useRouter();
   const revision = useCheckoutSessionRevision();
-  const cart: BrowserCartItem | null | undefined = revision === null ? undefined : readCart(window.sessionStorage);
-  const draft: PreviewDraft | null | undefined = revision === null
+  const cart: BrowserCartItem | null | undefined = (revision === null || revision === CHECKOUT_SESSION_UNAVAILABLE) ? undefined : readCart(window.sessionStorage);
+  const draft: PreviewDraft | null | undefined = (revision === null || revision === CHECKOUT_SESSION_UNAVAILABLE)
     ? undefined
     : readPreviewDraft(window.sessionStorage);
-  const ready = revision === null ? undefined : Boolean(
+  const ready = (revision === null || revision === CHECKOUT_SESSION_UNAVAILABLE) ? undefined : Boolean(
     readPreviewBuyer(window.sessionStorage)
     && draft
     && readPreviewReview(window.sessionStorage)
@@ -45,6 +47,7 @@ export function PreviewPayment({ enabled }: { enabled: boolean }) {
   const [skipReferral, setSkipReferral] = useState(false);
 
   if (!enabled) return <PreviewCheckoutUnavailable />;
+  if (revision === CHECKOUT_SESSION_UNAVAILABLE) return <CheckoutStorageUnavailable />;
   if (completed) return <p className="checkout-loading" role="status">完了画面を表示しています…</p>;
   if (cart === undefined || draft === undefined || ready === undefined) {
     return <p className="checkout-loading" role="status">決済情報を確認しています…</p>;
@@ -85,13 +88,20 @@ export function PreviewPayment({ enabled }: { enabled: boolean }) {
       }
       const settlement = result.quote;
       setCompleted(true);
-      const receipt = completePreviewCheckout(window.sessionStorage, new Date(), settlement);
+      const receipt = completePreparedPreviewCheckout(window.sessionStorage, cart.requestId, new Date(), settlement);
       if (!receipt) {
         setCompleted(false);
         setPaymentError("テスト決済を完了できませんでした。注文内容をもう一度ご確認ください。"); return;
       }
       router.replace("/checkout/test/complete");
-    } catch { setCompleted(false); setPaymentError("完了情報を保存できませんでした。同じ操作を再試行してください。"); }
+    } catch (error) {
+      if (error instanceof PreviewCheckoutCleanupError) {
+        router.replace("/checkout/test/complete");
+      } else {
+        setCompleted(false);
+        setPaymentError("完了情報を保存できませんでした。同じ操作を再試行してください。");
+      }
+    }
     finally {
       setPending(false);
     }

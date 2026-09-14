@@ -1,88 +1,134 @@
-# Remaining work inventory
+# BLOOM BOX 残課題台帳
 
-2026-09-11 時点。調査対象は `main` の `9d4d385`、コード、運用文書、GitHub設定・Issue・実行履歴。これは残課題の台帳であり、全項目の実装や本番有効化の承認ではない。
+更新：2026-09-14（JST）。確認基準はmain `a6c59bee6c5bbfda1b9ce40573fc81195208335f`（PR #101）、コード、機能別検証記録、GitHub設定・実行履歴。初めて参加するAI・開発者は [HANDOFF.md](HANDOFF.md) から読む。
 
-優先度は P0＝販売開始前、P1＝運営の安定化、P2＝必要性を決めてから拡張。P2は現行仕様の不具合ではない。外部アカウントとホスティングの未確認事項は、未設定と断定しない。
+この台帳は残作業の正本であり、全項目の実装・外部設定変更・本番公開の包括的承認ではない。P0＝販売開始前、P1＝運営の安定化、P2＝採用判断後の追加機能。P1でも販売時の最低限の代替運用は必要。状態は **実装・事業判断・外部設定・検証** を分け、完了した部分を未実装に戻さない。
+
+既存のP0/P1/P2 IDは維持した。旧Shopify前提の内容は [2026-09-13までの台帳](https://github.com/bright-broom/BloomBox_shop/blob/a6c59bee6c5bbfda1b9ce40573fc81195208335f/docs/operations/BACKLOG.md) に保存されており、現行の作業指示ではない。
+
+## 現行方針・確認済みの条件
+
+- [ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md)：自作PostgreSQLの顧客・商品・価格・在庫・注文・発送、Google直接認証、既存Stripe Checkoutによる次の決済接続。Shopify中心のADR 0001/0003/0008はこの方針で置き換えられた。カード番号を自作処理しない。
+- ユーザー確認済み：税込・日本全国配送、M＝商品4,000円＋送料1,000円、L＝商品8,000円＋送料0円、初期は1回1箱。紹介特典の最低商品小計5,500円を維持。これらを未決定として聞き直さない。
+- 箱は縦長の方向性で低送料を目指す。寸法・花材・本数・内容量・梱包・実配送原価は未確定。商品画像はパッケージ案。決定済み販売送料で配送できることは未検証。
+- 紹介制度はTest Mode専用。M1箱は最低商品小計に届かず対象外、Lは他条件を満たす場合に500円引き。この例は実決済の割引接続や本番提供の承認ではない。
 
 ## 確認済みの状態
 
-- PR #18 はマージ済み。修正時のCI、PostgreSQLテスト、依存監査、Semgrep、Vercel Previewは成功。調査開始時の未コミット・未プッシュ変更はなし。
-- GitHubはPUBLIC。mainのbranch protection APIは「Branch not protected」、rulesetsは空。Production Environmentに必須reviewerはなく、branch policyのみ。既存Issueは [#6](https://github.com/bright-broom/BloomBox_shop/issues/6)。
-- Repository SecretおよびProduction Environment Secretの一覧は空。Repository/ProductionのVariableには `PRODUCTION_BASE_URL` がある。ホスティング側や組織経由の秘密情報は未確認で、値は取得していない。
-- `stripe-test` Environmentは取得したEnvironment一覧に存在しない。
-- `pnpm check:production` は、案内コンテンツ未承認・本番販売未承認で失敗。activation evidenceの8項目はすべて未完了。
-- 商品検索、Shopify商品取得、単一商品カート、Preview購入導線、郵便番号検索、購入情報の永続化、Stripe署名検証・Inbox処理・イベント再照合、注文状態参照、暗号化・一時データ保持期限処理は実装済み。これらを丸ごと未実装とは扱わない。
+### 実装・検証済みの範囲
+
+| 項目 | 確認済み | 残る境界・根拠 |
+| --- | --- | --- |
+| 顧客アカウント | Googleログイン、本人の履歴・詳細、プロフィール参照、ログアウト、所有権検証 | 実Google2顧客＋合成注文で相互非表示を確認。ブラウザー購入・実Stripeを通した試験ではない。[2顧客記録](CUSTOMER_ORDER_ISOLATION_VERIFICATION.md) |
+| ログイン導線 | 専用の顧客/管理者ログイン、認証後の戻り先、管理各ページ入口、独立ログアウトを実装 | Chromium/WebKit・390/1280px、[3025実接続](CUSTOMER_GOOGLE_3025_VERIFICATION.md)に加え、公開Vercel HTTPSでGoogle2顧客の本人画面を確認。[公開接続](CUSTOMER_GOOGLE_VERCEL_VERIFICATION.md)。Google一般公開・公開先の運営者接続は別 |
+| Googleの失敗・復旧 | 同意キャンセル、DB障害・復旧、再ログイン、セッション版失効、運営者認証との分離をローカル確認 | 本番HTTPS等は別検証。[顧客接続](CUSTOMER_GOOGLE_CONNECTION_VERIFICATION.md) |
+| 購入者紐付け | サーバー認証の顧客IDを購入時に固定し、注文へ引継ぎ。別顧客の再送・メールによる後付け所有権を拒否 | 実Stripe購入での接続待ち。[顧客紐付け](PURCHASE_CUSTOMER_BINDING.md) |
+| 商品・在庫管理 | PostgreSQL参照、登録・編集・公開・補充・訂正・履歴・権限。実Google＋隔離DBで競合・失効も確認 | 正式な画像・商品・在庫・本番接続は未確認。[管理機能](NATIVE_CATALOG_MANAGEMENT.md)、[接続記録](NATIVE_CATALOG_CONNECTION_VERIFICATION.md) |
+| 在庫の取引処理 | 予約・確定・安全な解放、同時購入、重複、通信断、保存失敗をDBで検証 | 顧客向け取消、実Stripe、期限後復旧、発送・返品が残る。[在庫](NATIVE_INVENTORY.md) |
+| 送料・請求額 | 購入時固定、Stripe要求・通知・注文の照合、0円/未設定の区別、送信前拒否時の復旧 | 実Stripe最終画面・住所入力後の税額・実通知は未確認。[送料](PURCHASE_SHIPPING.md) |
+| 購入画面 | M/L選択、カート編集、期限切れ・保存失敗からの復旧、今日＋3日と「いつもありがとう」の編集可能な初期値 | 実Hosted Checkoutは別検証。[カート](CART_RECOVERY.md)、[画面記録](../design/VERIFICATION.md) |
+| 見た目・スマホ | ミント配色、M/L案画像、注記余白、横ずれ・端の跳ね返り抑制。直近は48表示条件とChromiumのタッチ・ピンチ確認 | 実機Safariの感触・商用状態・読み上げは未確認。[画面記録](../design/VERIFICATION.md) |
+| 品質検査 | PR #101で通常948テスト・静的検査・型・Lint・buildとCI成功。送料修正時に隔離DB198テスト成功 | 合成DB、プレビュー、CI成功を商用稼働と混同しない |
+| Dependabot | [2026-09-11の実更新ジョブ](https://github.com/bright-broom/BloomBox_shop/actions/runs/34576874161)の成功を確認 | 一時例外の見直しはP1-07。失敗継続として扱わない |
+
+### 2026-09-14に再確認した公開状態・外部設定
+
+- コード確認時点ではPR #101までmainに反映済み、未マージPRなし。この文書変更以降の状態は次の作業で再取得する。
+- mainのbranch protection APIは「Branch not protected」、rulesetsは空。[Issue #6](https://github.com/bright-broom/BloomBox_shop/issues/6) が未完了。
+- Environmentは `Preview`、`Production`、`Production – bloom-box-shop-ybb9`。`Production` はbranch policyのみ、他2つはprotection rulesなし。必須reviewerは確認した3環境すべてにない。`stripe-test` は存在しない。
+- `Stripe Test Mode Readiness` と `Production Release` は実行履歴0件。最近のProduction SmokeとCommerce Workerには成功履歴があるが、Workerは無効設定でも成功終了する。[Worker定義](../../.github/workflows/commerce-reconciliation.yml)の実行条件と実処理を確認すること。
+- `pnpm check:production` は案内コンテンツ未承認・本番販売未承認で失敗。[activation設定](../../config/production-commerce-activation.json) は `blocked` で証跡8項目すべて未完了。[storefront](../../content/storefront.json) は `draft`。
+- [composition-root](../../src/shared/infrastructure/composition-root.ts) は本番の新規購入をコードでも停止。停止フラグの変更だけでは商用購入を開始できない。
+- 今回の外部確認はGitHubの設定・実行メタデータ。Google/Stripe/Vercelの本番設定、組織・ホスティング側の秘密値、本番DB・バックアップ実体・契約は網羅的に再確認していない。過去のSecret一覧を現在の未設定の証拠にしない。
 
 ## P0：販売開始までに必要
 
-| ID | 課題 | 状態・根拠 | 完了条件 |
+| ID | 課題 | 現在の状態・残作業 | 完了条件・参照 |
 | --- | --- | --- | --- |
-| P0-01 | main保護とレビュー必須化 | 設定不足。GitHub API、Issue #6、GOVERNANCE.md | PR経由、必須CI、CODEOWNER承認、会話解決、最新mainへの追従、管理者迂回制限を設定しAPIで確認。承認者の実際の運営体制も決める |
-| P0-02 | 本番Environmentの必須承認 | 設定不足。Productionにreviewerなし | 適切な承認者・main制限・迂回ルールを設定し、未承認のデプロイが進まないことを確認 |
-| P0-03 | 公開リポジトリ向け運用確認 | 確認待ち。公開へ変更された | Actions権限、外部PRでのSecret非公開、ログ・Artifact・自動Incidentに公開不可データを出さない運用、公開を前提とした履歴・成果物の確認を完了 |
-| P0-04 | 決済方針をADRと一致させる | ADR 0003でShopify Checkout + Shopify Payments + KOMOJUを選定。本番利用の承認ではない | 選定済み。加盟店審査・方法別の接続条件と導入証跡はPAYMENTS.mdで追跡 |
-| P0-05 | 選択した本番購入経路を完成 | Shopifyカートの接続境界に加え、外部要求前の永続的な試行確保・事業者固定・暗号化・結果不明時の停止・再取得を内部ワークフローに実装。購入画面への組込みは未完了 | 通知の署名検証・参照保存・重複排除も実装（[受付](SHOPIFY_WEBHOOKS.md)）。残件は所有権確認、結果不明の照合/終了/削除、関連付けの実店舗検証/在庫の実店舗検証/出荷承認・個別返金詳細・注文表示/再照合（[Admin API読取境界](SHOPIFY_ORDER_READS.md)、[購入試行関連付け](SHOPIFY_ORDER_LINKS.md)、[決済状態照合・保存](SHOPIFY_PAYMENT_EVIDENCE.md)、[入金後の配送期限照合](SHOPIFY_DELIVERY_TIMING.md)、[配送先の構造・地域検証](SHOPIFY_DELIVERY_DESTINATION.md)は実装済み（地域方針は未承認））。[注文・暗号化ギフト/配送先の原子的保存](SHOPIFY_ORDER_ACCEPTANCE.md)も内部の決済照合から任意注入Gatewayで接続済み（公開経路は未接続）。[確定後の決済反映・返金集計・購入状態更新](SHOPIFY_ORDER_COMPLETION.md)も内部接続済み。[発送受付・外部発送活動の照合と保持・未着手受付の取消](SHOPIFY_FULFILLMENT_INTAKE.md)も内部接続済み。残件に購入画面への組込みを含む。SHOPIFY_CHECKOUT_ATTEMPTS.md参照 |
-| P0-06 | 在庫予約・解放・確定・再照合 | 未実装。予約Strategy証跡未完了、在庫書込方針はSTRIPE.mdで明示的に未決定 | 同時購入、決済失敗・期限切れ・キャンセル・通信断で売り越し、二重減算、永久予約を防止。Shopifyとの整合を検証 |
-| P0-07 | 配送日・締切・休業日・地域制約 | 一部実装。delivery-date.tsは3〜60日の範囲のみ | 商用の配送約束を定義し、必要な休業日、締切、対象外地域、配送日別上限をAsia/Tokyoで検証。不要な制約は業務判断で明記 |
-| P0-08 | 税・送料・最終総額・返品条件 | 設定/判断/証跡待ち。[正式APIの金額照合](SHOPIFY_ORDER_PRICING.md)を実装（税込の二重加算防止、商品/送料割引・税額配賦の照合とスナップショット生成、不完全/変更済み注文の保留）。条件付き注文保存まで内部接続済みだが、公開購入経路への接続・店舗設定の承認は未完了 | 実事業者の料金と表示を確定し、商品・数量・税・送料・総額・条件が最終確認画面と注文スナップショットで整合 |
-| P0-09 | Shopify実店舗接続契約 | 実店舗の証跡待ち。商品一覧/ID取得の条件統一、ID/価格/API版検証、ストリーム上限・タイムアウト・再試行の回帰テストを追加（SHOPIFY.md） | 商品公開、1商品1variant、JPY、metafield、売切れ、価格変更、認証拒否、制限・障害を隔離店舗で検証。SHOPIFY.mdの証跡を保存 |
-| P0-10 | 決済事業者のテスト環境設定 | Shopify Payments + KOMOJUを選定。加盟店アカウント・審査・接続は未確認 | Shopify隔離店舗でKOMOJUの方法別アプリとテストモードを設定。送料/税/規約/通知/API版、正常/失敗/遅延入金/返金を検証。PAYMENTS.mdの証跡を保存 |
-| P0-11 | 本番DB・権限・鍵の運用 | 外部環境未確認。Migration/Role/暗号化は実装済み | Application/Worker/Migration資格情報の分離、TLS、接続数、鍵保管・ローテーション、失効手順を本番相当環境で確認 |
-| P0-12 | デプロイとWorkerの設定 | 一部設定不足。確認したGitHub Secret一覧は空 | Deploy Hook、Migration URL、Worker Secret等を適切なスコープに設定。対象SHAの配備・health一致・Worker実行を確認。Previewへ本番資格情報を渡さない |
-| P0-13 | 新規決済停止と既存取引処理の分離 | 受付専用フラグ、Applicationの拒否、顧客向けエラー、停止/再開/実行中Sessionの回帰テストを実装。Provider設定を維持する手順へ更新 | 残作業は本番相当環境での設定反映・遅延イベントの決済確定・再開演習。分散環境へ瞬時に反映する制御ではなく、発行済みSessionを取り消すものでもない |
-| P0-14 | 出荷処理・配送追跡更新 | 一部実装。正式なShopify発送活動を読取・保存し、発送記録がある注文の自動取消を保留。[注文全体・分割配送の数量照合](SHOPIFY_FULFILLMENT_QUANTITIES.md)も内部実装済み。[割当先拠点の在庫確認](SHOPIFY_FULFILLMENT_STOCK.md)も内部実装済み。[店舗別の担当者権限・不変の承認記録](SHOPIFY_FULFILLMENT_APPROVAL.md)を内部実装済み。[権限付き参照・確認画面プレビュー](SHOPIFY_FULFILLMENT_REVIEW.md)も実装済み。[Google担当者認証](GOOGLE_OPERATOR_LOGIN.md)と実注文の確認画面、[店舗別の注文一覧](OPERATOR_FULFILLMENT_INBOX.md)は実装済み・実接続設定待ち。[承認フォームと再送保護](OPERATOR_APPROVAL_FORM.md)も接続済み。事業条件 PENDING で操作無効。[担当者別の送信制限](OPERATOR_APPROVAL_RATE_LIMIT.md)も実装済み。[監査付き権限失効の内部コマンド](OPERATOR_PERMISSION_REVOCATION.md)も実装済み。[ログイン付き権限確認・失効画面](OPERATOR_PERMISSION_MANAGEMENT.md)も実装済み。[担当者単位の既存セッション失効](OPERATOR_SESSION_REVOCATION.md)も実装済み（環境設定の版更新・全プロセスへの反映が必要）。[DB所有者向けの権限登録・更新ツール](OPERATOR_ACCESS_PROVISIONING.md)も実装済み。実 Google 接続・実管理者指定・実店舗 E2E と出荷Commandは残件 | 権限付き準備・発送・配達更新、配送番号登録、顧客画面への反映。重複指示で二重発送しない。初期版は手動登録でも可 |
-| P0-15 | 注文・発送・返金通知 | Provider通知の証跡待ち。独自通知consumerなし | Providerに委譲する範囲と独自通知の必要性を決定。正しい宛先に一度だけ通知し、購入者/受取人を分離。独自配信を選ぶ場合だけOutbox consumer、retry、再送を実装 |
-| P0-16 | 法務・配送返品・問い合わせ情報 | 未承認。content/storefront.json、production gate | 実在する販売者情報・窓口・支払/引渡/返品条件等を担当者が確定し、案内ページとCheckoutを承認。単にapprovedへ変更しない |
-| P0-17 | 個人情報・サポート権限・保持方針 | 一部実装。暗号化/一時データ削除はある。注文データの別途方針が必要 | 確定注文の保持、本人確認、閲覧権限、開示/削除依頼、バックアップ中のPII、ログ確認、受取人への開示範囲を決定・必要処理を実装 |
-| P0-18 | 購入経路のブラウザーE2E | 未整備。Vitest/DBテストはあるがブラウザーE2E構成なし | 商品→カート→Hosted Checkout→検証済みイベント→注文表示。二重送信、価格変更、在庫切れ、支払失敗、遅延・重複・順序逆転、返金まで隔離環境で検証 |
-| P0-19 | 商用状態のUI・アクセシビリティ検証 | 証跡待ち。画面と一部状態は実装済み | モバイル/PC/200%拡大/キーボード/読み上げ、空・エラー・処理中・キャンセル・発送・返金を確認。指摘はL1/L3の該当範囲で修正 |
-| P0-20 | 監視・障害検知・復旧演習 | 一部実装。Smoke/Worker Incident/構造化エラーあり | 決済引継ぎ失敗、署名失敗、DB、Inbox滞留・恒久失敗を検知。連絡先・対処・再処理手順、DB復元、ロールバック、取引照合の証跡を残す |
-| P0-21 | 本番公開証跡とGate整合 | 未承認。activation evidence全8項目がfalse | 上記の証跡を対象SHAと結び付ける。決済方針変更時はGateのSTRIPE固定条件もADRに沿って更新。最後にcheck:release成功、承認、公開後Smokeを確認 |
+| P0-01 | main保護・レビュー | 外部設定待ち。保護・rulesetなし | 必須CI、承認者/CODEOWNER、会話解決、最新mainへの追従、迂回ルールを設定しAPIで確認。[GOVERNANCE](GOVERNANCE.md)、Issue #6 |
+| P0-02 | 本番Environment承認 | 外部設定・担当者判断待ち。必須reviewerなし、Production名が複数 | 実配備経路のEnvironmentを整理し、承認者・対象ブランチ・迂回方針を設定。未承認デプロイが進まないことを確認 |
+| P0-03 | 公開リポジトリの運用 | 検証待ち | Actions権限、外部PRへのSecret非公開、ログ・Artifact・自動Incident・履歴の情報管理を確認。秘密値を文書に保存しない |
+| P0-04 | 決済方針 | 方向性は完了。ADR 0009で自作＋既存Stripe接続 | Shopify + KOMOJUへの再選定は不要。Stripeの商用契約・方法別の利用判断はP0-10。旧記述整理はP1-12 |
+| P0-05 | 認証済みの実購入経路 | 内部実装済み・接続/検証待ち。本番はコードで停止 | 本番受付を開けず隔離環境でGoogle→実商品相当DB→予約→Stripeテスト→署名通知→本人注文表示を接続。未決済購入取消の内部処理を安全な画面操作へつなぐ。[STRIPE](STRIPE.md)、[紐付け](PURCHASE_CUSTOMER_BINDING.md) |
+| P0-06 | 在庫と決済の実整合 | 予約・確定・解放は実装/DB検証済み。判断・実接続待ち | 実在庫登録、24時間の予約保持・受付上限の業務確認、同時購入・失敗・取消・期限切れ・通信断・返金を確認。結果不明の取引を期限後に照合して復旧し、タイマーだけで予約を戻さない。[在庫](NATIVE_INVENTORY.md) |
+| P0-07 | 配送約束・製作枠 | 3〜60日後の範囲と＋3日初期値は実装済み。事業判断待ち | 全国配送を前提に、注文締切・休業日・地域別所要日数・例外・繁忙期・配送日別の製作/出荷上限を確定。必要な制約をAsia/Tokyoで検証 |
+| P0-08 | 税・送料・返品条件 | 表示条件と1箱送料固定は実装済み。事業判断・実検証待ち | 実配送契約で承認済み送料の実現性を確認。住所入力後の税/商品/送料/総額と保存値を照合。複数箱、取消期限、状態不良、不在・拒否、返品・交換・再配送費の条件を承認。[送料](PURCHASE_SHIPPING.md) |
+| P0-09 | 正式な自作カタログ | 管理・在庫登録機能とローカル実接続は完了。本番設定/商品承認待ち | 承認済みM/L、税込価格、送料、花材、正式画像、販売可否、実在庫を専用権限で登録。価格変更・売切れ・競合・失効・送料編集を確認。テストデータを本番へ移さない。[管理](NATIVE_CATALOG_MANAGEMENT.md) |
+| P0-10 | Stripeアカウント・テスト設定 | ツール実装済み。専用Environmentなし、実行0件 | テスト/本番の分離、用途別の制限キー、Webhook URL/署名/API版/イベント、税込・送料・規約URL、ブランド・領収メールを設定。商用利用条件と採用支払方法を担当者が確認し、対象SHAでReadiness成功を記録。[STRIPE](STRIPE.md) |
+| P0-11 | 本番DB・権限・鍵 | Migration/Role/暗号化は実装済み。本番の設定/検証待ち | 0023までの適用、Application/Worker/Migration/Catalog Managerの分離、TLS、接続数、鍵保管・更新・失効、バックアップ中の情報を確認 |
+| P0-12 | ホスティング・配備・Worker | ワークフローあり。本番経路の実検証待ち | 正式オリジン/HTTPS、環境と秘密値の分離、Deploy Hook、Migration接続、Worker認証・有効化を確認。対象SHAとhealthの一致、実イベント処理を確認。ジョブが緑だけでは完了しない |
+| P0-13 | 新規停止と既存処理の分離 | 受付制御は実装済み。実環境での演習待ち | 停止中の新規要求拒否と遅延・重複イベント処理、結果不明Sessionの扱い、再開を確認。瞬時の分散停止・発行済みSessionの取消とは区別する |
+| P0-14 | 自作注文の発送・追跡 | 自作の運用接続・指示処理が不足。Shopify向け参照/承認を完成扱いにしない | 自作注文一覧、担当者権限、準備/保留/取消/発送/配達、配送会社・追跡番号、顧客表示を接続。重複指示・部分発送・返金/返品との整合を確認。初期は権限付き手動登録でも可 |
+| P0-15 | 注文・発送・返金通知 | 通知委譲範囲の判断と実配信待ち。独自consumerなし | 正しい宛先へ必要な通知を一度だけ送り、購入者/受取人を分離。独自配信を選ぶ場合はOutbox consumer・retry・再送と実送達を検証 |
+| P0-16 | 販売者・窓口・正式案内 | 事業判断・承認待ち。コンテンツdraft | 販売業者/責任者/所在地/電話/窓口/対応時間、支払・引渡・返品条件を確定。利用規約・特商法・配送返品・Privacy・Supportを実態に合わせ承認。値だけapprovedにしない |
+| P0-17 | 個人情報とサポート | 暗号化・一時データ削除は実装済み。確定注文の方針/運用待ち | 保持期間、本人確認、担当者の閲覧範囲、受取人への開示、開示/訂正/削除依頼、バックアップ・ログを承認し必要処理を実装。サポート経路はP1-01 |
+| P0-18 | 商用経路のE2E | 単体・DB・部分実接続はある。一連の実Stripe試験は未完了 | 成功/失敗/取消/期限切れ/遅延入金、二重送信、署名不正、通知の重複/遅延/逆順、通信断、全額/部分/失敗返金、紛争、価格変更・売切れ・税/送料不備を隔離環境で確認。Stripeと注文/台帳の金額を一致させる |
+| P0-19 | 商用UI・アクセシビリティ | 直近48表示条件等は確認済み。実機と商用状態は未確認 | 実機Safariの端の挙動・キーボード、PC/スマホ、200%拡大、キーボード操作・読み上げ、空/エラー/処理中/取消/発送/返金を確認。[画面記録](../design/VERIFICATION.md) |
+| P0-20 | 監視・復旧・当番 | Smoke/Worker Incident/構造化エラーあり。運用証跡待ち | 決済引継ぎ失敗、署名失敗、DB、Inbox滞留/恒久失敗を検知し担当者へ連絡。再処理、DB復元、切り戻し、取引照合、遅延通知の処理を演習 |
+| P0-21 | 公開判定と実配備 | 未承認。証跡8項目未完了、Production Release実行0件 | 下表の証跡を対象SHAへ紐付け、必要な実装/設定/承認後に本番コードの受付停止を扱う。`check:release`、承認、対象SHAの配備と公開後Smokeを記録。[RELEASE](RELEASE.md) |
+| P0-22 | Google本番認証 | ローカル顧客2名・運営者に加え、2026-09-14公開Vercel HTTPSへ顧客認証・専用Neon DBを接続。[公開証跡](CUSTOMER_GOOGLE_VERCEL_VERIFICATION.md)。一般公開は未完 | Googleはテスト中・2名のまま。Branding/正式公開範囲と運営者の公開接続・権限を確定。自然な期限切れ、停止/失効、同意拒否・偽造callback・Google/DB障害、公開DBの復旧、トークン非露出を公開対象で検証。販売停止を維持 |
+| P0-23 | M/L実物・包装・配送品質 | 事業判断と実物検証待ち | 箱寸法・重量、花材/本数/量/代替、固定/保水/鮮度保持、資材/印刷/色/許諾済み写真、調達ロット/納期を確定。試作配送で品質・破損・原価を確認。案画像を実写として表示しない |
+| P0-24 | 正式画像の登録・配信 | 自作管理はUnsplashのHTTPS URLのみ許可。実装/設定待ち | 自社画像の保管先・配信・管理権限を決め、検証とNext画像設定を整合。M/Lの正式画像を登録・表示できることを確認。任意URLを無条件に許可しない |
+
+### P0-21の公開証跡8項目
+
+すべて確認時点で `complete: false` / `reference: null`。実装完了率ではなく、公開の受入証跡である。
+
+| 設定キー | 必要な証拠 |
+| --- | --- |
+| activationDecisionAdr | 現行構成・対象SHAでの商用有効化の判断と承認 |
+| nativeCatalogContract | 正式商品・価格・画像・権限・在庫を含む自作商品接続 |
+| stripeTestModeE2e | 実Stripeテスト購入から署名通知・注文表示・復旧まで |
+| inventoryReservationStrategy | 業務承認済みの予約方針と実決済/取消/失効/復旧との整合 |
+| taxShippingReview | 最終請求額・配送条件・税/送料の確認 |
+| privacySupportReview | 確定注文の個人情報・保持・サポート権限と運用 |
+| storefrontLegalSupportApproval | 正式な販売者・規約・配送返品・窓口の承認 |
+| backupRollbackIncidentRehearsal | DB復元・切り戻し・障害連絡・取引照合の演習 |
 
 ## P1：運営を安定させる
 
-| ID | 課題 | 状態・根拠 | 完了条件 |
-| --- | --- | --- | --- |
-| P1-01 | サポート用注文検索・操作 | 独自画面/認証なし。Provider管理画面への委譲も可能 | 最小権限、注文検索、参照・変更監査、PII閲覧制限。販売開始時点で少なくとも担当者と代替手順は必要 |
-| P1-02 | キャンセル・部分返金・返品・再配送 | 返金イベント受信はあるが独自の指示Use Caseなし | Provider管理画面か独自Commandかを選ぶ。金額上限、重複防止、返金確定の非同期反映、在庫/出荷との整合を検証 |
-| P1-03 | Inbox/Outboxの再処理運用 | Inbox自動retryとFAILED隔離はある。Outboxは書込のみ | 失敗の調査、権限付き再試行、滞留確認。必要なconsumerを決め、記録だけのOutboxの保持/肥大化方針を定める |
-| P1-04 | 台帳と事業者の集計照合 | イベント再取得とLedger記録はあるが集計レポートなし | 売上・返金・入金・手数料等の責任範囲を決め、差異の検知と調査手順を設ける。会計システム全体の新規開発は不要 |
-| P1-05 | 負荷・濫用・外部API上限の検証 | Timeout/一部retry/入力検証はある。商用負荷証跡なし | 購入開始、郵便番号検索、注文参照、Webhookの負荷/上限を測定。必要なRate Limit・Cache・DB poolを実測に基づき追加 |
-| P1-06 | 商品数拡大時の検索・ページング | Shopify取得上限は50件×20ページ。検索は取得結果上 | 実カタログ件数で待ち時間・API量を測定し、必要ならProvider検索/ページングを実装。小規模時は現行構成を維持 |
-| P1-07 | Dependabot更新処理の失敗調査 | 実行34572684620の原因は、7日間のrelease-age制約がPR #18で採用済みの最低バージョンを拒否したこと。pnpm設定に採用済み3バージョンだけの例外を追加し、隔離コピーで修正前の失敗・修正後の更新を検証 | 残作業はmain反映後のDependabot実更新成功の確認、および2026-09-18以降の例外削除。アプリCI成功だけで更新ジョブ復旧と扱わない |
-| P1-08 | 開発ツールの次期移行 | TypeScript/Node型のmajor更新は意図的に保留 | Node baselineと型の整合、TypeScript AST API利用箇所、ESLint等の互換性を専用PRで検証。保留設定を無条件に解除しない |
-| P1-09 | カート編集と期限切れ復旧 | 実装済み。ギフトの入力復元・変更保存・破棄、期限外日付の再選択、商品入れ替え確認、古い確認の無効化 | [仕様と検証](CART_RECOVERY.md)。本番Hosted Checkoutで発行済みのSessionの取消は対象外 |
+| ID | 課題 | 現在の状態と完了条件 |
+| --- | --- | --- |
+| P1-01 | 自作注文のサポート検索・操作 | 2026-09-14：専用権限による顧客一覧、ID/注文番号検索、本人に紐付いた自作注文の履歴、参照監査を実装・隔離DB検証。氏名/連絡先・対応メモ・変更操作、実Google/本番接続、担当者・監査保持期限は残る。[顧客管理](CUSTOMER_MANAGEMENT.md)。販売時点で担当者・代替手順は必要 |
+| P1-02 | キャンセル・部分返金・返品・再配送 | 返金イベント受信は実装済み、独自指示Use Caseなし。Stripe管理画面か独自操作かを決定し、上限/重複防止/非同期確定/在庫と発送の整合を検証。販売前の最小運用はP0-08/14で確定 |
+| P1-03 | Inbox/Outboxの再処理 | Inbox retry/FAILED隔離あり。Outboxは書込中心。権限付き調査/再試行・滞留表示、必要なconsumer、保持/肥大化、通知再送の手順を整える |
+| P1-04 | 売上・返金・入金・手数料の照合 | Ledgerとイベント再取得あり。集計レポート不足。Stripeとの差異検知・調査・入金確認の担当と手順を決定。会計システム全体は新規開発しない |
+| P1-05 | 負荷・濫用・上限 | Timeout/一部retry/検証あり。購入開始・郵便番号・注文参照・Webhookを実測し、必要なRate Limit/Cache/DB poolを追加。想定販売量で最低限の確認を行う |
+| P1-06 | 商品数増加時の検索・ページング | 自作カタログの上限・待ち時間・DB量を実測し必要な検索/ページングを追加。初期M/Lに大規模検索基盤を追加しない |
+| P1-07 | Dependabotの一時例外整理 | 更新ジョブ復旧は確認済み。`pnpm-workspace.yaml` の採用済み3バージョン例外を2026-09-18以降にrelease-age条件と再照合し、不要なら削除する。日付だけで無条件に解除しない |
+| P1-08 | 開発ツールの次期移行 | Node 24/pnpm 10.23.0、TypeScript 5.9.3。TS majorはAST API互換性で保留。Node型・ESLint等を含め専用変更で検証 |
+| P1-09 | カート編集・期限切れ復旧 | 実装・確認済み。新規開発の残件から除外。[CART_RECOVERY](CART_RECOVERY.md)。発行済みStripe Sessionの取消は別課題 |
+| P1-10 | 商品・在庫変更履歴の画面 | 監査履歴は保存済み、専用一覧画面は未実装。必要な担当者に安全な検索・閲覧を提供 |
+| P1-11 | 運営者ログアウトの初回未反映 | 一度の未反映記録あり。後続の複数回再試験・Cookie削除テストは成功。原因は未特定で、解決済みとも継続発生とも断定しない。再発時に秘密値なしの送受信診断で調査。[接続記録](NATIVE_CATALOG_CONNECTION_VERIFICATION.md) |
+| P1-12 | 移行文書・旧実装の整理 | 本台帳・README・引き継ぎは現行方針へ更新。旧決済・会議・紹介文書には履歴注記を追加。残るShopify前提の文書・画面・処理は関連変更時に現在の所有者/接続先と照合。既存取引・資格情報・データは確認なしに削除しない |
 
-## P2：採否を決める追加機能
+| P1-13 | 会員ランク・自動割引の公開準備 | 2026-09-14：ランク方式をユーザー選択済み。本人の購入履歴の商品表示、全履歴集計、ランク・進捗、割引スナップショット、Stripe金額照合を実装し単体/隔離DB/合成セッションで検証。料率・閾値と返金時条件の採算/業務確認、実Google→Stripeテスト割引購入→返金→ランク再表示、会計確認は未完。0025 migrationが必要。本番停止を維持。[設計・証跡](CUSTOMER_LOYALTY.md) |
+
+## P2：採用判断後の追加機能
 
 | ID | 候補 | 現行仕様と着手条件 |
 | --- | --- | --- |
-| P2-01 | eGift受取リンク | 住所を知らずに贈る。トークンのハッシュ保存・期限・単回使用・失効、受取人入力、未受取処理。在庫/配送/通知完成後 |
-| P2-02 | 顧客アカウント・住所帳・注文履歴 | 現行はguest-first。Shopify Customer Account接続を優先し、本人確認・購入者/受取人分離を設計 |
-| P2-03 | 商品バリエーション | 初期M/Lの2SKU選択・入力保持・価格/送料/購入スナップショットをpreviewに実装。本番Adapterは1商品1variantのまま。実Shopifyの2variant・在庫・実写・税/配送条件が残件。[会議反映](MEETING_2026-09-11.md) |
-| P2-04 | 複数商品カート | 現行は単一item。商品ごとの金額・在庫と注文合計・部分取消/返金を設計 |
-| P2-05 | 複数配送先 | 明示的な非対応仕様。注文分割・送料・キャンセル・返金・サポートをADRで決めてから実装 |
-| P2-06 | クーポン・販促・分析・推薦 | 友人500円・紹介者500円の紹介特典をTest Modeに実装（[仕様・本番残件](REFERRALS.md)）。本番は顧客認証・永続台帳・Shopify割引・検証済み配達/返金イベント・不正対策が必要。分析/推薦は未実装、購入をブロックしない |
-| P2-07 | 生産者・花材・ロット・季節運用 | 現行は商品metadata。ロット追跡、代替花材、仕入/廃棄が業務上必要になったら所有Moduleと在庫移動を定義 |
-| P2-08 | 受取人特典・増量・用途別同梱物 | 受取人案内と無効状態を実装。特典・箱仕様・同梱資材・物流出力は業務条件待ち。[B09〜B11](MEETING_2026-09-11.md) |
-| P2-09 | SNS・商品フィード・効果測定 | 同意して開始するタブ内の動線確認を実装。実測定のサービス/ID/同意、公式SNS、Shopify→Googleの商品URL整合と店舗設定は待ち。[B13〜B15](MEETING_2026-09-11.md) |
+| P2-01 | 住所を知らずに贈るeGift | 受取リンク、ハッシュ保存、期限・単回使用・失効、受取人入力、未受取処理。在庫/配送/通知を整え採用条件を確定後 |
+| P2-02 | 住所帳・プロフィール編集 | Googleログイン・履歴・詳細・プロフィール参照は実装済み。編集/削除・住所帳・返金内訳等の追加範囲を決定。既存注文をメールで後付け所有しない |
+| P2-03 | 商品バリエーション拡張 | M/L選択・保持は実装済み。実物と本番登録はP0-09/23。サイズ/色等を増やす場合のみSKU・在庫・料金を追加設計。旧Shopifyの2variant接続を新要件にしない |
+| P2-04 | 複数商品・複数箱カート | 現行は1箱。商品ごとの価格/送料/在庫、注文合計、部分取消/返金を設計 |
+| P2-05 | 複数配送先 | 現行は非対応。注文分割、送料、発送、取消、返金、サポートを決めてから実装 |
+| P2-06 | 紹介・クーポン・販促・推薦 | 紹介はTest Mode専用。自作顧客と実注文による初回判定、永続台帳、自己/複数/相互紹介対策、実決済の割引、検証済み支払/配達/取消/返金、異議申立て・再処理を接続。推薦は未実装。分析・推薦障害で購入を止めない。会員ランク割引はP1-13に分離し、適用価格の確認障害時は無断で通常価格に切り替えない。[REFERRALS](REFERRALS.md) |
+| P2-07 | 生産者・花材・ロット・季節運用 | 現行は商品metadata。ロット追跡、代替花材、仕入/廃棄、許諾、在庫移動を必要性に応じて設計 |
+| P2-08 | 受取人特典・増量・用途別同梱物 | 共通案内と無効状態のみ。方式・原価・対象サイズ・期限/回数/成立条件、カードURL/QR、資材を決定。ギフト/自宅用を宛名から推測せず、採用時は入力から発送指示までつなぐ |
+| P2-09 | SNS・商品フィード・効果測定 | タブ内の同意付き検証カウントのみ。公式Instagram/Facebook、Google/Meta所有アカウント、同意/ID/保持、正式ドメイン/商品URL/画像/識別子/在庫/価格のフィード、予算/担当を確定。自作商品からの連携に再設計し、実売上は検証済み注文から計測 |
 
 ## 次に進める順序
 
-1. P0-01/02：公開化で取り除けるガバナンス課題を閉じる。承認者の決定は人が行う。
-2. P0-04の方針はADR 0003で確定。P0-05：Shopify + KOMOJU経路の残る購入処理・在庫・通知・Gateを完成。
-3. P0-05/06/13：購入・在庫・緊急停止を一つの取引経路として検証。
-4. P0-07/14/15：届けられる日付、実出荷、通知を完成。
-5. 並行して設定・規約・PII方針をそろえ、P0-18〜21で販売開始条件を確認。
+1. P0-05/10/18：隔離Stripeテスト設定と、認証済み購入から注文表示までの経路。外部設定待ちなら、必要権限・設定先・手順を具体化しつつ独立した実装/試験を進める。
+2. P0-14/15：自作の発送・追跡・通知。利用者に届くまでを完了条件とする。
+3. P0-07/08/16/17/23：実物・配送・返品・窓口・個人情報の業務判断を反映。
+4. P0-01/02/11/12/20/22：権限・本番接続・認証・復旧演習。保護と承認の設定は並行して進める。
+5. P0-21：対象SHA、証跡、承認をそろえ最後に公開。P2を一括して販売開始の必須条件にしない。
 
-通知をProviderに任せるなど、受入条件を満たす小さな運用で代替できる項目は独自実装を増やさない。会員機能・複数商品・AI等は販売開始の必須条件にしない。
+## 更新方法と参照
 
-## 証跡と既存資料
-
-- [本番公開条件](RELEASE.md)、[ガバナンス](GOVERNANCE.md)、[Shopify](SHOPIFY.md)、[Stripe](STRIPE.md)、[Storefront](STOREFRONT.md)
-- [ADR 0001](../architecture/adr/0001-shopify-first-commerce-boundary.md)、[ADR 0002](../architecture/adr/0002-commerce-persistence-and-payment-boundaries.md)
-- [本番証跡設定](../../config/production-commerce-activation.json)、[本番Gate](../../scripts/check-production-readiness.mjs)
-- [構成の組み立て](../../src/shared/infrastructure/composition-root.ts)、[配送日](../../src/modules/fulfillment/domain/delivery-date.ts)
-- [PR #18](https://github.com/bright-broom/BloomBox_shop/pull/18)、[Issue #6](https://github.com/bright-broom/BloomBox_shop/issues/6)
-
-公開後のAPI設定は変化するため、実施時に再取得する。ホスティング・Shopify・Stripeのアカウント状態、承認済み法務文書、バックアップ実体は本調査では確認していない。
+- 作業後は該当IDの「実装・判断・設定・検証」の状態と完了条件を更新する。完了には日付・対象SHA・根拠リンクを付ける。IDを削除して別課題へ再利用しない。
+- 変わる事実には確認日を付け、PR/CI/Environment/アカウント/URLは作業時に再確認。未確認を未設定と断定しない。
+- [HANDOFF](HANDOFF.md) は入口、[ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md) は現行方針、[RELEASE](RELEASE.md) は公開手順、[GOVERNANCE](GOVERNANCE.md) は権限・レビュー。本台帳はそれらの承認を代替しない。
+- 接続の詳細は [STRIPE](STRIPE.md)、[CUSTOMER_ACCOUNT](CUSTOMER_ACCOUNT.md)、[NATIVE_CATALOG_MANAGEMENT](NATIVE_CATALOG_MANAGEMENT.md)、[NATIVE_INVENTORY](NATIVE_INVENTORY.md)、[PURCHASE_SHIPPING](PURCHASE_SHIPPING.md)。各資料の古い未確認記載より後の証拠は、この台帳からたどる。

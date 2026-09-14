@@ -9,6 +9,9 @@ import { MobileNavigation } from "@/ui/mobile-navigation";
 import { HeaderCartLink } from "@/ui/header-cart-link";
 import { referralContent } from "@/shared/infrastructure/content/referral-content";
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
+import { customerAccountContent } from "@/shared/infrastructure/content/customer-account-content";
+import { AdvertisingConsent } from "@/ui/advertising-consent";
+import { advertisingPublicSettings } from "@/shared/infrastructure/advertising-runtime";
 import "./globals.css";
 
 const sans = Noto_Sans_JP({
@@ -41,6 +44,7 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const advertising = advertisingPublicSettings();
   return (
     <html lang="ja">
       <body className={sans.variable}>
@@ -59,13 +63,16 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <Link href="/flowers">季節の花</Link>
             <Link href="/about">私たちについて</Link>
             <Link href="/guide">ご利用ガイド</Link>
+            <Link href="/account" prefetch={false}>{customerAccountContent.title}</Link>
           </nav>
           <MobileNavigation>
             <Link href="/flowers">季節の花</Link>
             <Link href="/about">私たちについて</Link>
             <Link href="/guide">ご利用ガイド</Link>
             <Link href="/faq">よくあるご質問</Link>
+            <Link href="/account" prefetch={false}>{customerAccountContent.title}</Link>
             <Link href="/cart">カート</Link>
+            <Link href="/operations" prefetch={false}>{customerAccountContent.entry.operator}</Link>
           </MobileNavigation>
           <div className="header-actions">
             <HeaderCartLink />
@@ -90,6 +97,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                 <Link href="/guide">ご利用ガイド</Link>
                 <Link href="/shipping-returns">配送・返品</Link>
                 <Link href="/faq">よくあるご質問</Link>
+                <Link href="/account" prefetch={false}>{customerAccountContent.title}</Link>
                 <Link href="/gift-next">{giftExperienceContent.recipient.label}</Link>
                 {loadRuntimeMode() === "preview" ? <Link href="/preview/gift-experience">{giftExperienceContent.preview.navLabel}</Link> : null}
                 {loadRuntimeMode() === "preview" && loadCheckoutProviderMode() === "preview" ? <Link href="/referrals">{referralContent.navLabel}</Link> : null}
@@ -100,6 +108,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                 <Link href="/privacy">プライバシー</Link>
                 <Link href="/terms">利用規約</Link>
                 <Link href="/commercial-transactions">特定商取引法に基づく表記</Link>
+                <Link href="/operations" prefetch={false}>{customerAccountContent.entry.operator}</Link>
               </nav>
             </div>
             <div className="footer-note">
@@ -108,6 +117,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </div>
           </div>
         </footer>
+        {advertising.enabled ? <AdvertisingConsent preview={advertising.preview} /> : null}
       </body>
     </html>
   );

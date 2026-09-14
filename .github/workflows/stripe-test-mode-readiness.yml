@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify account contract and Checkout probe
+    name: Verify account contract and M/L shipping probes
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: stripe-test
@@ -33,7 +33,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -41,8 +41,13 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Verify Stripe Test Mode
+      - name: Verify Stripe Test Mode shipping and cleanup
         run: |
+          set -euo pipefail
+          echo 'M/Lの料金設定と期限切れを確認します。実支払・最終税額・注文保存のE2E検証ではありません。' >> "$GITHUB_STEP_SUMMARY"
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          close_summary() {
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          }
+          trap close_summary EXIT
           pnpm --silent stripe:verify:test | tee --append "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"

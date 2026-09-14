@@ -1,20 +1,25 @@
 "use client";
 
-import { readPreviewReceipt, type PreviewReceipt } from "@/modules/checkout/presentation/browser-checkout-session";
+import { cleanupPreviewCheckout, readPreviewCheckoutCleanupStatus, readPreviewReceipt, type PreviewReceipt } from "@/modules/checkout/presentation/browser-checkout-session";
+import { useState } from "react";
+import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { formatMoney, money } from "@/shared/domain/money";
 import Link from "next/link";
-import { useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
+import { CheckoutStorageUnavailable } from "@/ui/checkout-storage-unavailable";
+import { CHECKOUT_SESSION_UNAVAILABLE, useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
 import { PreviewCheckoutUnavailable, TestModeBanner } from "@/ui/preview-checkout-shared";
 import { PreviewReferralOrder } from "@/ui/preview-referral-order";
 import { referralContent } from "@/shared/infrastructure/content/referral-content";
 
 export function PreviewCheckoutComplete({ enabled }: { enabled: boolean }) {
+  const [cleanupError, setCleanupError] = useState(false);
   const revision = useCheckoutSessionRevision();
-  const receipt: PreviewReceipt | null | undefined = revision === null
+  const receipt: PreviewReceipt | null | undefined = (revision === null || revision === CHECKOUT_SESSION_UNAVAILABLE)
     ? undefined
     : readPreviewReceipt(window.sessionStorage);
 
   if (!enabled) return <PreviewCheckoutUnavailable />;
+  if (revision === CHECKOUT_SESSION_UNAVAILABLE) return <CheckoutStorageUnavailable />;
   if (receipt === undefined) {
     return <p className="checkout-loading" role="status">テスト注文を確認しています…</p>;
   }
@@ -29,6 +34,18 @@ export function PreviewCheckoutComplete({ enabled }: { enabled: boolean }) {
         </Link>
       </div>
     );
+  }
+
+  const cleanupStatus = readPreviewCheckoutCleanupStatus(window.sessionStorage, receipt.requestId);
+  const cleanupCopy = giftExperienceContent.checkoutCleanup;
+  function retryCleanup() {
+    setCleanupError(false);
+    if (!receipt?.requestId) return;
+    try {
+      cleanupPreviewCheckout(window.sessionStorage, receipt.requestId);
+    } catch {
+      setCleanupError(true);
+    }
   }
 
   return (
@@ -49,14 +66,20 @@ export function PreviewCheckoutComplete({ enabled }: { enabled: boolean }) {
         {receipt.discountAmount > 0 ? <div><dt>{referralContent.discountLabel}</dt><dd>−{formatMoney(money(receipt.discountAmount))}</dd></div> : null}
         <div><dt>テスト合計</dt><dd>{formatMoney(money(receipt.totalAmount))}</dd></div>
       </dl>
-      <p className="data-minimization-note">
-        入力したメールアドレス、電話番号、住所、カート情報は、このテスト完了時にブラウザーから削除しました。
-      </p>
+      {cleanupStatus === "pending" ? (
+        <div className="checkout-notice">
+          <p role="alert">{cleanupCopy.pending}</p>
+          <button className="secondary-button" type="button" onClick={retryCleanup}>{cleanupCopy.retry}</button>
+          {cleanupError ? <p className="form-error" role="alert">{cleanupCopy.error}</p> : null}
+        </div>
+      ) : (
+        <p className="data-minimization-note" role="status">{cleanupStatus === "complete" ? cleanupCopy.complete : cleanupCopy.changed}</p>
+      )}
       <div className="confirmation-actions">
         <Link className="primary-button" href="/flowers">
           別の花を見る <span aria-hidden="true">→</span>
         </Link>
-        <Link className="text-link" href="/cart">空のカートを確認する</Link>
+        <Link className="text-link" href="/cart">{cleanupCopy.cart}</Link>
       </div>
       <PreviewReferralOrder requestId={receipt.requestId} tracked={receipt.referralTracked} />
     </>

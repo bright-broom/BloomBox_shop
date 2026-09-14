@@ -1,5 +1,6 @@
+import { InventoryUnavailableError, type InventoryReservations } from "@/modules/inventory/public";
 import { randomUUID } from "node:crypto";
-import type { DatabaseClient } from "./postgres-client";
+import type { DatabaseClient, DatabaseTransaction } from "./postgres-client";
 
 export type DataRetentionResult = Readonly<{
   purchaseIntentsExpired: number;
@@ -11,19 +12,26 @@ export class PostgresDataRetentionJob {
   constructor(
     private readonly sql: DatabaseClient,
     private readonly createId: () => string = randomUUID,
+    private readonly inventory?: (tx: DatabaseTransaction) => InventoryReservations,
   ) {}
 
   async execute(now: Date = new Date()): Promise<DataRetentionResult> {
     return this.sql.begin(async (transaction) => {
+      // Provider assignment precedes the network call. An assigned-but-unrecorded checkout is uncertain, not expired.
       const expiredPurchaseIntents = await transaction`
-        UPDATE bloombox.purchase_intents
-        SET status = 'EXPIRED', version = version + 1, updated_at = ${now}
-        WHERE status IN ('DRAFT', 'READY_FOR_CHECKOUT')
-          AND expires_at <= ${now}
-          AND commerce_provider IS DISTINCT FROM 'SHOPIFY'
-        RETURNING id
+        SELECT intent.id, item.catalog_product_id FROM bloombox.purchase_intents intent
+        JOIN bloombox.purchase_intent_items item ON item.purchase_intent_id = intent.id AND item.position = 0
+        WHERE intent.status IN ('DRAFT', 'READY_FOR_CHECKOUT') AND intent.expires_at <= ${now}
+          AND intent.commerce_provider IS NULL
+        ORDER BY intent.expires_at, intent.id LIMIT 200 FOR UPDATE OF intent SKIP LOCKED
       `;
       for (const intent of expiredPurchaseIntents) {
+        if (String(intent.catalog_product_id).startsWith("native_")) {
+          if (!this.inventory) throw new InventoryUnavailableError();
+          await this.inventory(transaction).release(String(intent.id), "INTENT_EXPIRED", now);
+        }
+        await transaction`UPDATE bloombox.purchase_intents SET status = 'EXPIRED', version = version + 1, updated_at = ${now}
+          WHERE id = ${intent.id}`;
         await transaction`
           INSERT INTO bloombox.outbox_events (
             id, aggregate_type, aggregate_id, event_type, event_version,

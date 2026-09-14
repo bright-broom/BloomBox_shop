@@ -1,3 +1,4 @@
+import { loadCurrentCustomerLoyalty } from "@/shared/infrastructure/customer-loyalty";
 import type { Metadata } from "next";
 import { loadRuntimeMode } from "@/shared/infrastructure/config/runtime-config";
 import { CartPage } from "@/ui/cart-page";
@@ -16,7 +17,8 @@ type CartRouteProps = {
 
 export default async function CartRoute({ searchParams }: CartRouteProps) {
   const query = await searchParams;
-  const previewPrices = loadRuntimeMode() === "preview" ? (await application.listProducts.execute()).flatMap((product) => product.previewOffer ? [{ productId: product.id, unitAmount: product.price.amount, shippingAmount: product.previewOffer.shippingAmount }] : []) : [];
+  const catalogPrices = (await application.listProducts.execute()).flatMap((product) => product.shippingAmount !== undefined ? [{ productId: product.id, unitAmount: product.price.amount, shippingAmount: product.shippingAmount }] : []);
+  const loyalty = loadRuntimeMode() === "preview" ? null : await loadCurrentCustomerLoyalty();
   return (
     <section className="checkout-page section-shell" data-checkout-page="cart">
       <CheckoutProgress currentStep={3} />
@@ -26,7 +28,8 @@ export default async function CartRoute({ searchParams }: CartRouteProps) {
         <p>お届け内容を確認して、購入手続きへお進みください。</p>
       </header>
       <CartPage
-        previewPrices={previewPrices}
+        catalogPrices={catalogPrices}
+        loyalty={loyalty}
         added={query.added === "1"}
         checkoutCancelled={query.checkout === "cancelled"}
         previewMode={loadRuntimeMode() === "preview"}

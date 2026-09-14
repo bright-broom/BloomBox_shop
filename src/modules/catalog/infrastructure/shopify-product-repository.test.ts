@@ -13,6 +13,55 @@ import {
 } from "./shopify-storefront-client";
 
 describe("ShopifyProductRepository", () => {
+  it.each(["bloombox", "gift-catalog"])("enforces the exact %s tag across listing pages", async (catalogTag) => {
+    const outside = productNode({ tags: [`${catalogTag}-archive`], variantId: "201" });
+    // An unrelated product does not need BloomBox's curated content.
+    outside.subtitle.value = "";
+    const request = vi.fn<ShopifyStorefrontClient["request"]>()
+      .mockResolvedValueOnce(productsResponse([outside], true, "cursor-1"))
+      .mockResolvedValueOnce(productsResponse([
+        productNode({ tags: [], handle: "untagged", variantId: "202" }),
+        productNode({ tags: [catalogTag.toUpperCase()], handle: "wrong-case", variantId: "203" }),
+        productNode({ tags: ["seasonal", catalogTag], variantId: "204" }),
+      ], false, null));
+
+    const products = await new ShopifyProductRepository({ request }, catalogTag).findAvailable();
+
+    expect(products.map((product) => product.externalReference)).toEqual(["gid://shopify/ProductVariant/204"]);
+    expect(request).toHaveBeenNthCalledWith(2, expect.any(String), {
+      first: 50, after: "cursor-1", query: `tag:${catalogTag}`,
+    });
+  });
+
+  it("returns an empty catalog when no returned product has the curated tag", async () => {
+    const repository = new ShopifyProductRepository({
+      request: vi.fn().mockResolvedValue(productsResponse([productNode({ tags: ["other"] })], false, null)),
+    }, "bloombox");
+
+    await expect(repository.findAvailable()).resolves.toEqual([]);
+  });
+
+  it("still rejects missing curated content on an included product", async () => {
+    const included = productNode();
+    included.subtitle.value = "";
+    const repository = new ShopifyProductRepository({
+      request: vi.fn().mockResolvedValue(productsResponse([included], false, null)),
+    }, "bloombox");
+
+    await expect(repository.findAvailable()).rejects.toBeInstanceOf(ShopifyCatalogResponseError);
+  });
+
+  it("still validates response structure before excluding unrelated products", async () => {
+    const response = productsResponse([productNode({ tags: ["other"] })], false, null);
+    const repository = new ShopifyProductRepository({
+      request: vi.fn().mockResolvedValue({
+        data: { products: { ...response.data.products, nodes: [{ tags: ["other"] }] } },
+      }),
+    }, "bloombox");
+
+    await expect(repository.findAvailable()).rejects.toBeInstanceOf(ShopifyCatalogResponseError);
+  });
+
   it("paginates the curated tag and returns only available single-variant products", async () => {
     const request = vi.fn<ShopifyStorefrontClient["request"]>()
       .mockResolvedValueOnce(productsResponse([

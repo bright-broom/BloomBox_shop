@@ -8,7 +8,7 @@ const storefront = JSON.parse(await readFile("content/storefront.json", "utf8"))
 const blockers = [];
 const requiredEvidence = [
   "activationDecisionAdr",
-  "shopifyCatalogContract",
+  "nativeCatalogContract",
   "stripeTestModeE2e",
   "inventoryReservationStrategy",
   "taxShippingReview",
@@ -23,9 +23,9 @@ if (!compositionRoot.includes("new PostgresPurchaseIntentRepository")) {
   );
 }
 
-if (!compositionRoot.includes("new ShopifyProductRepository")) {
+if (!compositionRoot.includes("new PostgresProductRepository")) {
   blockers.push(
-    "The production composition does not contain the Shopify Storefront catalog adapter.",
+    "The production composition does not contain the native PostgreSQL catalog adapter.",
   );
 }
 

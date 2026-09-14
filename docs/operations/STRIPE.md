@@ -1,6 +1,6 @@
 # Stripe connection and operations
 
-This runbook prepares the dormant Stripe connector defined by ADR 0002. Do not enable live mode until the activation decision, Shopify catalog contract evidence, isolated end-to-end evidence, tax review, shipping configuration, support ownership, and production secrets are complete.
+ADR 0009に基づき、BloomBoxの自作CommerceをStripeへ接続するための手順です。本番注文受付はコード上で停止しています。接続確認の成功と、実支払・注文保存・配送を含む公開条件を区別します。M/Lの1箱送料は税込固定料金を検証対象とします。
 
 ## Fixed integration contract
 
@@ -23,8 +23,8 @@ Create and record the owner for each resource in the private credential inventor
 
 1. A Stripe test account and a separate live account or mode-specific access policy.
 2. Separate restricted server keys. The application key has Checkout Session write/read access. The worker key has Event read access. They must not be the same key. Restricted keys beginning with `rk_test_` or `rk_live_` are supported; publishable keys are not.
-3. One shipping rate for Japan. Record its `shr_` identifier as `STRIPE_SHIPPING_RATE_ID`.
-4. A reviewed `inclusive`, `exclusive`, or `unspecified` tax behavior. The shipping-rate behavior must match the price behavior. Enable Stripe Tax for explicit tax behavior and confirm the public price copy agrees.
+3. 共通送料 `STRIPE_SHIPPING_RATE_ID` は旧経路の互換性確認用です。M/Lの検証Sessionには個別の固定送料を渡します。実商品DBの送料登録・購入時固定は送料実装PR #99の対象で、この接続確認は商品DBを書き換えません。
+4. 1箱送料の接続確認は `STRIPE_TAX_BEHAVIOR=inclusive` と `STRIPE_AUTOMATIC_TAX_ENABLED=true` が必要です。旧共通送料の税区分も一致させます。実際の住所入力後の税額・最終総額は別途E2Eで確認します。
 5. A business-profile terms URL before setting `STRIPE_TERMS_ACCEPTANCE=required`. Configure payment receipts and branding in the Dashboard; these Dashboard-only settings remain a manual review item.
 6. A webhook endpoint at `/api/webhooks/stripe`, pinned to the API version above and subscribed only to:
    - `checkout.session.completed`
@@ -41,7 +41,7 @@ Create and record the owner for each resource in the private credential inventor
    - `charge.dispute.closed`
 7. The webhook signing secret and expected `acct_` account ID.
 
-Direct Stripe payment must not be activated until the provider activation ADR defines how Shopify-authoritative inventory is reserved before payment and reconciled after cancellation, expiry, refund, and provider outage. The current connector deliberately does not invent an inventory write policy.
+自作在庫の予約・確定・解放はADR 0010で内部実装済みです。実Stripeの支払・取消・失効・返金・通信断と在庫の照合、および発送運用の検証が完了するまで本番受付を解除しません。
 
 ## Runtime configuration
 
@@ -50,11 +50,8 @@ Application runtime:
 ```text
 BLOOMBOX_RUNTIME_MODE=production
 BLOOMBOX_CHECKOUT_PROVIDER=stripe
-BLOOMBOX_CHECKOUT_INTAKE_ENABLED=true
+BLOOMBOX_CHECKOUT_INTAKE_ENABLED=false
 BLOOMBOX_PUBLIC_ORIGIN=https://<production-origin>
-SHOPIFY_STORE_DOMAIN=<shop>.myshopify.com
-SHOPIFY_STOREFRONT_ACCESS_TOKEN=<storefront-access-token>
-SHOPIFY_CATALOG_TAG=bloombox
 DATABASE_URL=<least-privilege-application-url>
 DATABASE_SSL_MODE=verify-full
 DATABASE_MAX_CONNECTIONS=5
@@ -65,8 +62,8 @@ STRIPE_RECONCILIATION_SECRET_KEY=<restricted-test-events-key>
 STRIPE_WEBHOOK_SECRET=<test-webhook-secret>
 STRIPE_ACCOUNT_ID=<expected-account-id>
 STRIPE_SHIPPING_RATE_ID=<shipping-rate-id>
-STRIPE_TAX_BEHAVIOR=<inclusive|exclusive|unspecified>
-STRIPE_AUTOMATIC_TAX_ENABLED=<true|false>
+STRIPE_TAX_BEHAVIOR=inclusive
+STRIPE_AUTOMATIC_TAX_ENABLED=true
 STRIPE_TERMS_ACCEPTANCE=<required|none>
 # STRIPE_CHECKOUT_CUSTOM_DOMAIN=<exact-hostname-without-scheme>
 COMMERCE_WORKER_SECRET=<random-32-plus-character-secret>
@@ -103,9 +100,23 @@ Variable: STRIPE_TERMS_ACCEPTANCE
 Optional variable: STRIPE_CHECKOUT_CUSTOM_DOMAIN
 ```
 
-The workflow refuses every live credential. It verifies credential separation, account identity, the active JPY shipping rate, matching shipping tax behavior, Stripe Tax readiness, the business-profile terms URL, one exact webhook endpoint, exact event subscriptions, and the pinned endpoint version. It then creates, retrieves, validates, and expires a no-customer-data Checkout Session. The expired Session ID and account contract are written to the workflow summary as evidence.
+ワークフローは本番キー、同一キーの兼用、税別・税未指定を拒否します。アカウント・旧共通送料・Stripe Tax・規約URL・Webhook URL/版/購読イベント・Events読取権限を確認後、M/LのSessionを作成します。金額は検証用 `content/catalog.json` から検証付きで読み、現在はM＝4,000＋1,000円、L＝8,000＋0円です。これは実商品カタログの検証ではありません。
 
-This probe does not submit a payment method and is not a substitute for the browser E2E matrix below. Run it first so account configuration failures are separated from customer-flow failures.
+作成したSessionを再取得し、保存された商品の単価・数量・通貨・税区分と、個別の固定送料を照合します。住所入力前は自動税計算が未完了になり得るため、最終総額を検証済みとは扱いません。顧客情報・カード情報は送信せず、支払操作は行いません。
+
+全Sessionの期限切れを再取得で確認した後にだけ `status=connection_verified` を記録します。作成・金額照合・後片付けに失敗した場合は `failed` と終了コード1です。途中で失敗しても判明済みのSessionはすべて後片付けを試みます。expireの応答が不明でも、再取得で未払い・PaymentIntentなし・期限切れを確認できれば成功とします。SDKの生エラーやCheckout URLはログに残しません。
+
+作成結果が不明なSessionは `cleanup=unknown` と識別子・同一要求キーを記録します。別キーで新規作成せず、専用テストアカウントで識別子により調査します。Sessionの有効期限は作成要求から31分です。`unconfirmed` は期限切れ未確認であり、成功として扱いません。生成されたShipping Rate等のテストオブジェクトを削除する処理はありません。
+
+**実行順:** この変更のWebhook処理をテスト接続先へ配備し、`/api/health` のrevisionと対象コードを確認してからワークフローを手動実行します。専用接続確認の `readiness_` 識別子・固定マーカー・未払い・PaymentIntentなし・期限切れを持つテスト通知だけは、署名/アカウント/API版の検証後に受理してInboxへ保存しません。通常の購入UUID、支払い済み、本番モード、署名不正はこの除外に入りません。これにより実在しない購入を探す再試行が発生しません。旧版へのロールバック前は新たなprobe実行を止め、発行済みprobeの期限切れ通知を処理します。
+
+記録には実行コードのSHA（GitHub上のみ）、ケース別の金額、Session ID、期限切れ結果を残します。`paymentVerification` と `finalTaxAndTotalVerification` は常に `not_performed` です。署名付き通知の実配信・DB保存・ブラウザーでの支払いは、下記E2Eで別に確認します。
+
+2026-09-13時点の確認: ローカルのプロジェクト設定にStripeキーなし。GitHub Environment一覧はPreviewとProductionで、stripe-testは未作成です。キーの発行・環境登録・権限拡張・実Stripeへの接続は行っていません。公開チャットに秘密鍵を貼らず、権限を持つ担当者が上記の専用Environmentへ登録してください。
+
+実装の検証: Node 24.21.0 / pnpm 10.23.0で `pnpm check:ci`（通常テスト924件・build）を実行。関連33件ではSDKモックでM/Lの再取得照合、設定不備で外部接続ゼロ、後片付けの失敗・不明応答・途中失敗・本番オブジェクト拒否を確認しました。検証プログラムが生成する識別子を使った署名付き期限切れ通知の除外、通常購入UUID・本番モード・支払い済み通知を除外しないことも確認しました。DBスキーマや注文・在庫の書込処理は変更していません。これらはStripeアカウントへの実接続証拠ではありません。
+
+仕様参照: [Checkout Sessionの再取得](https://docs.stripe.com/api/checkout/sessions/retrieve)、[Sessionの期限切れ](https://docs.stripe.com/api/checkout/sessions/expire)。
 
 ## Automated flow
 
@@ -131,7 +142,7 @@ Before changing `STRIPE_MODE` to `live`, record all of the following in the acti
 - duplicate form submission, provider timeout after Session creation, duplicate Webhook, invalid signature, delayed delivery, and reversed event order;
 - full and partial refund, failed refund, dispute opened and dispute closed;
 - changed price, unavailable catalog item, shipping-rate failure, and tax configuration mismatch;
-- concurrent buyers, the approved inventory reservation policy, reservation release, and Shopify inventory reconciliation;
+- concurrent buyers, the approved inventory reservation policy, reservation release, and native inventory reconciliation;
 - encrypted address and gift data, log inspection, retention expiry, access controls, and data-subject workflow;
 - database backup restoration, frontend rollback, Inbox retry, Event reconciliation, and incident alert recovery;
 - Stripe Dashboard totals reconciled to BloomBox Payment, Refund, and Ledger records.

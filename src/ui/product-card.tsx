@@ -8,7 +8,7 @@ export function ProductCard({ product, headingLevel = 3 }: { product: Product; h
   const Heading = headingLevel === 2 ? "h2" : "h3";
   return (
     <article className="product-card">
-      <Link className="product-image-wrap" href={`/flowers/${product.slug}`} aria-label={`${product.name}の詳細を見る`}>
+      <Link className={`product-image-wrap${product.previewOffer ? " is-package" : ""}`} href={`/flowers/${product.slug}`} aria-label={`${product.name}の詳細を見る`}>
         <Image
           className="product-image"
           src={product.imageUrl}

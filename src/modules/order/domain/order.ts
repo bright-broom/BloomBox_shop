@@ -72,3 +72,5 @@ export class Order {
     this.currentStatus = nextStatus;
   }
 }
+
+export const SUPPORT_ORDER_PAGE_SIZE = 20;

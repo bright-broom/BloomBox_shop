@@ -10,6 +10,8 @@ export type Product = Readonly<{
   subtitle: string;
   description: string;
   price: Money;
+  /** JPY shipping for one box. Undefined is unconfigured, not free. */
+  shippingAmount?: number;
   imageUrl: string;
   imageAlt: string;
   palette: string;
@@ -17,7 +19,7 @@ export type Product = Readonly<{
   flowers: readonly string[];
   grower: string;
   available: boolean;
-  /** Launch-preview SKU metadata. Never populated by the production Shopify adapter. */
+  /** Launch-preview SKU metadata. Never populated by production catalog adapters. */
   previewOffer?: Readonly<{ family: string; size: "M" | "L"; shippingAmount: number }>;
 }>;
 

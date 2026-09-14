@@ -1,3 +1,6 @@
+import { restoreLoyaltyQuote } from "@/modules/customer/public";
+import { InventoryUnavailableError, type InventoryReservations } from "@/modules/inventory/public";
+import type { CheckoutBuyerWriter } from "@/modules/customer/public";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type {
@@ -55,10 +58,15 @@ const disputePayloadSchema = z.object({
 const purchaseIntentRowSchema = z.object({
   id: z.string().uuid(),
   display_id: z.string(),
+  commerce_provider: z.literal("STRIPE"),
   status: z.string(),
   external_checkout_id: z.string().nullable(),
   currency: z.literal("JPY"),
   subtotal_minor: integerValueSchema(),
+  shipping_minor: integerValueSchema().nullable().default(null),
+  loyalty_snapshot: z.unknown().default(null),
+  loyalty_discount_minor: integerValueSchema().default(0),
+  customer_id: z.uuid().nullable().default(null),
   delivery_date: z.string(),
   pii_key_id: z.string().nullable(),
   recipient_ciphertext: z.instanceof(Buffer).nullable(),
@@ -93,7 +101,9 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
     private readonly sql: DatabaseClient,
     private readonly protector: AesGcmDataProtector,
     private readonly taxBehavior: "inclusive" | "exclusive" | "unspecified",
+    private readonly buyerWriter: (transaction: DatabaseTransaction) => CheckoutBuyerWriter,
     private readonly createId: () => string = randomUUID,
+    private readonly inventory?: (tx: DatabaseTransaction) => InventoryReservations,
   ) {}
 
   async process(event: VerifiedProviderEvent): Promise<void> {
@@ -117,11 +127,14 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
     const payload = checkoutPayloadSchema.safeParse(event.payload);
     if (!payload.success) throw new InvalidStripeCommerceEventError();
 
+    if (event.externalObjectId !== payload.data.id) throw new InvalidStripeCommerceEventError();
     if (event.eventType === "checkout.session.expired") {
+      if (payload.data.checkoutStatus !== "expired" || payload.data.paymentStatus !== "unpaid") throw new InvalidStripeCommerceEventError();
       await this.transitionPurchaseIntent(event, payload.data.purchaseIntentId, "EXPIRED");
       return;
     }
     if (event.eventType === "checkout.session.async_payment_failed") {
+      if (payload.data.paymentStatus !== "unpaid") throw new InvalidStripeCommerceEventError();
       await this.transitionPurchaseIntent(event, payload.data.purchaseIntentId, "ABANDONED");
       return;
     }
@@ -156,10 +169,15 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
         SELECT
           intent.id,
           intent.display_id,
+          intent.commerce_provider,
           intent.status,
           intent.external_checkout_id,
           intent.currency,
           intent.subtotal_minor,
+          intent.shipping_minor,
+          intent.loyalty_snapshot,
+          intent.loyalty_discount_minor,
+          intent.customer_id,
           intent.delivery_date::text,
           intent.pii_key_id,
           intent.recipient_ciphertext,
@@ -194,18 +212,29 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
       }
 
       const itemSubtotal = toSafeInteger(intent.item_subtotal_minor);
+      const loyalty = intent.loyalty_snapshot === null ? null : restoreLoyaltyQuote(intent.loyalty_snapshot, itemSubtotal);
+      const loyaltyDiscount = loyalty?.discountYen ?? 0;
+      if (loyaltyDiscount !== toSafeInteger(intent.loyalty_discount_minor) || (loyalty !== null && (
+        !intent.customer_id || !intent.catalog_product_id.startsWith("native_") || intent.quantity !== 1
+        || intent.shipping_minor === null || totalDetails.amount_discount !== 0
+      ))) throw new InvalidStripeCommerceEventError();
+      const netSubtotal = itemSubtotal - loyaltyDiscount;
       if (
         currency.toUpperCase() !== intent.currency
-        || amountSubtotal !== itemSubtotal
+        || amountSubtotal !== netSubtotal
         || toSafeInteger(intent.subtotal_minor) !== itemSubtotal
       ) {
         throw new InvalidStripeCommerceEventError();
       }
       const shipping = totalDetails.amount_shipping ?? 0;
-      const discount = totalDetails.amount_discount;
+      const discount = totalDetails.amount_discount + loyaltyDiscount;
       const reportedTax = totalDetails.amount_tax;
       const tax = this.taxBehavior === "exclusive" ? reportedTax : 0;
       const includedTax = this.taxBehavior === "inclusive" ? reportedTax : 0;
+      if (intent.shipping_minor !== null && (
+        totalDetails.amount_shipping === null || shipping !== toSafeInteger(intent.shipping_minor) || totalDetails.amount_discount !== 0
+        || this.taxBehavior !== "inclusive" || amountTotal !== netSubtotal + shipping
+      )) throw new InvalidStripeCommerceEventError();
       if (this.taxBehavior === "unspecified" && reportedTax !== 0) {
         throw new InvalidStripeCommerceEventError();
       }
@@ -245,10 +274,7 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
         throw new InvalidStripeCommerceEventError();
       }
 
-      await transaction`
-        INSERT INTO bloombox.buyers (id, created_at)
-        VALUES (${buyerId}, ${event.occurredAt})
-      `;
+      await this.buyerWriter(transaction).create({ buyerId, purchaseIntentId: intent.id, occurredAt: event.occurredAt });
       await transaction`
         INSERT INTO bloombox.recipients (id, created_at)
         VALUES (${recipientId}, ${event.occurredAt})
@@ -273,7 +299,7 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
           ${this.createId()}, ${orderId}, ${intent.catalog_product_id},
           ${intent.external_product_id},
           ${intent.product_name_snapshot}, ${intent.quantity},
-          ${toSafeInteger(intent.unit_amount_minor)}, 0, 0, ${itemSubtotal}, ${intent.currency}, 0
+          ${toSafeInteger(intent.unit_amount_minor)}, 0, ${loyaltyDiscount}, ${netSubtotal}, ${intent.currency}, 0
         )
       `;
       await transaction`
@@ -343,6 +369,10 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
         intent.currency,
         event.occurredAt,
       );
+      if (intent.catalog_product_id.startsWith("native_")) {
+        if (!this.inventory) throw new InventoryUnavailableError();
+        await this.inventory(transaction).commit(intent.id, event.occurredAt);
+      }
       await transaction`
         UPDATE bloombox.purchase_intents
         SET status = 'CONVERTED', version = version + 1, updated_at = ${event.occurredAt}
@@ -368,24 +398,20 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
     status: "EXPIRED" | "ABANDONED",
   ): Promise<void> {
     await this.sql.begin(async (transaction) => {
-      const updated = await transaction`
-        UPDATE bloombox.purchase_intents
-        SET status = ${status}, version = version + 1, updated_at = ${event.occurredAt}
-        WHERE id = ${purchaseIntentId}
-          AND status = 'CHECKOUT_CREATED'
-          AND external_checkout_id = ${event.externalObjectId ?? null}
-        RETURNING id
-      `;
-      if (updated.length === 0) {
-        const rows = await transaction`
-          SELECT status FROM bloombox.purchase_intents WHERE id = ${purchaseIntentId}
-        `;
-        if (rows.length === 0) throw new StripeCommerceEventDependencyError();
-        if (rows[0].status !== status && rows[0].status !== "CONVERTED") {
-          throw new InvalidStripeCommerceEventError();
-        }
-        return;
+      const rows = await transaction`SELECT intent.status, intent.commerce_provider, intent.external_checkout_id, item.catalog_product_id
+        FROM bloombox.purchase_intents intent JOIN bloombox.purchase_intent_items item ON item.purchase_intent_id = intent.id AND item.position = 0
+        WHERE intent.id = ${purchaseIntentId} FOR UPDATE OF intent`;
+      const row = rows[0];
+      if (!row) throw new StripeCommerceEventDependencyError();
+      if (row.commerce_provider !== "STRIPE" || row.external_checkout_id !== event.externalObjectId) throw new InvalidStripeCommerceEventError();
+      if (row.status === status || row.status === "CONVERTED") return;
+      if (row.status !== "CHECKOUT_CREATED") throw new InvalidStripeCommerceEventError();
+      if (String(row.catalog_product_id).startsWith("native_")) {
+        if (!this.inventory) throw new InventoryUnavailableError();
+        await this.inventory(transaction).release(purchaseIntentId, status === "EXPIRED" ? "CHECKOUT_EXPIRED" : "PAYMENT_FAILED", event.occurredAt);
       }
+      await transaction`UPDATE bloombox.purchase_intents SET status = ${status}, version = version + 1, updated_at = ${event.occurredAt}
+        WHERE id = ${purchaseIntentId}`;
       await insertAudit(transaction, this.createId(), event, `checkout.${status.toLowerCase()}`, purchaseIntentId);
     });
   }

@@ -45,3 +45,32 @@
 休業日・締切・地域制約、実在庫予約、Shopify Checkout、出荷・追跡更新、通知連携は未完了。[残課題台帳](BACKLOG.md)の前提条件と受入条件に従って進める。
 
 戻す場合はこの機能PRをrevertする。DB・環境変数・外部サービスの変更はない。保存形式v1を維持しているためデータ移行は不要。ただし旧実装へ戻すと、期限外の日付を持つカートは再び空表示となる。
+
+## Preview form save failures — 2026-09-12
+
+Buyer information and review confirmation forms now catch storage failures during submission. They display a generic `role="alert"` message, retain the current form, and navigate only after saving succeeds. Retrying clears the previous message. Storage exception details and entered personal data are not logged or included in the error text. Existing storage formats, approval invalidation order and pricing are unchanged.
+
+Verification: six submit-handler regression tests cover quota/security exceptions, successful retries, cleared error state and save-before-navigation ordering. Four failure cases reproduced uncaught exceptions before the change. `pnpm check:ci` passed (759 tests, 138 external/DB-dependent tests skipped). Local Chrome confirmed M gift → cart (JPY 5,000) → buyer form → review → dummy payment screen, with no horizontal overflow on the 320px review page. Fault injection is a unit-level check; browser storage settings were not changed. No real payment or Shopify checkout E2E was run.
+
+Scope: this change covers writes during these two submit operations. Initial page-load storage denial is handled by the recovery state below; other cart/storage write operations remain separate work. Revert the form changes to roll back; there is no migration or environment change.
+
+
+## Unreadable browser storage — 2026-09-12
+
+The client revision reader catches both access-denied sessionStorage getters and getItem failures, returning a stable unavailable marker rather than an empty-cart snapshot. Gift, cart, buyer, review, dummy payment and receipt screens stop before reading their stored details and show one shared recovery message. The header shows an unknown count (—), not zero, when cart reading fails. Reload after correcting browser storage settings rechecks access; no storage clearing or writes are part of recovery.
+
+Copy is centrally validated in content/gift-experience.json. No raw exception, token, address or gift message is included in recovery feedback. Existing storage v1 formats, price validation, payment decisions and provider behavior are unchanged. A later recovery screen can replace an in-progress form; this does not promise persistence of unsaved input. Mid-operation storage policy changes after a successful snapshot and other write failures are not covered by this initial-read guard.
+
+Verification: 16 new tests cover property/getItem denial, all six recovery screens, stable snapshots, recovery on a subsequent read, no writes and unknown header count. Reverting only the UI guards reproduced 13 failing cases. Previous six submit-retry tests also pass. Full pnpm check:ci passed. A temporary static rendering of the real recovery component and shared CSS was inspected in Chrome at 320px: document width 320px, retry button height 48px. This visual fixture does not simulate browser storage denial or hydrate the retry button; behavioral coverage comes from unit tests. No actual browser privacy settings were changed and no real payment/Shopify E2E was performed.
+
+Rollback: revert the recovery change. No migration or environment changes are required, and no customer data is rewritten.
+
+## Cart removal failures — 2026-09-12
+
+Cart removal now invalidates review acceptance first, removes buyer and draft state, and removes the cart last. If any removal fails, the cart remains available for another attempt. Subscribers are notified even after partial cleanup, so other checkout screens see the current state. Repeated cleanup is safe and previously stored receipts remain unchanged. There is no multi-key transaction: buyer/draft input can already be gone when a later step fails; if the first removal fails, all prior state remains unchanged.
+
+The cart catches both sessionStorage property denial and removeItem exceptions, displays centrally validated, generic retry feedback with role="alert", and disables deletion while purchase preparation is pending. The message explicitly explains that some checkout input may have been removed. No raw exception or personal data is logged. Browser cleanup does not cancel provider checkout sessions or confirmed orders.
+
+Verification: four storage fault cases reproduced failures before the fix. Eight added regression cases cover all four deletion positions, retry and repeated cleanup, approval invalidation, subscriber notification, unchanged receipt data, property denial, generic feedback and the pending guard. `pnpm check:ci` passed: 783 tests passed, 138 external/DB-dependent tests skipped; static checks and production build passed. Local Chrome confirmed M gift → JPY 5,000 cart → remove → empty cart and header count zero. Storage fault injection and pending behavior were verified in tests, not by changing real browser settings. The new error state has not been visually checked on mobile; no real payment or Shopify E2E was performed.
+
+Rollback: revert this focused removal change. Storage v1, environment variables and database schemas are unchanged. Data already removed cannot be restored by rollback. The initial-read recovery change remains a prerequisite when these changes are reviewed as stacked PRs.

@@ -1,7 +1,7 @@
 import { SizeComparison } from "@/ui/size-comparison";
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { application } from "@/shared/infrastructure/composition-root";
-import { formatMoney } from "@/shared/domain/money";
+import { formatMoney, money } from "@/shared/domain/money";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -53,13 +53,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
         {serializeStructuredData(jsonLd)}
       </script> : null}
       <div className="detail-page">
-        <div className="detail-image">
+        <div className={`detail-image${product.previewOffer ? " is-package" : ""}`}>
         <Image
           src={product.imageUrl}
           alt={product.imageAlt}
           fill
           priority
-          sizes="(max-width: 760px) 100vw, 54vw"
+          sizes="(max-width: 959px) 100vw, 54vw"
         />
         <Link className="back-link" href="/flowers">← 一覧へ</Link>
         </div>
@@ -79,6 +79,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <p className="detail-subtitle">{product.subtitle}</p>
         <p className="detail-description">{product.description}</p>
         <div className="detail-price">{formatMoney(product.price)} <small>{product.previewOffer ? giftExperienceContent.launch.taxNote : "税込・送料別"}</small></div>
+        {product.shippingAmount !== undefined && !product.previewOffer ? <p className="field-note">
+          {giftExperienceContent.launch.shippingLabel} {formatMoney(money(product.shippingAmount))} · {giftExperienceContent.launch.totalLabel} {formatMoney(money(product.price.amount + product.shippingAmount))}
+        </p> : null}
         {product.available ? (
           <>
             <Link className="primary-button" href={`/gift/${product.id}`}>

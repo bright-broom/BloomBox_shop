@@ -1,5 +1,8 @@
+import { InsufficientInventoryError } from "@/modules/inventory/public";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { money } from "@/shared/domain/money";
+import { PurchaseCustomerMismatchError } from "../domain/purchase-customer";
+import { CheckoutPreparationUnavailableError } from "../application/checkout-session-provider";
 import { CheckoutPausedError } from "../application/checkout-paused-error";
 
 const { execute } = vi.hoisted(() => ({ execute: vi.fn() }));
@@ -54,6 +57,26 @@ describe("createPurchaseIntentAction", () => {
     });
     expect(JSON.stringify(state)).not.toContain("花子");
     expect(JSON.stringify(state)).not.toContain("おめでとう");
+  });
+
+  it("ignores forged customer fields and returns no order data on ownership mismatch", async () => {
+    const forged = formData();
+    forged.set("customerId", "forged-customer"); forged.set("customerVersion", "1");
+    execute.mockRejectedValue(new PurchaseCustomerMismatchError());
+    const result = await createPurchaseIntentAction({}, forged);
+    expect(execute.mock.calls[0][0]).not.toHaveProperty("customerId");
+    expect(execute.mock.calls[0][0]).not.toHaveProperty("customerVersion");
+    expect(result).toEqual({ error: new PurchaseCustomerMismatchError().message });
+  });
+
+  it("returns stock shortage guidance without a draft or payment redirect", async () => {
+    execute.mockRejectedValue(new InsufficientInventoryError());
+    expect(await createPurchaseIntentAction({}, formData())).toEqual({ error: new InsufficientInventoryError().message });
+  });
+
+  it("returns retry guidance for local preparation failure without a draft or redirect", async () => {
+    execute.mockRejectedValue(new CheckoutPreparationUnavailableError());
+    expect(await createPurchaseIntentAction({}, formData())).toEqual({ error: new CheckoutPreparationUnavailableError().message });
   });
 
   it("does not call the application layer when form input is invalid", async () => {

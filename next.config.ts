@@ -3,10 +3,13 @@ import catalog from "./content/catalog.json";
 import site from "./content/site.json";
 import { SHOPIFY_PRODUCT_IMAGE_HOST } from "./src/shared/infrastructure/config/shopify-storefront-config";
 
+import { NATIVE_CATALOG_IMAGE_HOSTS } from "./src/shared/infrastructure/config/native-catalog-image-config";
+
 const remoteImageUrls = [site.hero.imageUrl, ...catalog.map((product) => product.imageUrl)];
 const remoteImageHosts = new Set([
-  ...remoteImageUrls.map((value) => new URL(value).hostname),
+  ...remoteImageUrls.filter((value) => !value.startsWith("/")).map((value) => new URL(value).hostname),
   SHOPIFY_PRODUCT_IMAGE_HOST,
+  ...NATIVE_CATALOG_IMAGE_HOSTS,
 ]);
 const remotePatterns = [...remoteImageHosts].map(
   (hostname) => ({ protocol: "https" as const, hostname }),
@@ -38,6 +41,10 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "no-referrer" },
         ],
       },
+      { source: "/cart", headers: [
+        { key: "Cache-Control", value: "private, no-store, max-age=0" },
+        { key: "Referrer-Policy", value: "same-origin" },
+      ] },
       ...["/operations/:path*", "/api/operator-auth/:path*"].map((source) => ({ source, headers: [
         { key: "Content-Security-Policy", value: "base-uri 'self'; form-action 'self' https://accounts.google.com; frame-ancestors 'none'; object-src 'none'" },
         { key: "Cache-Control", value: "private, no-store, max-age=0" },

@@ -1,3 +1,4 @@
+import { authRedirect } from "@/shared/domain/auth-navigation";
 import { customFetch, type NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 import { z } from "zod";
@@ -27,7 +28,7 @@ export function createOperatorAuthOptions(config: OperatorAuthConfig, now: () =>
       checks: ["pkce", "state", "nonce"], authorization: { params: { scope: "openid email", prompt: "select_account" } } })],
     session: { strategy: "jwt", maxAge: OPERATOR_SESSION_SECONDS },
     jwt: { maxAge: OPERATOR_SESSION_SECONDS },
-    pages: { signIn: "/operations", error: "/operations" },
+    pages: { signIn: "/operations/login", error: "/operations/login" },
     callbacks: {
       async signIn({ account, profile }) {
         const value = profileSchema.safeParse(profile);
@@ -56,7 +57,7 @@ export function createOperatorAuthOptions(config: OperatorAuthConfig, now: () =>
         const value = tokenSchema.parse(token);
         return { user: { id: value.googleSubject }, expires: new Date(value.loginExpiresAt).toISOString() };
       },
-      async redirect() { return `${config.origin}/operations`; },
+      async redirect({ url }) { return authRedirect(url, config.origin, "operator"); },
     },
     // Provider error objects can include tokens, profiles or callback URLs. Emit fixed categories only.
     logger: {

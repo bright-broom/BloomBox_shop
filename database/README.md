@@ -1,6 +1,6 @@
 # BloomBox database operations
 
-PostgreSQL stores BloomBox-owned purchase intents, encrypted personal data, provider mappings, operational commerce projections, inbox and outbox records, idempotency state, reconciliation results, and audit history. Shopify remains authoritative for production commerce under ADR 0001.
+PostgreSQL stores BloomBox-owned catalog products, customer identities, purchase intents, encrypted personal data, provider mappings, orders, inbox and outbox records, idempotency state, reconciliation results, and audit history. ADR 0009 selects native commerce; legacy Shopify records remain during migration and production activation is blocked.
 
 ## Required configuration
 
@@ -9,9 +9,9 @@ PostgreSQL stores BloomBox-owned purchase intents, encrypted personal data, prov
 - `DATABASE_SSL_MODE`: `verify-full` in hosted environments; `disable` is allowed only for an isolated local database.
 - `DATABASE_MAX_CONNECTIONS`: per-process connection limit from 1 to 20.
 - `BLOOMBOX_PII_KEYRING`: JSON containing the active AES-256-GCM key ID and all retained decryption keys.
-- `BLOOMBOX_RUNTIME_MODE`: defaults to `preview`; `production` selects the PostgreSQL purchase-intent adapter and fails closed if database or encryption configuration is missing.
+- `BLOOMBOX_RUNTIME_MODE`: defaults to `preview`; `production` selects the PostgreSQL catalog and purchase-intent adapters and fails closed if database or encryption configuration is missing.
 - Stripe connector configuration and account-side setup are documented in `docs/operations/STRIPE.md`.
-- Shopify Storefront catalog configuration and content contract are documented in `docs/operations/SHOPIFY.md`.
+- Native catalog setup and migration boundaries are documented in [NATIVE_CATALOG.md](../docs/operations/NATIVE_CATALOG.md). Shopify configuration is needed only for retained legacy integrations.
 
 Example names only; use secret management rather than a checked-in environment file:
 
@@ -39,7 +39,7 @@ Migration files are immutable after application. The runner records a SHA-256 ch
 
 The protected commerce worker claims encrypted Inbox rows with row-level locking and bounded exponential retry, then runs transient-data retention. Shopify checkout credentials are encrypted in the Checkout-owned `shopify_checkout_attempts` table (migration 0005); the legacy plaintext external ID stays NULL for Shopify. Provider selection is permanent, and unresolved Shopify attempts are held for reconciliation. See [durable Shopify handoff](../docs/operations/SHOPIFY_CHECKOUT_ATTEMPTS.md) before migration, retention changes, or rollback.
 
-It expires unstarted non-Shopify PurchaseIntents after 24 hours and removes encrypted Webhook payloads and personal data from terminal PurchaseIntents after 30 days while retaining provider identifiers, processing status, audits, and confirmed Order snapshots needed for reconciliation and support. Changes to confirmed-order retention require a separate privacy and legal review.
+It expires only provider-unassigned PurchaseIntents after 24 hours and removes encrypted Webhook payloads and personal data from terminal PurchaseIntents after 30 days while retaining provider identifiers, processing status, audits, and confirmed Order snapshots needed for reconciliation and support. Changes to confirmed-order retention require a separate privacy and legal review.
 
 ## Local verification
 
@@ -58,3 +58,17 @@ Migration 0016 adds scoped permission-manager grants, immutable revocation recei
 Migration 0017 adds scoped permission-list and latest-revocation lookup indexes. Reapply `database/roles.sql` so the dedicated manager role shares the existing submission allowance with approval operations. Configure `DATABASE_PERMISSION_MANAGER_URL` against the same database with a separate least-privilege login; there is no fallback to application/worker/approver URLs. See [management screen rollout](../docs/operations/OPERATOR_PERMISSION_MANAGEMENT.md).
 
 Migration 0018 restricts operator provisioning audit receipts to schema-owner inserts and protects them from update/delete. It preserves unrelated audit operations and adds no role grants. Apply it before using the offline owner-only plan/apply tool with `DATABASE_OPERATOR_ADMIN_URL`; never expose this credential to runtime roles or previews. The tool refuses missing/disabled protection, uses reviewed versions and confirmation digests, and atomically records before/after SYSTEM audit. Retain this migration and receipts on rollback. See [operator and manager provisioning](../docs/operations/OPERATOR_ACCESS_PROVISIONING.md).
+
+Migration 0019 adds the Catalog-owned `catalog_products` table, initially empty with DRAFT/unavailable defaults. Reapply `database/roles.sql` for application/worker SELECT-only access. Existing commerce tables, identifiers and prices are not migrated or overwritten. Native inventory is added by migration 0021; operator catalog editing remains incomplete; new production checkout stays paused in code. Retain catalog data and migration history on rollback. See [native catalog operations](../docs/operations/NATIVE_CATALOG.md).
+
+Migration 0020 adds immutable Checkout-owned customer ID/version snapshots to purchase intents. Customer creates buyer links from those snapshots inside the existing acceptance transaction. Intent owner, buyer customer, and order buyer references cannot be reassigned, including NULL-to-customer claims of historical purchases. Existing rows remain anonymous. Reapply roles.sql for worker SELECT on buyer ID/customer ID only, used by the order ownership constraint. Old workers that drop a stored customer link fail closed. Physical deletion of linked principals is restricted; use the reviewed anonymization/retention workflow rather than unlinking orders. Keep the migration and a binding-aware payment worker on rollback. See [purchase customer binding](../docs/operations/PURCHASE_CUSTOMER_BINDING.md).
+
+Migration 0021 adds Inventory-owned stock, reservations and movement history. Apply roles.sql afterward: application may update reserved counts, while the worker may commit/release stock; movement history is append-only for both roles. Stock starts empty, with no inferred quantities. Native provider handoff and terminal purchase transitions require a matching reservation state. Retain the Inventory-aware purchase, payment and retention processes on rollback; uncertain provider-assigned purchases must not be released by local TTL. See [native inventory operations](../docs/operations/NATIVE_INVENTORY.md).
+
+### 0022: 自作商品・在庫の運営管理
+
+`0022_native_catalog_management.sql` と `roles.sql` で、期限付きの管理権限、商品変更履歴、在庫補充・訂正履歴、専用ロールを追加します。`DATABASE_CATALOG_MANAGER_URL` は `bloombox_catalog_manager` を付与した専用ログインを使用し、オーナー・通常アプリ・決済ワーカーの接続を流用しません。権限や商品・数量の初期値を自動登録しません。手順と復旧は [商品・在庫管理](../docs/operations/NATIVE_CATALOG_MANAGEMENT.md) を参照してください。
+
+### 0025: 会員割引の購入時スナップショット
+
+`0025_customer_loyalty_snapshot.sql` は `purchase_intents.loyalty_snapshot`（JSON: version/tier/eligibleSpendYen/basisPoints/discountYen）と `loyalty_discount_minor`（bigint）を追加。NULL/0は既存取引または割引対象外で、実績不足と障害を同一視しません。v1規則・本人紐付け・送料確定・額の整合性を制約で確認し、保存後はトリガーで変更禁止。ロール追加なし。実績はOrder側の読み取りから計算し、ポイント財布や別の集計テーブルは作りません。アプリ/worker配備より前に適用し、戻す際も割引済み取引を処理できるworkerとmigrationを保持します。[運用・検証](../docs/operations/CUSTOMER_LOYALTY.md)。

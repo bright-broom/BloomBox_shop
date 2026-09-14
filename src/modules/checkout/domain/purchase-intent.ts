@@ -1,4 +1,7 @@
-import type { Money } from "@/shared/domain/money";
+import { purchaseLoyalty, InvalidPurchaseLoyaltyError, type PurchaseLoyalty } from "./purchase-loyalty";
+import { quotePurchaseShipping } from "./purchase-shipping";
+import { purchaseCustomer, type PurchaseCustomer } from "./purchase-customer";
+import { money, type Money } from "@/shared/domain/money";
 import {
   purchaseIntentExpiry,
   purchaseIntentPiiRetentionExpiry,
@@ -78,7 +81,18 @@ export class PurchaseIntent {
     private currentExternalCheckoutId?: string,
     private currentProviderApiVersion?: string,
     private currentCheckoutCreatedAt?: Date,
+    readonly customer: PurchaseCustomer | null = null,
+    readonly shippingAmount: Money | null = null,
+    readonly loyalty: PurchaseLoyalty | null = null,
   ) {
+    if (shippingAmount !== null) {
+      quotePurchaseShipping(shippingAmount.amount, item.quantity);
+      money(item.subtotal.amount + shippingAmount.amount);
+    }
+    if (loyalty !== null) {
+      if (!customer || !item.productId.startsWith("native_") || item.quantity !== 1 || shippingAmount === null) throw new InvalidPurchaseLoyaltyError();
+      this.loyalty = purchaseLoyalty(loyalty, item.subtotal.amount);
+    }
     this.currentStatus = status;
   }
 
@@ -89,6 +103,9 @@ export class PurchaseIntent {
     recipient: IntendedRecipient;
     giftMessage: GiftMessage;
     createdAt: Date;
+    customer?: PurchaseCustomer | null;
+    shippingAmount?: Money | null;
+    loyalty?: PurchaseLoyalty | null;
   }): PurchaseIntent {
     return new PurchaseIntent(
       input.id,
@@ -100,6 +117,9 @@ export class PurchaseIntent {
       purchaseIntentExpiry(input.createdAt),
       purchaseIntentPiiRetentionExpiry(input.createdAt),
       "DRAFT",
+      undefined, undefined, undefined, undefined, purchaseCustomer(input.customer ?? null),
+      input.shippingAmount ?? null,
+      input.loyalty ?? null,
     );
   }
 
@@ -110,6 +130,9 @@ export class PurchaseIntent {
     recipient: IntendedRecipient;
     giftMessage: GiftMessage;
     createdAt: Date;
+    customer?: PurchaseCustomer | null;
+    shippingAmount?: Money | null;
+    loyalty?: PurchaseLoyalty | null;
     expiresAt: Date;
     piiRetentionExpiresAt: Date;
     status: PurchaseIntentStatus;
@@ -132,6 +155,9 @@ export class PurchaseIntent {
       input.externalCheckoutId,
       input.providerApiVersion,
       input.checkoutCreatedAt,
+      purchaseCustomer(input.customer ?? null),
+      input.shippingAmount ?? null,
+      input.loyalty ?? null,
     );
   }
 

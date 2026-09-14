@@ -17,6 +17,7 @@ const REVIEW_STORAGE_KEY = "bloombox.checkout.preview-review.v1";
 const RECEIPT_STORAGE_KEY = "bloombox.checkout.preview-receipt.v1";
 
 export const CHECKOUT_SESSION_CHANGED_EVENT = "bloombox:checkout-session-changed";
+export const CHECKOUT_SESSION_UNAVAILABLE = "unavailable";
 export const PREVIEW_PAYMENT_LAST_FOUR = "4242";
 
 // A valid stored draft may need a new delivery date. Reading must not hide it.
@@ -82,6 +83,24 @@ export type PreviewReceipt = z.infer<typeof previewReceiptSchema>;
 
 type CheckoutStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
+/** Catch access to the browser property as well as failures reading individual keys. */
+export function readBrowserCheckoutSessionSnapshot(): string {
+  try {
+    return readCheckoutSessionSnapshot(window.sessionStorage);
+  } catch {
+    return CHECKOUT_SESSION_UNAVAILABLE;
+  }
+}
+
+/** Null means unreadable; zero is reserved for a readable, empty cart. */
+export function readBrowserCartQuantity(): number | null {
+  try {
+    return readRecoverableCart(window.sessionStorage)?.quantity ?? 0;
+  } catch {
+    return null;
+  }
+}
+
 export function readCart(storage: CheckoutStorage): BrowserCartItem | null {
   return readStored(storage, CART_STORAGE_KEY, cartItemSchema);
 }
@@ -120,11 +139,16 @@ export function storeCart(
 }
 
 export function removeCart(storage: CheckoutStorage): void {
-  storage.removeItem(CART_STORAGE_KEY);
-  storage.removeItem(BUYER_STORAGE_KEY);
-  storage.removeItem(DRAFT_STORAGE_KEY);
-  storage.removeItem(REVIEW_STORAGE_KEY);
-  notifyCheckoutSessionChanged();
+  try {
+    // Invalidate approval first; retain the cart until dependent cleanup succeeds.
+    storage.removeItem(REVIEW_STORAGE_KEY);
+    storage.removeItem(BUYER_STORAGE_KEY);
+    storage.removeItem(DRAFT_STORAGE_KEY);
+    storage.removeItem(CART_STORAGE_KEY);
+  } finally {
+    // Storage has no multi-key transaction. Subscribers must see partial cleanup too.
+    notifyCheckoutSessionChanged();
+  }
 }
 
 export function readPreviewBuyer(storage: CheckoutStorage): PreviewBuyer | null {
@@ -151,6 +175,17 @@ export function storePreviewDraft(storage: CheckoutStorage, draft: z.input<typeo
 export function storePreparedPreviewDraft(storage: CheckoutStorage, requestId: string, draft: z.input<typeof previewDraftSchema>): void {
   if (readRecoverableCart(storage)?.requestId !== requestId) throw new CartChangedError();
   storePreviewDraft(storage, draft);
+}
+
+/** Bind a delayed payment response to the cart that started that operation, even without a quote. */
+export function completePreparedPreviewCheckout(
+  storage: CheckoutStorage,
+  requestId: string,
+  completedAt = new Date(),
+  settlement?: PreviewReferralQuote,
+): PreviewReceipt | null {
+  if (readCart(storage)?.requestId !== requestId) return null;
+  return completePreviewCheckout(storage, completedAt, settlement);
 }
 
 export function readPreviewReview(storage: CheckoutStorage): PreviewReview | null {
@@ -183,6 +218,41 @@ export function readCheckoutSessionSnapshot(storage: CheckoutStorage): string {
 
 export function readPreviewReceipt(storage: CheckoutStorage): PreviewReceipt | null {
   return readStored(storage, RECEIPT_STORAGE_KEY, previewReceiptSchema);
+}
+
+export class PreviewCheckoutCleanupError extends Error {
+  constructor() {
+    super("Preview receipt saved; checkout input cleanup is incomplete.");
+    this.name = "PreviewCheckoutCleanupError";
+  }
+}
+
+export type PreviewCheckoutCleanupStatus = "complete" | "pending" | "changed";
+
+export function readPreviewCheckoutCleanupStatus(
+  storage: CheckoutStorage,
+  requestId: string | undefined,
+): PreviewCheckoutCleanupStatus {
+  const keys = [CART_STORAGE_KEY, BUYER_STORAGE_KEY, DRAFT_STORAGE_KEY, REVIEW_STORAGE_KEY];
+  if (keys.every((key) => storage.getItem(key) === null)) return "complete";
+  // Never delete input belonging to a new cart, an invalid cart, or a replaced receipt.
+  if (!requestId || readPreviewReceipt(storage)?.requestId !== requestId) return "changed";
+  if (storage.getItem(CART_STORAGE_KEY) !== null && readRecoverableCart(storage)?.requestId !== requestId) return "changed";
+  return "pending";
+}
+
+export function cleanupPreviewCheckout(storage: CheckoutStorage, requestId: string): void {
+  const status = readPreviewCheckoutCleanupStatus(storage, requestId);
+  if (status === "changed") throw new CartChangedError();
+  if (status === "complete") return;
+  try {
+    storage.removeItem(REVIEW_STORAGE_KEY);
+    storage.removeItem(BUYER_STORAGE_KEY);
+    storage.removeItem(DRAFT_STORAGE_KEY);
+    storage.removeItem(CART_STORAGE_KEY);
+  } finally {
+    notifyCheckoutSessionChanged();
+  }
 }
 
 export function completePreviewCheckout(
@@ -222,11 +292,12 @@ export function completePreviewCheckout(
 
   writeStored(storage, RECEIPT_STORAGE_KEY, receipt);
   recordPreviewMetric({ name: "preview_purchase", requestId: cart.requestId, referralUsed: receipt.discountAmount > 0 }, storage);
-  storage.removeItem(CART_STORAGE_KEY);
-  storage.removeItem(BUYER_STORAGE_KEY);
-  storage.removeItem(DRAFT_STORAGE_KEY);
-  storage.removeItem(REVIEW_STORAGE_KEY);
-  notifyCheckoutSessionChanged();
+  try {
+    cleanupPreviewCheckout(storage, cart.requestId);
+  } catch {
+    // The receipt is already durable. Retry cleanup without settling another test order.
+    throw new PreviewCheckoutCleanupError();
+  }
   return receipt;
 }
 

@@ -1,5 +1,8 @@
 "use server";
 
+import { bindAdvertisingCheckout } from "@/shared/infrastructure/advertising-runtime";
+import { LoyaltyUnavailableError } from "@/modules/customer/public";
+import { InsufficientInventoryError, InventoryUnavailableError } from "@/modules/inventory/public";
 import { DeliveryDateUnavailableError } from "@/modules/fulfillment/public";
 import { productId } from "@/modules/catalog/public";
 import { PREVIEW_SHIPPING_AMOUNT } from "../domain/preview-pricing";
@@ -7,8 +10,11 @@ import { formatMoney } from "@/shared/domain/money";
 import { application } from "@/shared/infrastructure/composition-root";
 import { reportUnexpectedError } from "@/shared/infrastructure/observability/report-unexpected-error";
 import { ProductUnavailableError } from "../application/create-purchase-intent";
+import { PurchaseCustomerMismatchError } from "../domain/purchase-customer";
 import { CheckoutPausedError } from "../application/checkout-paused-error";
+import { CheckoutPreparationUnavailableError } from "../application/checkout-session-provider";
 import { InvalidPurchaseIntentInputError } from "../domain/purchase-intent-policy";
+import { ShippingPriceUnavailableError } from "../domain/purchase-shipping";
 import {
   createPurchaseIntentSchema,
   type CreatePurchaseIntentFormState,
@@ -35,6 +41,7 @@ export async function createPurchaseIntentAction(
     const prepared = await application.preparePurchase.execute(parsed.data);
     const intent = prepared.intent;
     if (prepared.checkoutSession) {
+      await bindAdvertisingCheckout(intent.id, prepared.checkoutSession.provider, prepared.checkoutSession.id);
       return { checkout: { url: prepared.checkoutSession.url } };
     }
     const product = await application.getProduct.byId(productId(parsed.data.productId));
@@ -47,14 +54,20 @@ export async function createPurchaseIntentAction(
         quantity: intent.item.quantity,
         deliveryDate: intent.recipient.deliveryDate,
         subtotalAmount: intent.item.subtotal.amount,
-        shippingAmount: product.previewOffer?.shippingAmount ?? PREVIEW_SHIPPING_AMOUNT,
+        shippingAmount: intent.shippingAmount?.amount ?? PREVIEW_SHIPPING_AMOUNT,
         formattedTotal: formatMoney(intent.item.subtotal),
       },
     };
   } catch (error) {
     if (
-      error instanceof ProductUnavailableError
+      error instanceof LoyaltyUnavailableError
+      || error instanceof InsufficientInventoryError
+      || error instanceof ShippingPriceUnavailableError
+      || error instanceof InventoryUnavailableError
+      || error instanceof ProductUnavailableError
+      || error instanceof PurchaseCustomerMismatchError
       || error instanceof CheckoutPausedError
+      || error instanceof CheckoutPreparationUnavailableError
       || error instanceof DeliveryDateUnavailableError
       || error instanceof InvalidPurchaseIntentInputError
     ) {

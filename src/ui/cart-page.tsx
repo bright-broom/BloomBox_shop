@@ -1,5 +1,8 @@
 "use client";
 
+import { quoteLoyalty } from "@/modules/customer/public";
+import type { CustomerLoyaltyState } from "@/shared/infrastructure/customer-loyalty";
+import { customerAccountContent } from "@/shared/infrastructure/content/customer-account-content";
 import { createPurchaseIntentAction } from "@/modules/checkout/presentation/actions";
 import {
   readRecoverableCart,
@@ -11,27 +14,32 @@ import {
 import { isAvailableDeliveryDate } from "@/modules/fulfillment/public";
 import { formatMoney, money, multiplyMoney } from "@/shared/domain/money";
 import Link from "next/link";
+import { CheckoutStorageUnavailable } from "@/ui/checkout-storage-unavailable";
 import { useRouter } from "next/navigation";
-import { useActionState } from "react";
-import { useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
+import { useActionState, useState } from "react";
+import { CHECKOUT_SESSION_UNAVAILABLE, useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
 import { FlowerLoading } from "@/ui/flower-loading";
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { recordPreviewMetric } from "@/shared/infrastructure/preview-metrics";
+import { SHIPPING_QUOTE_MAX_QUANTITY } from "@/modules/checkout/public";
 
 export function CartPage({
   added,
   checkoutCancelled,
   previewMode,
-  previewPrices,
+  catalogPrices,
+  loyalty = null,
 }: {
+  loyalty?: CustomerLoyaltyState | null;
   added: boolean;
   checkoutCancelled: boolean;
   previewMode: boolean;
-  previewPrices: readonly { productId: string; unitAmount: number; shippingAmount: number }[];
+  catalogPrices: readonly { productId: string; unitAmount: number; shippingAmount: number }[];
 }) {
   const router = useRouter();
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const revision = useCheckoutSessionRevision();
-  const cart: BrowserCartItem | null | undefined = revision === null
+  const cart: BrowserCartItem | null | undefined = (revision === null || revision === CHECKOUT_SESSION_UNAVAILABLE)
     ? undefined
     : readRecoverableCart(window.sessionStorage);
   const [state, formAction, pending] = useActionState(async (previous: Parameters<typeof createPurchaseIntentAction>[0], formData: FormData) => {
@@ -50,9 +58,16 @@ export function CartPage({
   }, {});
 
   function clearCart() {
-    removeCart(window.sessionStorage);
+    if (pending) return;
+    setRemoveError(null);
+    try {
+      removeCart(window.sessionStorage);
+    } catch {
+      setRemoveError(giftExperienceContent.cart.removeError);
+    }
   }
 
+  if (revision === CHECKOUT_SESSION_UNAVAILABLE) return <CheckoutStorageUnavailable />;
   if (cart === undefined) {
     return <p className="checkout-loading" role="status">カートを確認しています…</p>;
   }
@@ -71,13 +86,21 @@ export function CartPage({
   }
 
   const deliveryDateAvailable = isAvailableDeliveryDate(cart.deliveryDate);
-  const previewPrice = previewPrices.find((price) => price.productId === cart.productId);
-  const unitPrice = money(previewPrice?.unitAmount ?? cart.unitAmount);
+  const catalogPrice = catalogPrices.find((price) => price.productId === cart.productId);
+  const unitPrice = money(catalogPrice?.unitAmount ?? cart.unitAmount);
   const subtotal = multiplyMoney(unitPrice, cart.quantity);
+  const shippingUnavailable = (cart.productId.startsWith("native_") && !catalogPrice)
+    || (catalogPrice !== undefined && cart.quantity !== SHIPPING_QUOTE_MAX_QUANTITY);
+
+  const loyaltyApplies = !previewMode && cart.productId.startsWith("native_");
+  const loyaltyUnavailable = loyaltyApplies && loyalty?.status === "unavailable";
+  const discount = loyaltyApplies && loyalty?.status === "ready" && !shippingUnavailable
+    ? quoteLoyalty(loyalty.progress.eligibleSpendYen, subtotal.amount).discountYen : 0;
 
   return (
     <div className="cart-layout">
       <div className="cart-main">
+        {shippingUnavailable ? <p className="checkout-notice" role="alert">{giftExperienceContent.cart.shippingUnavailable}</p> : null}
         {!deliveryDateAvailable ? (
           <div className="checkout-notice" role="alert">
             <p>お届け希望日を選び直してください。お名前とメッセージは保存されています。</p>
@@ -111,8 +134,9 @@ export function CartPage({
           </dl>
           <div className="cart-item-actions">
             <Link className="text-link" href={`/gift/${encodeURIComponent(cart.productId)}`}>内容を変更する</Link>
-            <button className="text-button" type="button" onClick={clearCart}>カートから削除</button>
+            <button className="text-button" type="button" onClick={clearCart} disabled={pending}>カートから削除</button>
           </div>
+          {removeError ? <p className="form-error" role="alert">{removeError}</p> : null}
         </article>
       </div>
       <aside className="checkout-totals">
@@ -120,9 +144,12 @@ export function CartPage({
         <h2>ご注文内容</h2>
         <dl>
           <div><dt>商品小計</dt><dd>{formatMoney(subtotal)}</dd></div>
-          <div><dt>送料</dt><dd>{previewPrice ? formatMoney(money(previewPrice.shippingAmount)) : "決済前に表示"}</dd></div>
-          <div className="checkout-total-row"><dt>お支払い合計</dt><dd>{previewPrice ? formatMoney(money(subtotal.amount + previewPrice.shippingAmount)) : "決済前に確定"}</dd></div>
+          {discount > 0 ? <div><dt>{customerAccountContent.loyalty.cartDiscount}</dt><dd>−{formatMoney(money(discount))}</dd></div> : null}
+          <div><dt>送料</dt><dd>{catalogPrice ? formatMoney(money(catalogPrice.shippingAmount)) : "決済前に表示"}</dd></div>
+          <div className="checkout-total-row"><dt>お支払い合計</dt><dd>{catalogPrice ? formatMoney(money(subtotal.amount - discount + catalogPrice.shippingAmount)) : "決済前に確定"}</dd></div>
         </dl>
+        {loyaltyUnavailable ? <p role="alert" className="form-error">{customerAccountContent.loyalty.cartUnavailable}</p> : null}
+        {discount > 0 ? <p className="form-hint">{customerAccountContent.loyalty.cartEstimate}</p> : null}
         <form action={formAction}>
           <input type="hidden" name="requestId" value={cart.requestId} />
           <input type="hidden" name="productId" value={cart.productId} />
@@ -136,7 +163,7 @@ export function CartPage({
               入力内容の有効期限が切れています。ギフト設定を更新してください。
             </p>
           ) : null}
-          <button className="primary-button form-submit" type="submit" disabled={pending || !deliveryDateAvailable}>
+          <button className="primary-button form-submit" type="submit" disabled={pending || !deliveryDateAvailable || shippingUnavailable || loyaltyUnavailable}>
             {pending ? "安全に準備しています…" : "購入手続きへ"}
             <span aria-hidden="true">→</span>
           </button>

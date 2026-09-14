@@ -59,3 +59,11 @@ function isPostgresUrl(value: string): boolean {
     return false;
   }
 }
+
+export function loadCatalogManagerDatabaseConfig(environment: Readonly<Record<string, string | undefined>> = process.env): DatabaseConfig {
+  return loadDatabaseConfig({ ...environment, DATABASE_URL: environment.DATABASE_CATALOG_MANAGER_URL });
+}
+
+export function loadCustomerSupportDatabaseConfig(environment: Readonly<Record<string, string | undefined>> = process.env): DatabaseConfig {
+  return loadDatabaseConfig({ ...environment, DATABASE_URL: environment.DATABASE_CUSTOMER_SUPPORT_URL });
+}

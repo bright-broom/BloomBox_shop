@@ -2,7 +2,7 @@
 
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { recordPreviewMetric } from "@/shared/infrastructure/preview-metrics";
-import { previewTotals, LAUNCH_PREVIEW_QUANTITY } from "@/modules/checkout/public";
+import { previewTotals, LAUNCH_PREVIEW_QUANTITY, SHIPPING_QUOTE_MAX_QUANTITY } from "@/modules/checkout/public";
 import {
   GIFT_MESSAGE_MAX_LENGTH,
   GIFT_QUANTITY_MAX,
@@ -21,7 +21,8 @@ import {
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
+import { CheckoutStorageUnavailable } from "@/ui/checkout-storage-unavailable";
+import { CHECKOUT_SESSION_UNAVAILABLE, useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
 import { formatMoney, multiplyMoney, type Money } from "@/shared/domain/money";
 
 type SizeOption = { id: string; name: string; size: "M" | "L"; price: Money; shippingAmount: number };
@@ -31,18 +32,20 @@ type GiftFormProps = {
   productId: string;
   productName: string;
   unitPrice: Money;
+  shippingAmount?: number;
   minDeliveryDate: string;
   maxDeliveryDate: string;
 };
 
 export function GiftForm(props: GiftFormProps) {
   const revision = useCheckoutSessionRevision();
+  if (revision === CHECKOUT_SESSION_UNAVAILABLE) return <CheckoutStorageUnavailable />;
   if (revision === null) return <p className="checkout-loading" role="status">ギフトの設定を確認しています…</p>;
   return <GiftConfigurationForm key={props.productId} {...props} initialCart={readRecoverableCart(window.sessionStorage)} />;
 }
 
 function GiftConfigurationForm({
-  productId: initialProductId, productName: initialProductName, unitPrice: initialUnitPrice, minDeliveryDate, maxDeliveryDate, initialCart, sizeOptions = [],
+  productId: initialProductId, productName: initialProductName, unitPrice: initialUnitPrice, shippingAmount, minDeliveryDate, maxDeliveryDate, initialCart, sizeOptions = [],
 }: GiftFormProps & { initialCart: BrowserCartItem | null }) {
   // Snapshot the cart once: a background revision must not overwrite in-progress typing.
   const [cartAtOpen] = useState(initialCart);
@@ -59,6 +62,7 @@ function GiftConfigurationForm({
   const [state, setState] = useState<CreatePurchaseIntentFormState>({});
   const [pending, setPending] = useState(false);
   const [quantity, setQuantity] = useState(sizeOptions.length ? LAUNCH_PREVIEW_QUANTITY : editingCart?.quantity ?? GIFT_QUANTITY_MIN);
+  const [giftMessage, setGiftMessage] = useState(editingCart?.giftMessage ?? giftExperienceContent.giftForm.defaultMessage);
 
   function addToCart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -143,7 +147,7 @@ function GiftConfigurationForm({
           required
         >
           {Array.from(
-            { length: selection ? 1 : GIFT_QUANTITY_MAX - GIFT_QUANTITY_MIN + 1 },
+            { length: selection || shippingAmount !== undefined ? SHIPPING_QUOTE_MAX_QUANTITY : GIFT_QUANTITY_MAX - GIFT_QUANTITY_MIN + 1 },
             (_, index) => GIFT_QUANTITY_MIN + index,
           ).map((quantity) => <option key={quantity} value={quantity}>{quantity} 点</option>)}
         </select>
@@ -171,7 +175,7 @@ function GiftConfigurationForm({
         <input
           aria-invalid={Boolean(state.fieldErrors?.deliveryDate?.length)}
           id="deliveryDate"
-          defaultValue={editingCart?.deliveryDate ?? ""}
+          defaultValue={editingCart?.deliveryDate ?? minDeliveryDate}
           name="deliveryDate"
           type="date"
           min={minDeliveryDate}
@@ -187,19 +191,21 @@ function GiftConfigurationForm({
       <div className="form-field">
         <div className="label-row">
           <label htmlFor="giftMessage"><span>04</span> 贈ることば <i aria-hidden="true">*</i></label>
-          <span>{GIFT_MESSAGE_MAX_LENGTH} 文字まで</span>
+          <span id="giftMessage-count">{giftMessage.length} / {GIFT_MESSAGE_MAX_LENGTH} 文字</span>
         </div>
         <textarea
           aria-invalid={Boolean(state.fieldErrors?.giftMessage?.length)}
           id="giftMessage"
-          defaultValue={editingCart?.giftMessage ?? ""}
+          value={giftMessage}
+          onChange={(event) => setGiftMessage(event.target.value)}
           name="giftMessage"
           rows={5}
           maxLength={GIFT_MESSAGE_MAX_LENGTH}
           placeholder="伝えたい気持ちを、あなたの言葉で。"
-          aria-describedby="giftMessage-error"
+          aria-describedby="giftMessage-help giftMessage-count giftMessage-error"
           required
         />
+        <p className="field-note" id="giftMessage-help">{giftExperienceContent.giftForm.messageHint}</p>
         <FieldError id="giftMessage-error" messages={state.fieldErrors?.giftMessage} />
       </div>
       {state.error ? <p className="form-error" role="alert">{state.error}</p> : null}

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { CheckoutPreparationUnavailableError } from "../../application/checkout-session-provider";
 import { money } from "@/shared/domain/money";
 import {
   catalogProductReference,
@@ -25,6 +26,7 @@ describe("StripeCheckoutSessionProvider", () => {
       expiresAt: new Date("2026-08-21T23:00:00.000Z"),
     });
     const api: StripeCheckoutApi = {
+      validateCreate: vi.fn(),
       create,
       retrieve: vi.fn<StripeCheckoutApi["retrieve"]>(),
     };
@@ -43,12 +45,56 @@ describe("StripeCheckoutSessionProvider", () => {
       idempotencyKey: "stable-idempotency-key",
     }));
     const serialized = JSON.stringify(create.mock.calls[0][0]);
+    expect(serialized).not.toContain("00000000-0000-4000-8000-000000000321");
+    expect(serialized).not.toContain("customerId");
     expect(serialized).not.toContain("花子");
     expect(serialized).not.toContain("おめでとう");
   });
 });
 
 describe("StripeSdkCheckoutApi", () => {
+  it.each([{ unitAmount: 4000, shippingAmount: 1000 }, { unitAmount: 8000, shippingAmount: 0 }])("sends the saved one-box quote through the provider to Stripe: %j", async ({ unitAmount, shippingAmount }) => {
+    const create = vi.fn<StripeCheckoutSessionsClient["create"]>().mockResolvedValue({
+      id: "cs_test_123", client_reference_id: createIntent().id,
+      url: "https://checkout.stripe.com/c/pay/cs_test_123", expires_at: 1_787_353_200, livemode: false,
+    });
+    const api = new StripeSdkCheckoutApi(stripeConfig(), { create, retrieve: vi.fn() });
+    const provider = new StripeCheckoutSessionProvider(api, stripeConfig().apiVersion);
+    const base = createIntent();
+    const intent = PurchaseIntent.create({
+      ...base, item: { ...base.item, productId: catalogProductReference("native_12345678-abcd-4000-8000-123456789012"),
+        unitPriceSnapshot: money(unitAmount), subtotal: money(unitAmount) }, shippingAmount: money(shippingAmount),
+    });
+    await provider.create(intent, "same-request");
+    await provider.create(intent, "same-request");
+    expect(create.mock.calls[1]).toEqual(create.mock.calls[0]);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      shipping_options: [{ shipping_rate_data: {
+        type: "fixed_amount", display_name: "配送料", fixed_amount: { amount: shippingAmount, currency: "jpy" }, tax_behavior: "inclusive",
+      } }],
+      line_items: [expect.objectContaining({ quantity: 1, price_data: expect.objectContaining({ unit_amount: unitAmount }) })],
+    }), { idempotencyKey: "same-request" });
+  });
+
+  it.each([
+    { shippingAmount: undefined, quantity: 1, taxBehavior: "inclusive" as const },
+    { shippingAmount: -1, quantity: 1, taxBehavior: "inclusive" as const },
+    { shippingAmount: 0.5, quantity: 1, taxBehavior: "inclusive" as const },
+    { shippingAmount: 1000, quantity: 2, taxBehavior: "inclusive" as const },
+    { shippingAmount: 1000, quantity: 1, taxBehavior: "exclusive" as const },
+    { shippingAmount: 1000, quantity: 1, taxBehavior: "unspecified" as const },
+    { shippingAmount: Number.MAX_SAFE_INTEGER, quantity: 1, taxBehavior: "inclusive" as const },
+  ])("refuses an unquoted or incompatible native charge before calling Stripe: %j", async ({ taxBehavior, ...quote }) => {
+    const create = vi.fn<StripeCheckoutSessionsClient["create"]>();
+    const api = new StripeSdkCheckoutApi({ ...stripeConfig(), taxBehavior }, { create, retrieve: vi.fn() });
+    await expect(api.create({
+      purchaseIntentId: createIntent().id, productId: "native_12345678-abcd-4000-8000-123456789012",
+      externalProductReference: "native_test", productName: "試験商品", unitAmount: 4000, currency: "JPY",
+      expiresAt: createIntent().expiresAt, idempotencyKey: "same-request", ...quote,
+    })).rejects.toBeInstanceOf(CheckoutPreparationUnavailableError);
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("creates a hosted Checkout Session with server-owned tax, terms, shipping, and price", async () => {
     const create = vi.fn<StripeCheckoutSessionsClient["create"]>().mockResolvedValue({
       id: "cs_test_123",
@@ -171,6 +217,7 @@ function createIntent(): PurchaseIntent {
     recipient: { name: recipientName("花子"), deliveryDate: "2026-08-28" },
     giftMessage: giftMessage("おめでとう"),
     createdAt: new Date("2026-08-21T00:00:00.000Z"),
+    customer: { customerId: "00000000-0000-4000-8000-000000000321", version: 1 },
   });
   intent.transitionTo("READY_FOR_CHECKOUT");
   return intent;

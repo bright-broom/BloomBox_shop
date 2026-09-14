@@ -1,9 +1,14 @@
+import { quoteLoyalty, LoyaltyUnavailableError } from "@/modules/customer/public";
+import type { CustomerPurchasePerformance } from "@/modules/order/public";
+import { anonymousPurchaseCustomer, type CurrentPurchaseCustomer } from "./current-purchase-customer";
+import { purchaseCustomer, assertPurchaseCustomer, type PurchaseCustomer } from "../domain/purchase-customer";
 import { productId, type ProductRepository } from "@/modules/catalog/public";
 import { assertAvailableDeliveryDate } from "@/modules/fulfillment/public";
 import { multiplyMoney } from "@/shared/domain/money";
 import { BUSINESS_TIME_ZONE } from "@/shared/domain/time";
 import { CheckoutPausedError } from "./checkout-paused-error";
 import { assertPreviewQuantity } from "../domain/preview-pricing";
+import { quotePurchaseShipping, ShippingPriceUnavailableError } from "../domain/purchase-shipping";
 import {
   catalogProductReference,
   commerceProductReference,
@@ -40,6 +45,8 @@ export class CreatePurchaseIntent {
     private readonly intents: PurchaseIntentRepository,
     private readonly now: () => Date = () => new Date(),
     private readonly acceptsNewCheckout: () => boolean = () => true,
+    private readonly currentCustomer: CurrentPurchaseCustomer = anonymousPurchaseCustomer,
+    private readonly performance?: CustomerPurchasePerformance,
   ) {}
 
   async execute(input: CreatePurchaseIntentInput): Promise<PurchaseIntent> {
@@ -48,6 +55,7 @@ export class CreatePurchaseIntent {
     const normalizedRecipientName = recipientName(input.recipientName);
     const normalizedGiftMessage = giftMessage(input.giftMessage);
     const normalizedQuantity = giftQuantity(input.quantity);
+    const customer = purchaseCustomer(await this.currentCustomer());
     const existing = await this.intents.findById(id);
     if (existing) return assertIdempotentMatch(
       existing,
@@ -55,6 +63,7 @@ export class CreatePurchaseIntent {
       normalizedRecipientName,
       normalizedGiftMessage,
       normalizedQuantity,
+      customer,
     );
 
     const product = await this.products.findById(productId(input.productId));
@@ -62,9 +71,18 @@ export class CreatePurchaseIntent {
       throw new ProductUnavailableError();
     }
     assertPreviewQuantity(normalizedQuantity, Boolean(product.previewOffer));
+    const shippingAmount = product.shippingAmount ?? product.previewOffer?.shippingAmount;
+    if (product.id.startsWith("native_") && shippingAmount === undefined) throw new ShippingPriceUnavailableError();
 
     const createdAt = this.now();
     assertAvailableDeliveryDate(input.deliveryDate, createdAt);
+    const subtotal = multiplyMoney(product.price, normalizedQuantity);
+    let loyalty = null;
+    if (customer && product.id.startsWith("native_")) {
+      if (!this.performance) throw new LoyaltyUnavailableError();
+      try { loyalty = quoteLoyalty(await this.performance.readEligibleSpend(customer.customerId), subtotal.amount); }
+      catch { throw new LoyaltyUnavailableError(); }
+    }
     const intent = PurchaseIntent.create({
       id,
       displayId: createDisplayId(createdAt, id),
@@ -74,7 +92,7 @@ export class CreatePurchaseIntent {
         productName: product.name,
         quantity: normalizedQuantity,
         unitPriceSnapshot: product.price,
-        subtotal: multiplyMoney(product.price, normalizedQuantity),
+        subtotal,
       },
       recipient: {
         name: normalizedRecipientName,
@@ -82,6 +100,9 @@ export class CreatePurchaseIntent {
       },
       giftMessage: normalizedGiftMessage,
       createdAt,
+      customer,
+      loyalty,
+      shippingAmount: shippingAmount === undefined ? null : quotePurchaseShipping(shippingAmount, normalizedQuantity),
     });
 
     intent.transitionTo("READY_FOR_CHECKOUT");
@@ -97,6 +118,7 @@ export class CreatePurchaseIntent {
         normalizedRecipientName,
         normalizedGiftMessage,
         normalizedQuantity,
+        customer,
       );
     }
     return intent;
@@ -116,7 +138,9 @@ function assertIdempotentMatch(
   normalizedRecipientName: ReturnType<typeof recipientName>,
   normalizedGiftMessage: ReturnType<typeof giftMessage>,
   normalizedQuantity: number,
+  customer: PurchaseCustomer | null,
 ): PurchaseIntent {
+  assertPurchaseCustomer(existing.customer, customer);
   if (
     existing.item.productId !== input.productId
     || existing.item.quantity !== normalizedQuantity

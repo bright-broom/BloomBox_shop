@@ -23,6 +23,41 @@ const config: StripeConfig = {
 const timestamp = Math.floor(Date.now() / 1000);
 
 describe("StripeWebhookVerifier", () => {
+  const probe = {
+    id: "cs_test_probe", livemode: false,
+    client_reference_id: "readiness_12345678-abcd-4000-8000-123456789012",
+    metadata: { readiness_probe: "bloombox-shipping-v1" },
+    status: "expired", payment_status: "unpaid", payment_intent: null,
+  };
+  it("acknowledges only a signed expired unpaid test probe without adding a nonexistent purchase to the Inbox", () => {
+    const raw = JSON.stringify(event({ type: "checkout.session.expired", object: probe }));
+    expect(new StripeWebhookVerifier(config).verify(raw, signature(raw))).toBeNull();
+    expect(() => new StripeWebhookVerifier(config).verify(raw + " ", signature(raw))).toThrow(InvalidProviderWebhookError);
+  });
+  it.each([
+    { status: "open" }, { payment_status: "paid" }, { payment_intent: "pi_exists" },
+    { id: "cs_live_probe" }, { livemode: true }, { metadata: { readiness_probe: "true" } },
+  ])("does not skip a probe with inconsistent payment or identity evidence: %j", (change) => {
+    const raw = JSON.stringify(event({ type: "checkout.session.expired", object: { ...probe, ...change } }));
+    expect(() => new StripeWebhookVerifier(config).verify(raw, signature(raw))).toThrow(InvalidProviderWebhookError);
+  });
+  it("does not skip a signed paid probe or a matching marker in live mode", () => {
+    for (const type of ["checkout.session.completed", "checkout.session.async_payment_succeeded"]) {
+      const raw = JSON.stringify(event({ type, object: probe }));
+      expect(() => new StripeWebhookVerifier(config).verify(raw, signature(raw))).toThrow(InvalidProviderWebhookError);
+    }
+    const raw = JSON.stringify({ ...event({ type: "checkout.session.expired", object: probe }), livemode: true });
+    expect(() => new StripeWebhookVerifier({ ...config, mode: "live" }).verify(raw, signature(raw))).toThrow(InvalidProviderWebhookError);
+  });
+  it("keeps a normal purchase UUID on the commerce path even with a probe marker", () => {
+    const raw = JSON.stringify(event({ type: "checkout.session.expired", object: {
+      ...probe, client_reference_id: "12345678-abcd-4000-8000-123456789012",
+      amount_total: null, amount_subtotal: null, currency: "jpy", customer: null, customer_details: null,
+      collected_information: null, total_details: null,
+    } }));
+    expect(new StripeWebhookVerifier(config).verify(raw, signature(raw))?.payload)
+      .toMatchObject({ purchaseIntentId: "12345678-abcd-4000-8000-123456789012", objectType: "checkout_session" });
+  });
   it("verifies the raw body and maps a minimal encrypted-inbox payload", () => {
     const payload = JSON.stringify(event({
       type: "checkout.session.completed",

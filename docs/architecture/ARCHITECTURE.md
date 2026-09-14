@@ -2,6 +2,8 @@
 
 Read this document only when a change affects module ownership, dependencies, state, persistence, transactions, providers, or the commerce critical path.
 
+> Current direction: [ADR 0009](adr/0009-native-commerce-and-google-customers.md) selects native PostgreSQL commerce and direct Google customer login. Legacy Shopify commerce adapters remain during migration; production is blocked.
+
 ## System shape
 
 BloomBox is a Modular Monolith. This keeps domain evolution, transactions, deployment, testing, and operations simple while the product is still being validated. A service split requires measured need and an approved ADR.
@@ -53,9 +55,9 @@ Each module exposes cross-module contracts through `src/modules/<module>/public.
 
 Order, Payment, and Fulfillment have independent explicit state machines with validated transition tables. Provider facts cause commands or events; they do not synchronize boolean flags across models.
 
-- Shopify is the production source of truth for sellable catalog, price, availability, inventory, checkout, payment, orders, and refunds. See ADR 0001.
+- BloomBox owns the native commerce records under ADR 0009. Verified payment-provider facts remain authoritative for captures/refunds. Shopify adapters are legacy migration code, not the selected production core.
 - Checked-in catalog JSON and in-memory purchase-intent storage are deterministic preview adapters, not a production data path.
-- A verified Shopify fact is authoritative for checkout and payment state. A browser redirect is not.
+- Verified provider facts are authoritative for payment state within the transaction's assigned provider. A browser redirect is not.
 - Inventory changes are traceable movements such as received, reserved, released, consumed, or adjusted.
 - Public identifiers are opaque; database sequences are not exposed.
 - An eGift claim URL is a capability: store only a token hash and enforce expiry, single use, rate limiting, and auditability.
@@ -69,7 +71,7 @@ Configuration is split by meaning rather than collected into an untyped global o
 | Kind | Location | Validation and ownership |
 | --- | --- | --- |
 | Editable site copy | `content/site.json` | Zod schema at the infrastructure boundary |
-| Preview catalog | `content/catalog.json` | Catalog adapter schema; production replaces it with Shopify |
+| Preview catalog | `content/catalog.json` | Catalog adapter schema; production uses PostgreSQL catalog_products |
 | Business policy | Owning module's domain | Typed constants and domain tests |
 | Visual primitives | CSS root semantic tokens | Design-token check and visual review |
 | Secrets and deploy values | Server environment | Central runtime validation; never client-exposed |
@@ -92,7 +94,7 @@ Browse → Gift configuration → Checkout → Payment → Order → Fulfillment
 
 AI, analytics, recommendation, marketing, CMS, and story enrichment are noncritical. Their outage must not prevent checkout or corrupt commerce state. AI output is validated, receives only the minimum necessary data, and never decides price, payment, refund, inventory, shipment, or legal facts. Customer-facing prompts are centralized and versioned.
 
-Production commerce currently stops at the preview boundary. Public experience previews may deploy, but the commerce release gate remains red until Shopify adapters, provider verification, observability, privacy review, and critical-flow E2E evidence satisfy [`../operations/RELEASE.md`](../operations/RELEASE.md).
+Production commerce currently stops at the preview boundary. Public experience previews may deploy, but the commerce release gate remains red until native catalog/inventory, buyer binding, provider verification, observability, privacy review, and critical-flow E2E evidence satisfy [`../operations/RELEASE.md`](../operations/RELEASE.md).
 
 ## ADR threshold
 
@@ -108,6 +110,14 @@ Decision records:
 - [ADR 0004: Referral rewards preview](adr/0004-referral-rewards-preview.md) — proposed; production activation excluded
 - [ADR 0005: Fulfillment operator approval](adr/0005-fulfillment-operator-approval.md) — proposed for production; disconnected internal capability
 
+- [ADR 0008: Native customer account](adr/0008-native-customer-account.md) — superseded by ADR 0009.
+- [ADR 0009: Native commerce and Google customers](adr/0009-native-commerce-and-google-customers.md) — current direction; activation blocked.
+- [ADR 0012: Customer support directory](adr/0012-customer-support-directory.md) — dedicated operator access and audited native customer/order reads; production access unconfigured.
+
+- [ADR 0013: Customer rank discounts](adr/0013-customer-rank-discounts.md) — derived paid-purchase performance, immutable pricing snapshots; rates provisional and production blocked.
+
+The production catalog reader uses PostgreSQL; see [native catalog](../operations/NATIVE_CATALOG.md). Publication and manual availability are not inventory reservation. Purchase customer binding is implemented through a server-owned identity reader and immutable intent references; Customer owns buyer creation inside the existing acceptance transaction. See [purchase customer binding](../operations/PURCHASE_CUSTOMER_BINDING.md). Native inventory reservations, verified-payment commitment and safe release are implemented under [ADR 0010](adr/0010-native-inventory-reservations.md). New production checkout remains paused pending live inventory/payment recovery and fulfillment evidence.
+
 ## Architecture decision test
 
 Before a material change, answer:
@@ -121,3 +131,7 @@ Before a material change, answer:
 7. Is a smaller reversible design sufficient?
 
 - [ADR 0006: Google operator login](adr/0006-google-operator-login.md) — implementation selection; live OAuth setup and account binding required
+
+- [ADR 0011: 自作商品の運営管理](adr/0011-native-catalog-management.md) — Google主体と独立した管理権限、専用接続、商品・在庫変更の監査。
+
+- [ADR 0014: 広告コンバージョン連携](adr/0014-advertising-conversions.md) — 同意と暗号化したクリック情報、確定購入に基づくGoogle/Meta/Webhook送信。実アカウント未接続。

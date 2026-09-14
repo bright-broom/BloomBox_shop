@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { Product } from "@/modules/catalog/public";
 import { formatMoney, money } from "@/shared/domain/money";
 import { previewTotals } from "@/modules/checkout/public";
@@ -16,6 +17,9 @@ export function SizeComparison({ products, selectedId }: { products: readonly Pr
       const totals = previewTotals(product.price.amount, product.previewOffer!.shippingAmount);
       return <article className="size-option" key={product.id}>
         <PreviewMetric event={{ name: "product_view", productId: product.id }} />
+        <Link className="size-option-image" href={`/flowers/${product.slug}`} aria-label={`${product.name}の詳細を見る`}>
+          <Image src={product.imageUrl} alt={product.imageAlt} fill sizes="(max-width: 767px) 100vw, 50vw" />
+        </Link>
         <h3>{product.name}</h3>
         <dl className="checkout-details">
           <div><dt>{copy.productLabel}</dt><dd>{formatMoney(product.price)}</dd></div>

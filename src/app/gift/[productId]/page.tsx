@@ -3,7 +3,7 @@ import { PreviewMetric } from "@/ui/preview-metric";
 import { productId } from "@/modules/catalog/public";
 import { getEarliestDeliveryDate, getLatestDeliveryDate } from "@/modules/fulfillment/public";
 import { application } from "@/shared/infrastructure/composition-root";
-import { formatMoney } from "@/shared/domain/money";
+import { formatMoney, money } from "@/shared/domain/money";
 import { GiftForm } from "@/ui/gift-form";
 import { CheckoutProgress } from "@/ui/checkout-progress";
 import Image from "next/image";
@@ -21,7 +21,9 @@ export default async function GiftPage({ params }: GiftPageProps) {
   const { productId: rawProductId } = await params;
   const product = await application.getProduct.byId(productId(rawProductId));
   if (!product) notFound();
-  const sizeOptions = product.previewOffer ? (await application.listProducts.execute()).filter((candidate) => candidate.previewOffer?.family === product.previewOffer?.family).map((candidate) => ({ id: candidate.id, name: candidate.name, size: candidate.previewOffer!.size, price: candidate.price, shippingAmount: candidate.previewOffer!.shippingAmount })) : [];
+  const sizeProducts = product.previewOffer ? (await application.listProducts.execute()).filter((candidate) => candidate.previewOffer?.family === product.previewOffer?.family) : [];
+  const sizeOptions = sizeProducts.map((candidate) => ({ id: candidate.id, name: candidate.name, size: candidate.previewOffer!.size, price: candidate.price, shippingAmount: candidate.previewOffer!.shippingAmount }));
+  const now = new Date();
 
   return (
     <section className="gift-page section-shell">
@@ -34,7 +36,10 @@ export default async function GiftPage({ params }: GiftPageProps) {
       </header>
       <div className="gift-layout">
         <aside className="order-summary">
-          <div className="summary-image">
+          {sizeProducts.length ? <div className="summary-size-images">{sizeProducts.map((candidate) => <figure key={candidate.id}>
+            <div className="summary-image"><Image src={candidate.imageUrl} alt={candidate.imageAlt} fill sizes="(max-width: 767px) 45vw, 22vw" /></div>
+            <figcaption>{candidate.name}</figcaption>
+          </figure>)}</div> : <div className="summary-image">
             <Image
               src={product.imageUrl}
               alt={product.imageAlt}
@@ -42,11 +47,14 @@ export default async function GiftPage({ params }: GiftPageProps) {
               priority
               sizes="(max-width: 760px) 112px, 36vw"
             />
-          </div>
+          </div>}
           <div className="summary-copy">
             <div><p className="eyebrow">YOUR SELECTION</p><h2>{product.previewOffer ? "BLOOM BOX" : product.name}</h2></div>
             {!product.previewOffer ? <p>{formatMoney(product.price)}</p> : null}
           </div>
+          {product.shippingAmount !== undefined && !product.previewOffer ? <p className="field-note">
+            {giftExperienceContent.launch.shippingLabel} {formatMoney(money(product.shippingAmount))} · {giftExperienceContent.launch.totalLabel} {formatMoney(money(product.price.amount + product.shippingAmount))}
+          </p> : null}
           <p className="summary-note">{product.previewOffer ? giftExperienceContent.launch.notice : "税込・送料別"}</p>
         </aside>
         {product.available ? <GiftForm
@@ -54,8 +62,8 @@ export default async function GiftPage({ params }: GiftPageProps) {
           productId={product.id}
           productName={product.name}
           unitPrice={product.price}
-          minDeliveryDate={getEarliestDeliveryDate()}
-          maxDeliveryDate={getLatestDeliveryDate()}
+          minDeliveryDate={getEarliestDeliveryDate(now)}
+          maxDeliveryDate={getLatestDeliveryDate(now)}
         /> : (
           <div className="checkout-empty" role="status">
             <h2>この花は現在ご注文いただけません</h2>

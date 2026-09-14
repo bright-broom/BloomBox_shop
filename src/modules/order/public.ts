@@ -21,3 +21,10 @@ export {
   type ShopifyOrderAcceptanceResult, type ShopifyOrderAcceptor,
   ShopifyOrderAcceptanceConflictError, ShopifyOrderAcceptancePersistenceError,
 } from "./application/accept-shopify-order";
+
+export { type CustomerOrderSummary, type CustomerOrderHistoryQuery, CustomerOrderHistoryUnavailableError } from "./application/customer-order-history";
+export type { CustomerOrderDetail, CustomerOrderDetailQuery } from "./application/customer-order-detail";
+
+export { SUPPORT_ORDER_PAGE_SIZE, type SupportOrder, type SupportOrderHistory } from './application/support-order-history';
+export type { CustomerPurchasePerformance } from "./application/customer-purchase-performance";
+export type { AdvertisingPurchase, AdvertisingPurchaseQuery } from "./application/advertising-purchase-query";

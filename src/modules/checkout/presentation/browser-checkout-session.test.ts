@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getEarliestDeliveryDate } from "@/modules/fulfillment/public";
 import {
   CartChangedError,
+  PreviewCheckoutCleanupError,
+  cleanupPreviewCheckout,
+  readPreviewCheckoutCleanupStatus,
   completePreviewCheckout,
   acceptPreviewReview,
   PREVIEW_SHIPPING_AMOUNT,
@@ -224,6 +227,63 @@ describe("browser checkout session", () => {
     expect(readPreviewDraft(storage)).toBeNull();
   });
 
+  it.each(["preview-review", "buyer", "preview-draft", "cart"])(
+    "preserves a completed receipt when %s cleanup fails and retries cleanup without another purchase",
+    (part) => {
+      storeCart(storage, cart); storePreviewBuyer(storage, buyer);
+      storePreviewDraft(storage, previewDraft("BB-CLEANUP")); acceptPreviewReview(storage);
+      storage.setItem("bloombox.preview-metrics.v1", JSON.stringify({ enabled: true, events: [] }));
+      const originalRemove = storage.removeItem.bind(storage);
+      const remove = vi.spyOn(storage, "removeItem").mockImplementation((key) => {
+        if (key === `bloombox.checkout.${part}.v1`) throw new DOMException("private detail", "SecurityError");
+        originalRemove(key);
+      });
+      expect(() => completePreviewCheckout(storage)).toThrow(PreviewCheckoutCleanupError);
+      const receipt = readPreviewReceipt(storage);
+      expect(receipt?.requestId).toBe(cart.requestId);
+      expect(readPreviewCheckoutCleanupStatus(storage, cart.requestId)).toBe("pending");
+      const metrics = storage.getItem("bloombox.preview-metrics.v1");
+      remove.mockImplementation(originalRemove);
+      cleanupPreviewCheckout(storage, cart.requestId);
+      cleanupPreviewCheckout(storage, cart.requestId);
+      expect(readPreviewCheckoutCleanupStatus(storage, cart.requestId)).toBe("complete");
+      expect(readPreviewReceipt(storage)).toEqual(receipt);
+      expect(readPreviewBuyer(storage)).toBeNull();
+      expect(readCart(storage)).toBeNull();
+      expect(storage.getItem("bloombox.preview-metrics.v1")).toBe(metrics);
+      expect(JSON.parse(metrics ?? "{}").events).toHaveLength(1);
+    },
+  );
+
+  it("does not clean input when the receipt cannot be saved", () => {
+    storeCart(storage, cart); storePreviewBuyer(storage, buyer);
+    storePreviewDraft(storage, previewDraft("BB-SAVE-FAILURE")); acceptPreviewReview(storage);
+    const before = readCheckoutSessionSnapshot(storage);
+    vi.spyOn(storage, "setItem").mockImplementation(() => { throw new DOMException("quota", "QuotaExceededError"); });
+    expect(() => completePreviewCheckout(storage)).toThrow("quota");
+    expect(readCheckoutSessionSnapshot(storage)).toBe(before);
+    expect(readPreviewReceipt(storage)).toBeNull();
+  });
+
+  it.each(["new-cart", "invalid-cart", "replaced-receipt", "legacy-receipt"])(
+    "protects unrelated input during cleanup: %s",
+    (change) => {
+      storeCart(storage, cart); storePreviewBuyer(storage, buyer);
+      storePreviewDraft(storage, previewDraft("BB-PROTECTED")); acceptPreviewReview(storage);
+      const receipt = completePreviewCheckout(storage);
+      storage.setItem("bloombox.checkout.buyer.v1", JSON.stringify(buyer));
+      if (change === "new-cart") storage.setItem("bloombox.checkout.cart.v1", JSON.stringify({ ...cart, requestId: "22345678-abcd-4000-8000-123456789012" }));
+      if (change === "invalid-cart") storage.setItem("bloombox.checkout.cart.v1", "invalid");
+      if (change === "replaced-receipt") storage.setItem("bloombox.checkout.preview-receipt.v1", JSON.stringify({ ...receipt, requestId: "22345678-abcd-4000-8000-123456789012" }));
+      if (change === "legacy-receipt") storage.setItem("bloombox.checkout.preview-receipt.v1", JSON.stringify({ ...receipt, requestId: undefined }));
+      const remove = vi.spyOn(storage, "removeItem");
+      expect(readPreviewCheckoutCleanupStatus(storage, cart.requestId)).toBe("changed");
+      expect(() => cleanupPreviewCheckout(storage, cart.requestId)).toThrow(CartChangedError);
+      expect(remove).not.toHaveBeenCalled();
+      expect(readPreviewBuyer(storage)).toEqual(buyer);
+    },
+  );
+
   it("creates a minimal receipt and removes buyer PII after a successful dummy payment", () => {
     storeCart(storage, cart);
     storePreviewBuyer(storage, buyer);
@@ -270,6 +330,45 @@ describe("browser checkout session", () => {
 
     expect(completePreviewCheckout(storage)).toBeNull();
   });
+
+  it.each(["preview-review", "buyer", "preview-draft", "cart"])(
+    "keeps the cart recoverable when removing %s fails, then permits repeated cleanup",
+    (failedPart) => {
+      storeCart(storage, cart);
+      storePreviewBuyer(storage, buyer);
+      storePreviewDraft(storage, previewDraft("BB-TEST-1234"));
+      acceptPreviewReview(storage);
+      const receipt = "previous-receipt";
+      storage.setItem("bloombox.checkout.preview-receipt.v1", receipt);
+      const originalRemove = storage.removeItem.bind(storage);
+      const remove = vi.spyOn(storage, "removeItem").mockImplementation((key) => {
+        if (key === `bloombox.checkout.${failedPart}.v1`) throw new DOMException("private detail", "SecurityError");
+        originalRemove(key);
+      });
+      const dispatchEvent = vi.fn();
+      vi.stubGlobal("window", { dispatchEvent });
+      try {
+        expect(() => removeCart(storage)).toThrow("private detail");
+        expect(readRecoverableCart(storage)).toEqual(cart);
+        expect(dispatchEvent).toHaveBeenCalledTimes(1);
+        // Approval is invalidated before any buyer/draft data is removed.
+        if (failedPart !== "preview-review") expect(readPreviewReview(storage)).toBeNull();
+        if (failedPart !== "preview-review") expect(completePreviewCheckout(storage)).toBeNull();
+        remove.mockImplementation(originalRemove);
+        removeCart(storage);
+        removeCart(storage);
+        expect(readCart(storage)).toBeNull();
+        expect(readPreviewBuyer(storage)).toBeNull();
+        expect(readPreviewDraft(storage)).toBeNull();
+        expect(readPreviewReview(storage)).toBeNull();
+        expect(storage.getItem("bloombox.checkout.preview-receipt.v1")).toBe(receipt);
+        expect(dispatchEvent).toHaveBeenCalledTimes(3);
+      } finally {
+        remove.mockRestore();
+        vi.unstubAllGlobals();
+      }
+    },
+  );
 
   it("removes the cart and its dependent preview state together", () => {
     storeCart(storage, cart);

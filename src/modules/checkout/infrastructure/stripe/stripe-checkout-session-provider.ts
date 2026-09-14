@@ -1,3 +1,5 @@
+import { SHIPPING_QUOTE_MAX_QUANTITY } from "../../domain/purchase-shipping";
+import { CheckoutPreparationUnavailableError } from "../../application/checkout-session-provider";
 import Stripe from "stripe";
 import type {
   CheckoutSession,
@@ -13,6 +15,7 @@ type StripeCheckoutRequest = Readonly<{
   productName: string;
   quantity: number;
   unitAmount: number;
+  shippingAmount?: number;
   currency: "JPY";
   expiresAt: Date;
   idempotencyKey: string;
@@ -42,6 +45,7 @@ export interface StripeCheckoutSessionsClient {
 }
 
 export interface StripeCheckoutApi {
+  validateCreate(request: Omit<StripeCheckoutRequest, "idempotencyKey">): void;
   create(request: StripeCheckoutRequest): Promise<StripeCheckoutResponse>;
   retrieve(sessionId: string): Promise<StripeCheckoutResponse>;
 }
@@ -61,18 +65,30 @@ export class StripeCheckoutSessionProvider implements CheckoutSessionProvider {
     private readonly apiVersion: string,
   ) {}
 
-  create(intent: PurchaseIntent, idempotencyKey: string): Promise<CheckoutSession> {
-    return this.api.create({
+  validateCreate(intent: PurchaseIntent): void {
+    this.api.validateCreate(this.toRequest(intent));
+  }
+
+  async create(intent: PurchaseIntent, idempotencyKey: string): Promise<CheckoutSession> {
+    const session = await this.api.create({ ...this.toRequest(intent), idempotencyKey });
+    return this.toCheckoutSession(session);
+  }
+
+  private toRequest(intent: PurchaseIntent): Omit<StripeCheckoutRequest, "idempotencyKey"> {
+    if (intent.item.productId.startsWith("native_") && intent.shippingAmount === null) {
+      throw new CheckoutPreparationUnavailableError();
+    }
+    return {
       purchaseIntentId: intent.id,
       productId: intent.item.productId,
       externalProductReference: intent.item.externalProductReference,
       productName: intent.item.productName,
       quantity: intent.item.quantity,
-      unitAmount: intent.item.unitPriceSnapshot.amount,
+      unitAmount: intent.item.unitPriceSnapshot.amount - (intent.loyalty?.discountYen ?? 0),
+      shippingAmount: intent.shippingAmount?.amount,
       currency: intent.item.unitPriceSnapshot.currency,
       expiresAt: intent.expiresAt,
-      idempotencyKey,
-    }).then((session) => this.toCheckoutSession(session));
+    };
   }
 
   retrieve(externalCheckoutId: string): Promise<CheckoutSession> {
@@ -108,7 +124,17 @@ export class StripeSdkCheckoutApi implements StripeCheckoutApi {
     };
   }
 
+  validateCreate(request: Omit<StripeCheckoutRequest, "idempotencyKey">): void {
+    if (request.productId.startsWith("native_") && request.shippingAmount === undefined) throw new CheckoutPreparationUnavailableError();
+    if (request.shippingAmount !== undefined && (
+      !Number.isSafeInteger(request.shippingAmount) || request.shippingAmount < 0
+      || request.quantity !== SHIPPING_QUOTE_MAX_QUANTITY || this.config.taxBehavior !== "inclusive"
+      || !Number.isSafeInteger(request.unitAmount + request.shippingAmount)
+    )) throw new CheckoutPreparationUnavailableError();
+  }
+
   async create(request: StripeCheckoutRequest): Promise<StripeCheckoutResponse> {
+    this.validateCreate(request);
     const session = await this.sessions.create({
       mode: "payment",
       client_reference_id: request.purchaseIntentId,
@@ -133,7 +159,13 @@ export class StripeSdkCheckoutApi implements StripeCheckoutApi {
         quantity: request.quantity,
       }],
       shipping_address_collection: { allowed_countries: ["JP"] },
-      shipping_options: [{ shipping_rate: this.config.shippingRateId }],
+      shipping_options: [request.shippingAmount === undefined
+        ? { shipping_rate: this.config.shippingRateId }
+        : { shipping_rate_data: {
+          type: "fixed_amount", display_name: "配送料",
+          fixed_amount: { amount: request.shippingAmount, currency: request.currency.toLowerCase() },
+          tax_behavior: this.config.taxBehavior,
+        } }],
       phone_number_collection: { enabled: true },
       payment_intent_data: {
         metadata: { purchase_intent_id: request.purchaseIntentId },

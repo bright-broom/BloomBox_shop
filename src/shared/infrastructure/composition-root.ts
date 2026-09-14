@@ -1,20 +1,23 @@
+import { PostgresCustomerPurchasePerformance } from "@/modules/order/infrastructure/postgres-customer-purchase-performance";
+import { PostgresInventoryReservations } from "@/modules/inventory/infrastructure/postgres-inventory-reservations";
+import { PostgresStockAvailabilityReader } from "@/modules/inventory/infrastructure/postgres-stock-availability-reader";
+import { CancelPurchaseIntent } from "@/modules/checkout/application/cancel-purchase-intent";
+import { readCurrentPurchaseCustomer } from "./security/customer-auth/purchase-customer";
+import { PostgresCheckoutBuyerWriter } from "@/modules/customer/infrastructure/postgres-checkout-buyer-writer";
 import { ReadShopifyReference } from "@/modules/payment/application/read-shopify-reference";
 import { ShopifyAdminOrderReader } from "@/modules/payment/infrastructure/shopify/shopify-admin-order-reader";
 import { loadShopifyAdminConfig } from "./config/shopify-admin-config";
-import { isIP } from "node:net";
 import { loadShopifyWebhookConfig } from "./config/shopify-webhook-config";
 import {
   ShopifyWebhookVerifier,
   type ShopifyWebhookHeaders,
 } from "@/modules/payment/infrastructure/shopify-webhook-verifier";
-import { headers } from "next/headers";
 import { GetProduct } from "@/modules/catalog/application/get-product";
 import { ListProducts } from "@/modules/catalog/application/list-products";
 import { SearchProducts } from "@/modules/catalog/application/search-products";
 import { InMemoryProductRepository } from "@/modules/catalog/infrastructure/in-memory-product-repository";
 import type { ProductRepository } from "@/modules/catalog/public";
-import { ShopifyProductRepository } from "@/modules/catalog/infrastructure/shopify-product-repository";
-import { ShopifyStorefrontFetchClient } from "@/modules/catalog/infrastructure/shopify-storefront-client";
+import { PostgresProductRepository } from "@/modules/catalog/infrastructure/postgres-product-repository";
 import { CreatePurchaseIntent } from "@/modules/checkout/application/create-purchase-intent";
 import { PreparePurchase } from "@/modules/checkout/application/prepare-purchase";
 import { StartCheckout } from "@/modules/checkout/application/start-checkout";
@@ -29,7 +32,6 @@ import { loadDataProtectionConfig } from "./config/data-protection-config";
 import { loadCheckoutIntakeEnabled, loadCheckoutProviderMode } from "./config/checkout-provider-config";
 import { loadRuntimeMode } from "./config/runtime-config";
 import { loadStripeConfig } from "./config/stripe-config";
-import { loadShopifyStorefrontConfig } from "./config/shopify-storefront-config";
 import {
   getApplicationDatabaseClient,
   getWorkerDatabaseClient,
@@ -53,7 +55,9 @@ const createPurchaseIntent = new CreatePurchaseIntent(
   productRepository,
   purchaseIntentRepository,
   undefined,
-  loadCheckoutIntakeEnabled,
+  acceptsNewCheckout,
+  readCurrentPurchaseCustomer,
+  loadRuntimeMode() === "preview" ? undefined : new PostgresCustomerPurchasePerformance(getApplicationDatabaseClient()),
 );
 const startCheckout = createStartCheckout(purchaseIntentRepository);
 
@@ -62,6 +66,7 @@ export const application = {
   searchProducts: new SearchProducts(productRepository),
   getProduct: new GetProduct(productRepository),
   createPurchaseIntent,
+  cancelPurchaseIntent: new CancelPurchaseIntent(purchaseIntentRepository, readCurrentPurchaseCustomer),
   preparePurchase: new PreparePurchase(createPurchaseIntent, startCheckout),
   getOrderStatus: new GetOrderStatus(createOrderStatusQuery()),
   lookupPostalCode: new LookupPostalCode(new ZipcloudPostalAddressRepository()),
@@ -77,35 +82,22 @@ function createOrderStatusQuery(): OrderStatusQuery {
 function createProductRepository(): ProductRepository {
   if (loadRuntimeMode() === "preview") return new InMemoryProductRepository();
 
-  const config = loadShopifyStorefrontConfig();
-  return new ShopifyProductRepository(
-    new ShopifyStorefrontFetchClient(
-      config,
-      { buyerIp: getRequestBuyerIp },
-    ),
-    config.catalogTag,
-  );
+  return new PostgresProductRepository(getApplicationDatabaseClient(), new PostgresStockAvailabilityReader(getApplicationDatabaseClient()));
 }
 
-async function getRequestBuyerIp(): Promise<string | undefined> {
-  try {
-    const requestHeaders = await headers();
-    const candidates = [
-      requestHeaders.get("x-forwarded-for")?.split(",")[0].trim(),
-      requestHeaders.get("x-real-ip")?.trim(),
-    ];
-    return candidates.find((candidate) => candidate && isIP(candidate));
-  } catch {
-    return undefined;
-  }
+function acceptsNewCheckout(): boolean {
+  const enabled = loadCheckoutIntakeEnabled();
+  // ADR 0009: live inventory/payment recovery and fulfillment evidence remain incomplete.
+  // Settlement/reconciliation must remain available for existing transactions.
+  return loadRuntimeMode() === "preview" && enabled;
 }
 
-function createPurchaseIntentRepository(): PurchaseIntentRepository {
+function createPurchaseIntentRepository(): InMemoryPurchaseIntentRepository | PostgresPurchaseIntentRepository {
   if (loadRuntimeMode() === "preview") return new InMemoryPurchaseIntentRepository();
 
   const sql = getApplicationDatabaseClient();
   const protector = new AesGcmDataProtector(loadDataProtectionConfig());
-  return new PostgresPurchaseIntentRepository(sql, protector);
+  return new PostgresPurchaseIntentRepository(sql, protector, undefined, (tx) => new PostgresInventoryReservations(tx));
 }
 
 function createStartCheckout(intents: PurchaseIntentRepository): StartCheckout | undefined {
@@ -120,7 +112,7 @@ function createStartCheckout(intents: PurchaseIntentRepository): StartCheckout |
     new StripeSdkCheckoutApi(config),
     config.apiVersion,
   );
-  return new StartCheckout(intents, provider, undefined, loadCheckoutIntakeEnabled);
+  return new StartCheckout(intents, provider, undefined, acceptsNewCheckout, readCurrentPurchaseCustomer);
 }
 
 let stripeWebhookReceiver: ReceiveProviderWebhook | undefined;
@@ -180,7 +172,7 @@ export function getStripeInboxProcessor(): ProcessProviderInbox {
     new PostgresWebhookInbox(sql, protector, undefined, undefined, {
       provider: "STRIPE", accountId: config.accountId,
     }),
-    new StripeCommerceEventProcessor(sql, protector, config.taxBehavior),
+    new StripeCommerceEventProcessor(sql, protector, config.taxBehavior, (tx) => new PostgresCheckoutBuyerWriter(tx), undefined, (tx) => new PostgresInventoryReservations(tx)),
   );
   return stripeInboxProcessor;
 }
@@ -189,7 +181,7 @@ export function getCommerceDataRetentionJob(): PostgresDataRetentionJob {
   if (loadRuntimeMode() !== "production") {
     throw new Error("Commerce data retention is disabled");
   }
-  commerceDataRetentionJob ??= new PostgresDataRetentionJob(getWorkerDatabaseClient());
+  commerceDataRetentionJob ??= new PostgresDataRetentionJob(getWorkerDatabaseClient(), undefined, (tx) => new PostgresInventoryReservations(tx));
   return commerceDataRetentionJob;
 }
 

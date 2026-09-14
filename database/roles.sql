@@ -20,6 +20,12 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_permission_manager') THEN
     CREATE ROLE bloombox_permission_manager NOLOGIN;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_catalog_manager') THEN
+    CREATE ROLE bloombox_catalog_manager NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_customer_support') THEN
+    CREATE ROLE bloombox_customer_support NOLOGIN;
+  END IF;
 END
 $$;
 
@@ -137,3 +143,41 @@ GRANT INSERT ON bloombox.fulfillment_permission_revocations, bloombox.audit_logs
 GRANT EXECUTE ON FUNCTION bloombox.disable_fulfillment_permission(uuid, bigint) TO bloombox_permission_manager;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA bloombox TO bloombox_readonly;
+
+-- Storefronts and settlement workers cannot change catalog publication or prices.
+GRANT SELECT ON bloombox.catalog_products TO bloombox_application, bloombox_worker;
+
+-- The order ownership constraint reads only the buyer key and its customer reference.
+GRANT SELECT (id, customer_id) ON bloombox.buyers TO bloombox_worker;
+
+GRANT SELECT ON bloombox.inventory_stock, bloombox.inventory_reservations, bloombox.inventory_movements
+  TO bloombox_application, bloombox_worker;
+GRANT UPDATE (reserved, version) ON bloombox.inventory_stock TO bloombox_application;
+GRANT UPDATE (on_hand, reserved, version) ON bloombox.inventory_stock TO bloombox_worker;
+GRANT INSERT ON bloombox.inventory_reservations TO bloombox_application;
+GRANT UPDATE (status, updated_at) ON bloombox.inventory_reservations TO bloombox_application, bloombox_worker;
+GRANT INSERT ON bloombox.inventory_movements TO bloombox_application, bloombox_worker;
+
+GRANT USAGE ON SCHEMA bloombox TO bloombox_catalog_manager;
+GRANT EXECUTE ON FUNCTION bloombox.lock_native_catalog_operator(uuid) TO bloombox_catalog_manager;
+GRANT SELECT, INSERT ON bloombox.catalog_products TO bloombox_catalog_manager;
+GRANT UPDATE (slug, status, available, name, subtitle, description, price_minor, shipping_minor, image_url, image_alt, palette,
+  occasions, flowers, grower, version, updated_at) ON bloombox.catalog_products TO bloombox_catalog_manager;
+GRANT SELECT ON bloombox.inventory_stock TO bloombox_catalog_manager;
+GRANT INSERT (product_id, on_hand) ON bloombox.inventory_stock TO bloombox_catalog_manager;
+GRANT UPDATE (on_hand, version) ON bloombox.inventory_stock TO bloombox_catalog_manager;
+GRANT SELECT, INSERT ON bloombox.catalog_changes, bloombox.inventory_adjustments TO bloombox_catalog_manager;
+
+-- Support can inspect customer/account and order summaries, never identity or recipient payloads.
+GRANT USAGE ON SCHEMA bloombox TO bloombox_customer_support;
+GRANT EXECUTE ON FUNCTION bloombox.lock_customer_support_operator(uuid) TO bloombox_customer_support;
+GRANT SELECT (id, status, created_at) ON bloombox.customer_accounts TO bloombox_customer_support;
+GRANT SELECT (id, customer_id) ON bloombox.buyers TO bloombox_customer_support;
+GRANT SELECT (id, display_id, buyer_id, status, commerce_provider, currency, total_minor, created_at)
+  ON bloombox.orders TO bloombox_customer_support;
+GRANT SELECT (order_id, status) ON bloombox.payments, bloombox.fulfillments TO bloombox_customer_support;
+GRANT INSERT ON bloombox.customer_support_accesses TO bloombox_customer_support;
+
+-- Advertising activation requires these grants; the public customer-only role is unchanged.
+GRANT SELECT, INSERT, UPDATE ON bloombox.advertising_consents, bloombox.advertising_deliveries TO bloombox_application;
+GRANT SELECT, UPDATE, DELETE ON bloombox.advertising_consents, bloombox.advertising_deliveries TO bloombox_worker;

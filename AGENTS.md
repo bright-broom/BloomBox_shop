@@ -14,11 +14,14 @@ This is the mandatory, token-efficient policy for the whole repository. An appro
 
 ## 1. Operating model
 
+- At task start, read [`docs/operations/HANDOFF.md`](docs/operations/HANDOFF.md). It is the shared entry point for every AI and developer; no private chat history is required. Use [`docs/operations/BACKLOG.md`](docs/operations/BACKLOG.md) for current task status and acceptance criteria, then load only the relevant detailed guidance.
+- When work changes a backlog item's status, update that item with dated evidence. Distinguish implementation, business decisions, external configuration, and verification; recheck mutable PR/environment state and never treat a historical snapshot as current authorization.
 - Inspect the relevant code and current diff before editing. Extend an existing pattern before creating an abstraction.
 - Keep one change focused. Do not refactor unrelated code unless it blocks a safe implementation.
 - Prefer the smallest explicit, testable, recoverable solution. Do not add speculative infrastructure.
 - Use deterministic checks for facts they can prove; do not duplicate lint, test, or scanner work with long narrative reviews.
 - Read guidance progressively. Search headings first and load only the sections needed for the changed surface.
+- Write PR titles, descriptions, and review comments in Japanese. Preserve machine-required template headings and identifiers.
 - Do not push directly to `main`. Use a focused PR with risk, verification, and rollback evidence.
 
 ## 2. Product and architecture invariants
@@ -31,7 +34,7 @@ BloomBox is a gift-experience platform. Optimize in this order: correct orders, 
 - A module never mutates another module's tables directly.
 - Keep these concepts distinct: Order/Payment/Fulfillment, Buyer/Recipient, Product/Flower/FlowerLot, Customer/User, Gift/Order.
 - Business logic and authoritative state transitions do not live in React components.
-- Shopify is the production commerce system of record. Keep its SDK and transport models behind infrastructure adapters as defined by ADR 0001.
+- ADR 0009 selects BloomBox-owned PostgreSQL commerce and direct Google customer authentication. During migration, Shopify adapters remain legacy integrations; never treat their presence as native-commerce readiness. Payment SDKs and transport models stay behind infrastructure adapters.
 - Checked-in catalog JSON and in-memory repositories are preview fixtures; they must never pass the production-readiness gate.
 - Cross-module code imports only the owning module's `public.ts` entry point.
 

@@ -1,6 +1,9 @@
+import { restoreLoyaltyQuote } from "@/modules/customer/public";
+import { InventoryUnavailableError, InsufficientInventoryError, type InventoryReservations } from "@/modules/inventory/public";
+import { PurchaseCancellationUnavailableError } from "../application/cancel-purchase-intent";
 import { randomUUID } from "node:crypto";
 import { money } from "@/shared/domain/money";
-import type { DatabaseClient } from "@/shared/infrastructure/database/postgres-client";
+import type { DatabaseClient, DatabaseTransaction } from "@/shared/infrastructure/database/postgres-client";
 import type { AesGcmDataProtector } from "@/shared/infrastructure/security/aes-gcm-data-protector";
 import { z } from "zod";
 import {
@@ -22,9 +25,14 @@ import { PURCHASE_INTENT_STATUSES } from "../domain/purchase-intent-status";
 const persistedIntentSchema = z.object({
   id: z.string().uuid(),
   display_id: z.string().min(1),
+  customer_id: z.uuid().nullable(),
+  customer_version: z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER).nullable(),
   status: z.enum(PURCHASE_INTENT_STATUSES),
   currency: z.literal("JPY"),
   subtotal_minor: z.union([z.string(), z.number(), z.bigint()]),
+  shipping_minor: z.union([z.string(), z.number(), z.bigint()]).nullable().default(null),
+  loyalty_snapshot: z.unknown().default(null),
+  loyalty_discount_minor: z.coerce.number().int().nonnegative().safe().default(0),
   delivery_date: z.string(),
   pii_key_id: z.string().min(1).nullable(),
   recipient_ciphertext: z.instanceof(Buffer).nullable(),
@@ -59,6 +67,7 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
     private readonly sql: DatabaseClient,
     private readonly protector: AesGcmDataProtector,
     private readonly createId: () => string = randomUUID,
+    private readonly inventory?: (tx: DatabaseTransaction) => InventoryReservations,
   ) {}
 
   async save(intent: PurchaseIntent): Promise<void> {
@@ -74,14 +83,19 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
 
     try {
       await this.sql.begin(async (transaction) => {
+        if (intent.customer) {
+          const account = await transaction`SELECT id FROM bloombox.customer_accounts
+            WHERE id = ${intent.customer.customerId} AND status = 'ACTIVE' AND version = ${intent.customer.version} FOR SHARE`;
+          if (account.length !== 1) throw new PurchaseIntentPersistenceError();
+        }
         await transaction`
           INSERT INTO bloombox.purchase_intents (
-            id, display_id, status, currency, subtotal_minor, delivery_date,
+            id, display_id, status, currency, subtotal_minor, shipping_minor, loyalty_snapshot, loyalty_discount_minor, delivery_date, customer_id, customer_version,
             pii_key_id, recipient_ciphertext, gift_message_ciphertext,
             version, created_at, updated_at, expires_at, pii_retention_expires_at
           ) VALUES (
             ${intent.id}, ${intent.displayId}, ${intent.status}, ${intent.item.subtotal.currency},
-            ${intent.item.subtotal.amount}, ${intent.recipient.deliveryDate}, ${recipient.keyId},
+            ${intent.item.subtotal.amount}, ${intent.shippingAmount?.amount ?? null}, ${intent.loyalty ? transaction.json(intent.loyalty) : null}, ${intent.loyalty?.discountYen ?? 0}, ${intent.recipient.deliveryDate}, ${intent.customer?.customerId ?? null}, ${intent.customer?.version ?? null}, ${recipient.keyId},
             ${recipient.ciphertext}, ${giftMessagePayload.ciphertext}, 1,
             ${intent.createdAt}, ${intent.createdAt}, ${intent.expiresAt},
             ${intent.piiRetentionExpiresAt}
@@ -98,6 +112,10 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
             ${intent.item.subtotal.amount}, ${intent.item.subtotal.currency}, 0
           )
         `;
+        if (intent.item.productId.startsWith("native_")) {
+          if (!this.inventory) throw new InventoryUnavailableError();
+          await this.inventory(transaction).reserve(intent.id);
+        }
         await transaction`
           INSERT INTO bloombox.outbox_events (
             id, aggregate_type, aggregate_id, event_type, event_version,
@@ -111,6 +129,7 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
         `;
       });
     } catch (error) {
+      if (error instanceof InsufficientInventoryError || error instanceof InventoryUnavailableError) throw error;
       if (isUniqueViolation(error)) throw new PurchaseIntentAlreadyExistsError();
       throw new PurchaseIntentPersistenceError();
     }
@@ -121,9 +140,14 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
       SELECT
         intent.id,
         intent.display_id,
+        intent.customer_id,
+        intent.customer_version,
         intent.status,
         intent.currency,
         intent.subtotal_minor,
+        intent.shipping_minor,
+        intent.loyalty_snapshot,
+        intent.loyalty_discount_minor,
         intent.delivery_date::text,
         intent.pii_key_id,
         intent.recipient_ciphertext,
@@ -169,10 +193,16 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
       giftMessageContext(id),
     );
 
+    const loyalty = row.data.loyalty_snapshot === null ? null : restoreLoyaltyQuote(row.data.loyalty_snapshot, toSafeInteger(row.data.subtotal_minor));
+    if ((loyalty?.discountYen ?? 0) !== row.data.loyalty_discount_minor) throw new PurchaseIntentPersistenceError();
     return PurchaseIntent.restore({
+      loyalty,
       id: purchaseIntentId(row.data.id),
       displayId: row.data.display_id,
       status: row.data.status,
+      shippingAmount: row.data.shipping_minor === null ? null : money(toSafeInteger(row.data.shipping_minor)),
+      customer: row.data.customer_id && row.data.customer_version
+        ? { customerId: row.data.customer_id, version: row.data.customer_version } : null,
       item: {
         productId: catalogProductReference(row.data.catalog_product_id),
         externalProductReference: commerceProductReference(row.data.external_product_id),
@@ -195,6 +225,26 @@ export class PostgresPurchaseIntentRepository implements PurchaseIntentRepositor
       checkoutCreatedAt: row.data.checkout_created_at
         ? new Date(row.data.checkout_created_at)
         : undefined,
+    });
+  }
+
+  async cancelBeforeCheckout(id: PurchaseIntentId): Promise<void> {
+    await this.sql.begin(async (tx) => {
+      const rows = await tx`SELECT intent.status, intent.commerce_provider, item.catalog_product_id
+        FROM bloombox.purchase_intents intent JOIN bloombox.purchase_intent_items item ON item.purchase_intent_id = intent.id AND item.position = 0
+        WHERE intent.id = ${id} FOR UPDATE OF intent`;
+      const row = rows[0];
+      if (!row || row.commerce_provider !== null) throw new PurchaseCancellationUnavailableError();
+      if (row.status === "ABANDONED" || row.status === "EXPIRED") return;
+      if (row.status !== "READY_FOR_CHECKOUT" && row.status !== "DRAFT") throw new PurchaseCancellationUnavailableError();
+      const occurredAt = new Date();
+      if (String(row.catalog_product_id).startsWith("native_")) {
+        if (!this.inventory) throw new InventoryUnavailableError();
+        await this.inventory(tx).release(id, "BEFORE_CHECKOUT_CANCELLED", occurredAt);
+      }
+      await tx`UPDATE bloombox.purchase_intents SET status = 'ABANDONED', version = version + 1, updated_at = ${occurredAt} WHERE id = ${id}`;
+      await tx`INSERT INTO bloombox.audit_logs (id, actor_type, action, resource_type, resource_id, safe_metadata, occurred_at)
+        VALUES (${this.createId()}, 'SYSTEM', 'checkout.purchase_intent.cancelled', 'PurchaseIntent', ${id}, '{}', ${occurredAt})`;
     });
   }
 
