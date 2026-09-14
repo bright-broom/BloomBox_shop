@@ -38,6 +38,8 @@
 
 顧客は `/account/login`、管理者は `/operations/login` に入口を分離。認証済みなら本人の `/account` または権限確認付き管理画面へ進む。[経路と検証記録](AUTH_ROUTING.md) を参照。`/preview/account` は架空のデザイン確認画面であり、実認証済みのマイページではない。ローカルのポートを変える場合はOAuthの戻り先とサーバー設定の両方をそろえる。
 
+3025番へ既存の実Google OAuthと顧客DBを接続し、実Google2顧客で本人の画面・相互非表示を確認済み。[接続・再開手順](CUSTOMER_GOOGLE_3025_VERIFICATION.md)を参照。コードだけ別の作業ツリーへ移しても秘密値は移らないため、認証設定と固定ポートを合わせて確認する。
+
 ## 本番販売は停止中
 
 - [activation設定](../../config/production-commerce-activation.json) は `blocked`、証跡8項目は未完了。[案内コンテンツ](../../content/storefront.json) は `draft`。
