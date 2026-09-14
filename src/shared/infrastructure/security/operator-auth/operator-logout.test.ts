@@ -52,7 +52,7 @@ describe.each(["http://localhost:3000", "https://operators.example"])("operator 
     const names = chunked ? [`${cookieName}.0`, `${cookieName}.1`] : [cookieName];
     for (const name of names) expect(mocks.set).toHaveBeenCalledWith(name, "", expect.objectContaining({ maxAge: 0, path: "/", httpOnly: true, sameSite: "lax", secure }));
     expect(mocks.set.mock.invocationCallOrder.at(-1)).toBeLessThan(mocks.redirect.mock.invocationCallOrder[0]);
-    expect(mocks.redirect).toHaveBeenCalledWith(`${origin}/operations`);
+    expect(mocks.redirect).toHaveBeenCalledWith(`${origin}/operations/login`);
     expect([...jar.keys()].some((name) => name.startsWith(cookieName))).toBe(false);
     expect(jar.get("__Host-bloombox.google-customer-session")).toBe("synthetic-customer-cookie");
     expect(await getOperatorAuth()!.auth.auth()).toBeNull();

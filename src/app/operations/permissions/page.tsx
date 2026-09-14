@@ -1,3 +1,4 @@
+import { requireOperatorLogin } from "@/shared/infrastructure/security/auth-entry";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: copy.title, robots: { index: false, follow: false } };
 export default async function PermissionManagement({ searchParams }: { searchParams: Promise<{ shop?: string | string[]; cursor?: string | string[] }> }) {
   const parameters = await searchParams;
+  await requireOperatorLogin("/operations/permissions");
   const input = z.object({ shop: z.string().optional(), cursor: z.string().optional() }).strict().safeParse(parameters);
   const state = input.success ? await load(input.data) : { page: null, error: copy.invalid };
   return <section className="section-shell content-page permission-management-page">

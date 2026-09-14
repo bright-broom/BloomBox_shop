@@ -1,3 +1,4 @@
+import { requireOperatorLogin } from "@/shared/infrastructure/security/auth-entry";
 import Link from "next/link";
 import { fulfillmentInboxContent } from "@/shared/infrastructure/content/fulfillment-inbox-content";
 import type { Metadata } from "next";
@@ -12,6 +13,7 @@ import { FulfillmentReviewPanel } from "@/ui/fulfillment-review";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: copy.title, robots: { index: false, follow: false } };
 export default async function OperatorFulfillmentReview({ params }: { params: Promise<{ shop: string; fulfillmentId: string }> }) {
+  await requireOperatorLogin("/operations/fulfillments");
   const input = await params;
   const page = await loadReview(input);
   if (!page) notFound();

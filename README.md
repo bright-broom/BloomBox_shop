@@ -310,6 +310,7 @@ flowchart TB
 | [BACKLOG.md](docs/operations/BACKLOG.md) | 残課題・優先順位・完了条件・確認日の正本 |
 | [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) | モジュール・依存方向・状態・責任の境界 |
 | [ADR 0009](docs/architecture/adr/0009-native-commerce-and-google-customers.md) | 自作CommerceとGoogle直接認証を選んだ理由 |
+| [AUTH_ROUTING.md](docs/operations/AUTH_ROUTING.md) | トップから顧客・管理者ログインへの経路と接続設定 |
 | [GOVERNANCE.md](docs/operations/GOVERNANCE.md) | レビュー・権限・環境の保護 |
 | [RELEASE.md](docs/operations/RELEASE.md) | 本番候補の検査・承認・配備・復旧 |
 

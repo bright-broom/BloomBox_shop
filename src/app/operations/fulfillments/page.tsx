@@ -1,3 +1,4 @@
+import { requireOperatorLogin } from "@/shared/infrastructure/security/auth-entry";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { z } from "zod";
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: copy.title, robots: { index: false, follow: false } };
 type Parameters = { shop?: string | string[]; cursor?: string | string[] };
 export default async function OperatorFulfillmentInbox({ searchParams }: { searchParams: Promise<Parameters> }) {
+  await requireOperatorLogin("/operations/fulfillments");
   const parameters = await searchParams;
   const state = await loadInbox(parameters);
   const shop = typeof parameters.shop === "string" && parameters.shop.length <= 255 ? parameters.shop : "";

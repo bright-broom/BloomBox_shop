@@ -1,3 +1,4 @@
+vi.mock("@/shared/infrastructure/security/auth-entry", () => ({ requireOperatorLogin: vi.fn(async () => undefined) }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import Page from "@/app/operations/fulfillments/page";

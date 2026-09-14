@@ -1,3 +1,4 @@
+import { requireOperatorLogin } from "@/shared/infrastructure/security/auth-entry";
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -10,6 +11,7 @@ export const metadata: Metadata = { title: copy.historyTitle, robots: { index: f
 export default async function CustomerHistory({ params, searchParams }: {
   params: Promise<{ customerId: string }>; searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireOperatorLogin("/operations/customers");
   const { customerId } = await params;
   let page;
   let error;

@@ -101,7 +101,7 @@ describe("customer authentication boundary", () => {
     for (const field of ["nonce", "state", "code_challenge"]) expect(location.searchParams.get(field)).toBeTruthy();
     expect(location.searchParams.get("code_challenge_method")).toBe("S256");
     const callback = await GET(request("callback/google?code=forged&state=wrong", { headers: { cookie: browserCookies(csrf, start) } }));
-    expect(callback.headers.get("location")).toContain("/account?error=");
+    expect(callback.headers.get("location")).toContain("/account/login?error=");
     expect(browserCookies(callback)).not.toContain(cookieName);
     expect(transport.mock.calls.every(([url]) => String(url).includes(".well-known"))).toBe(true);
   });
@@ -131,7 +131,7 @@ describe("customer authentication boundary", () => {
     const callback = await GET(request(`callback/google?${new URLSearchParams({ code: "synthetic-code", state: location.searchParams.get("state") ?? "" })}`,
       { headers: { cookie: browserCookies(csrf, start) } }));
     if (variant !== "valid") {
-      expect(callback.headers.get("location")).toContain("/account?error=");
+      expect(callback.headers.get("location")).toContain("/account/login?error=");
       expect(browserCookies(callback)).not.toContain(cookieName); return;
     }
     expect(callback.headers.get("location")).toBe(`${origin}/account`);

@@ -1,3 +1,4 @@
+import { requireOperatorLogin } from "@/shared/infrastructure/security/auth-entry";
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -8,6 +9,7 @@ import { CustomerDirectoryPanel } from '@/ui/customer-management';
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: copy.title, robots: { index: false, follow: false } };
 export default async function Customers({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await requireOperatorLogin("/operations/customers");
   const input = await searchParams;
   let page;
   let error;

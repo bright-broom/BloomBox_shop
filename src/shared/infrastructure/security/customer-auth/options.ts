@@ -1,3 +1,4 @@
+import { authRedirect } from "@/shared/domain/auth-navigation";
 import { customFetch, type NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 import { z } from "zod";
@@ -31,7 +32,7 @@ export function createCustomerAuthOptions(config: CustomerAccountConfig, identit
       [customFetch]: createGoogleTokenFetch(config.clientId), checks: ["pkce", "state", "nonce"],
       authorization: { params: { scope: "openid email profile", prompt: "select_account" } } })],
     session: { strategy: "jwt", maxAge: CUSTOMER_SESSION_SECONDS }, jwt: { maxAge: CUSTOMER_SESSION_SECONDS },
-    pages: { signIn: "/account", error: "/account" },
+    pages: { signIn: "/account/login", error: "/account/login" },
     callbacks: {
       async signIn({ account, profile }) {
         const parsed = profileSchema.safeParse(profile);
@@ -57,7 +58,7 @@ export function createCustomerAuthOptions(config: CustomerAccountConfig, identit
         const value = customerSessionSchema.parse(token);
         return { user: { id: value.customerId }, expires: new Date(value.expiresAt).toISOString() };
       },
-      async redirect() { return `${config.origin}/account`; },
+      async redirect({ url }) { return authRedirect(url, config.origin, "customer"); },
     },
     logger: { error() { console.error("customer_auth_error"); }, warn() { console.warn("customer_auth_warning"); }, debug() {} }, debug: false,
   };
