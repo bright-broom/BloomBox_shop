@@ -737,3 +737,11 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
 .operations-destinations h2 { font-size: var(--text-label); }
 .operations-destinations p { color: var(--ink-soft); }
 @media (max-width: 640px) { .operations-destinations { grid-template-columns: minmax(0, 1fr); } .login-card { padding: var(--space-5); } }
+
+/* Advertising preferences use the existing form/button system. */
+.advertising-settings { padding: var(--space-3) var(--page-gutter); }
+.advertising-consent { position: fixed; z-index: 60; inset: auto 0 0; padding: var(--space-5) var(--page-gutter); background: var(--surface); color: var(--ink); border-top: 1px solid var(--line); max-height: 60dvh; overflow-y: auto; }
+.advertising-consent h2 { font-size: var(--text-body); margin: 0 0 var(--space-2); }
+.advertising-consent p { font-size: var(--text-small); margin: var(--space-2) 0; }
+.advertising-consent a { text-decoration: underline; }
+.advertising-consent-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-3); }

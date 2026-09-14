@@ -1,5 +1,6 @@
 "use server";
 
+import { bindAdvertisingCheckout } from "@/shared/infrastructure/advertising-runtime";
 import { LoyaltyUnavailableError } from "@/modules/customer/public";
 import { InsufficientInventoryError, InventoryUnavailableError } from "@/modules/inventory/public";
 import { DeliveryDateUnavailableError } from "@/modules/fulfillment/public";
@@ -40,6 +41,7 @@ export async function createPurchaseIntentAction(
     const prepared = await application.preparePurchase.execute(parsed.data);
     const intent = prepared.intent;
     if (prepared.checkoutSession) {
+      await bindAdvertisingCheckout(intent.id, prepared.checkoutSession.provider, prepared.checkoutSession.id);
       return { checkout: { url: prepared.checkoutSession.url } };
     }
     const product = await application.getProduct.byId(productId(parsed.data.productId));

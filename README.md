@@ -315,3 +315,19 @@ flowchart TB
 | [RELEASE.md](docs/operations/RELEASE.md) | 本番候補の検査・承認・配備・復旧 |
 
 確認済みの状態は2026-09-14の引き継ぎに基づきます。最新の完了・未完了は台帳と対象コード、実際の設定・検証記録を参照してください。
+
+## 広告との連携
+
+Google広告・Meta広告・署名付きWebhook向けに、同意管理と確定購入の送信基盤を実装しています。広告設定は初期状態で無効です。実アカウント接続・販売開始・キャンペーン配信は別の段階です。
+
+```mermaid
+flowchart LR
+  A[広告から訪問] --> B{計測に同意}
+  B -->|あり| C[クリック情報を暗号化]
+  C --> D[購入と紐付け]
+  D --> E[確定購入だけをworker送信]
+  E --> F[Google / Meta / Webhook]
+  B -->|なし| G[通常どおり購入]
+```
+
+設定・定期処理・保持期限・未接続項目は [広告連携の運用](docs/operations/ADVERTISING.md)、設計判断は [ADR 0014](docs/architecture/adr/0014-advertising-conversions.md) を参照してください。

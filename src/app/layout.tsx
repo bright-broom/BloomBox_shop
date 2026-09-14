@@ -10,6 +10,8 @@ import { HeaderCartLink } from "@/ui/header-cart-link";
 import { referralContent } from "@/shared/infrastructure/content/referral-content";
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { customerAccountContent } from "@/shared/infrastructure/content/customer-account-content";
+import { AdvertisingConsent } from "@/ui/advertising-consent";
+import { advertisingPublicSettings } from "@/shared/infrastructure/advertising-runtime";
 import "./globals.css";
 
 const sans = Noto_Sans_JP({
@@ -42,6 +44,7 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const advertising = advertisingPublicSettings();
   return (
     <html lang="ja">
       <body className={sans.variable}>
@@ -114,6 +117,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </div>
           </div>
         </footer>
+        {advertising.enabled ? <AdvertisingConsent preview={advertising.preview} /> : null}
       </body>
     </html>
   );
