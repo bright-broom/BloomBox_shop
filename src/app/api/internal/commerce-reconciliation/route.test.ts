@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { reconcile, retain, processInbox, recover } = vi.hoisted(() => ({
+const { reconcile, retain, processInbox, recover, attention, reportUnexpectedError } = vi.hoisted(() => ({
   reconcile: vi.fn(),
   retain: vi.fn(),
   processInbox: vi.fn(),
   recover: vi.fn(),
+  attention: vi.fn(),
+  reportUnexpectedError: vi.fn().mockReturnValue("test-error-id"),
 }));
 
 vi.mock("@/shared/infrastructure/composition-root", () => ({
@@ -12,15 +14,16 @@ vi.mock("@/shared/infrastructure/composition-root", () => ({
   getCommerceDataRetentionJob: () => ({ execute: retain }),
   getStripeInboxProcessor: () => ({ execute: processInbox }),
   getStripeUnrecordedCheckoutRecovery: () => ({ execute: recover }),
+  getCommerceWorkerAttention: () => ({ execute: attention }),
 }));
 vi.mock("@/shared/infrastructure/config/worker-config", () => ({
   loadCommerceWorkerSecret: () => "a-secure-worker-secret-with-32-chars",
 }));
-vi.mock("@/shared/infrastructure/observability/report-unexpected-error", () => ({
-  reportUnexpectedError: vi.fn().mockReturnValue("test-error-id"),
-}));
+vi.mock("@/shared/infrastructure/observability/report-unexpected-error", () => ({ reportUnexpectedError }));
 
 import { POST } from "./route";
+
+const healthy = { failedInboxEvents: 0, unrecordedCheckoutsAwaitingReview: 0, requiresAttention: false };
 
 function authenticated() {
   return new Request(new URL("reconcile", import.meta.url), {
@@ -33,14 +36,13 @@ function quietCycle() {
   reconcile.mockResolvedValue({ checked: 0, relevant: 0, discovered: 0 });
   retain.mockResolvedValue({ purchaseIntentsExpired: 0, webhookPayloadsPurged: 0, purchaseIntentPiiPurged: 0 });
   recover.mockResolvedValue({ checked: 0, released: 0, heldForReview: 0 });
+  attention.mockResolvedValue(healthy);
 }
 
 describe("commerce reconciliation route", () => {
   beforeEach(() => {
-    reconcile.mockReset();
-    retain.mockReset();
-    processInbox.mockReset();
-    recover.mockReset();
+    for (const mock of [reconcile, retain, processInbox, recover, attention]) mock.mockReset();
+    reportUnexpectedError.mockClear();
   });
 
   it("rejects an unauthenticated invocation", async () => {
@@ -49,13 +51,11 @@ describe("commerce reconciliation route", () => {
     }));
 
     expect(response.status).toBe(401);
-    expect(reconcile).not.toHaveBeenCalled();
-    expect(retain).not.toHaveBeenCalled();
-    expect(processInbox).not.toHaveBeenCalled();
-    expect(recover).not.toHaveBeenCalled();
+    for (const mock of [reconcile, retain, processInbox, recover, attention]) expect(mock).not.toHaveBeenCalled();
   });
 
   it("runs bounded reconciliation for an authenticated invocation", async () => {
+    quietCycle();
     processInbox
       .mockResolvedValueOnce({ claimed: 2, processed: 1, retryScheduled: 1, failed: 0 })
       .mockResolvedValueOnce({ claimed: 1, processed: 1, retryScheduled: 0, failed: 0 });
@@ -79,41 +79,47 @@ describe("commerce reconciliation route", () => {
         purchaseIntentPiiPurged: 1,
       },
       unrecordedCheckouts: { checked: 2, released: 2, heldForReview: 0 },
+      attention: healthy,
     });
   });
 
-  it("settles unrecorded checkouts only after verified events were drained", async () => {
+  it("checks unresolved conditions only after the whole cycle has run", async () => {
     quietCycle();
     const order: string[] = [];
     processInbox.mockImplementation(async () => { order.push("inbox"); return { claimed: 0, processed: 0, retryScheduled: 0, failed: 0 }; });
     reconcile.mockImplementation(async () => { order.push("events"); return { checked: 0, relevant: 0, discovered: 0 }; });
+    retain.mockImplementation(async () => { order.push("retention"); return { purchaseIntentsExpired: 0, webhookPayloadsPurged: 0, purchaseIntentPiiPurged: 0 }; });
     recover.mockImplementation(async () => { order.push("unrecorded"); return { checked: 0, released: 0, heldForReview: 0 }; });
+    attention.mockImplementation(async () => { order.push("attention"); return healthy; });
 
     expect((await POST(authenticated())).status).toBe(200);
-    expect(order).toEqual(["inbox", "events", "inbox", "unrecorded"]);
+    expect(order).toEqual(["inbox", "events", "inbox", "retention", "unrecorded", "attention"]);
   });
 
-  it("returns a failure after completing the cycle when an event reaches the dead letter state", async () => {
+  it.each([
+    { name: "a dead-lettered event from an earlier run", attention: { failedInboxEvents: 1, unrecordedCheckoutsAwaitingReview: 0, requiresAttention: true } },
+    { name: "an unrecorded checkout still awaiting review", attention: { failedInboxEvents: 0, unrecordedCheckoutsAwaitingReview: 1, requiresAttention: true } },
+  ])("keeps failing while $name remains unresolved, even when this run found nothing new", async ({ attention: unresolved }) => {
     quietCycle();
-    processInbox
-      .mockResolvedValueOnce({ claimed: 1, processed: 0, retryScheduled: 0, failed: 1 })
-      .mockResolvedValueOnce({ claimed: 0, processed: 0, retryScheduled: 0, failed: 0 });
+    attention.mockResolvedValue(unresolved);
 
     const response = await POST(authenticated());
 
     expect(response.status).toBe(500);
-    expect(reconcile).toHaveBeenCalled();
-    expect(retain).toHaveBeenCalled();
+    expect(await response.json()).toEqual({ ok: false, attention: unresolved });
+    expect(reportUnexpectedError).not.toHaveBeenCalled();
     expect(recover).toHaveBeenCalled();
   });
 
-  it("fails the run so an unrecorded checkout that must not be released is investigated", async () => {
+  it("reports an unexpected failure without exposing its details", async () => {
     quietCycle();
-    recover.mockResolvedValue({ checked: 1, released: 0, heldForReview: 1 });
+    recover.mockRejectedValue(new Error("private provider detail"));
 
     const response = await POST(authenticated());
 
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ ok: false });
+    expect(reportUnexpectedError).toHaveBeenCalledOnce();
+    expect(attention).not.toHaveBeenCalled();
   });
 });

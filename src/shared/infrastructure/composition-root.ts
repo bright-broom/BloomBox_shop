@@ -48,6 +48,8 @@ import {
   StripeSdkCheckoutSessionFinder,
   StripeUnrecordedCheckoutRecovery,
 } from "@/modules/payment/infrastructure/stripe-unrecorded-checkout-recovery";
+import { PostgresCommerceWorkerAttention } from "@/modules/payment/infrastructure/postgres-commerce-worker-attention";
+import { PostgresFailedInboxRequeue } from "@/modules/payment/infrastructure/postgres-failed-inbox-requeue";
 import { PostgresDataRetentionJob } from "./database/data-retention-job";
 import { GetOrderStatus, type OrderStatusQuery } from "@/modules/order/public";
 import { PostgresOrderStatusQuery } from "@/modules/order/infrastructure/postgres-order-status-query";
@@ -209,6 +211,21 @@ export function getStripeUnrecordedCheckoutRecovery(): StripeUnrecordedCheckoutR
     (tx) => new PostgresInventoryReservations(tx),
   );
   return stripeUnrecordedCheckoutRecovery;
+}
+
+export function getCommerceWorkerAttention(): PostgresCommerceWorkerAttention {
+  if (loadRuntimeMode() !== "production") {
+    throw new Error("Commerce worker attention is disabled");
+  }
+  return new PostgresCommerceWorkerAttention(getWorkerDatabaseClient());
+}
+
+export function getStripeFailedInboxRequeue(): PostgresFailedInboxRequeue {
+  if (loadCheckoutProviderMode() !== "stripe" || loadRuntimeMode() !== "production") {
+    throw new Error("Stripe failed inbox requeue is disabled");
+  }
+  // Scoped to the configured Stripe account, like the Inbox processor that will pick the events up again.
+  return new PostgresFailedInboxRequeue(getWorkerDatabaseClient(), loadStripeConfig().accountId);
 }
 
 /** Capture-only receiver; deliberately no Shopify processor is composed into the worker. */

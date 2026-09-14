@@ -34,19 +34,38 @@ jobs:
           echo "configured=true" >> "$GITHUB_OUTPUT"
           test -n "$PRODUCTION_BASE_URL"
           test -n "$COMMERCE_WORKER_SECRET"
-          curl --fail --silent --show-error --max-time 90 \
+          # The response carries only counts, never event payloads or customer data. It is not printed.
+          response="$RUNNER_TEMP/commerce-worker-response.json"
+          echo "response=$response" >> "$GITHUB_OUTPUT"
+          curl --fail-with-body --silent --show-error --max-time 90 \
             --request POST \
             --header "Authorization: Bearer $COMMERCE_WORKER_SECRET" \
-            "${PRODUCTION_BASE_URL%/}/api/internal/commerce-reconciliation" > /dev/null
+            --output "$response" \
+            "${PRODUCTION_BASE_URL%/}/api/internal/commerce-reconciliation"
       - name: Open or refresh reconciliation incident
         if: failure() && steps.reconcile.outputs.configured == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          WORKER_RESPONSE: ${{ steps.reconcile.outputs.response }}
         with:
           script: |
+            const fs = require("fs");
             const marker = "<!-- bloombox-commerce-reconciliation -->";
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const body = `${marker}\nThe Stripe commerce worker is failing. `
-              + `[Inspect the workflow run](${runUrl}), failed Inbox rows, and Stripe events before retrying.`;
+            const runbookUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/blob/main/docs/operations/COMMERCE_WORKER_INCIDENTS.md`;
+            let summary = "No attention summary was returned (authentication, network, or unexpected failure).";
+            try {
+              const attention = JSON.parse(fs.readFileSync(process.env.WORKER_RESPONSE, "utf8"))?.attention;
+              if (Number.isInteger(attention?.failedInboxEvents) && Number.isInteger(attention?.unrecordedCheckoutsAwaitingReview)) {
+                summary = `Unresolved: ${attention.failedInboxEvents} failed Inbox event(s) and `
+                  + `${attention.unrecordedCheckoutsAwaitingReview} unrecorded checkout(s) awaiting review. `
+                  + "This incident stays open until they are resolved.";
+              }
+            } catch {
+              // Keep the generic summary when the worker returned no readable attention counts.
+            }
+            const body = `${marker}\nThe Stripe commerce worker is failing. ${summary}\n\n`
+              + `[Inspect the workflow run](${runUrl}) and follow the [commerce worker incident runbook](${runbookUrl}).`;
             const issues = await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner,
               repo: context.repo.repo,

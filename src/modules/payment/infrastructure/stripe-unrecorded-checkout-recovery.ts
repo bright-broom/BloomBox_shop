@@ -10,7 +10,8 @@ export const UNRECORDED_CHECKOUT_RECOVERY_BATCH = 20;
 export const MAX_CHECKOUT_SESSIONS_PER_LOOKUP = 1_000;
 const SESSION_CREATION_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const RELEASE_ACTION = "checkout.expired.provider_lookup";
-const REVIEW_ACTION = "checkout.unrecorded_session.review_required";
+export const UNRECORDED_CHECKOUT_REVIEW_ACTION = "checkout.unrecorded_session.review_required";
+const REVIEW_ACTION = UNRECORDED_CHECKOUT_REVIEW_ACTION;
 
 export type ProviderCheckoutSession = Readonly<{ id: string; status: string | null; paymentStatus: string }>;
 
