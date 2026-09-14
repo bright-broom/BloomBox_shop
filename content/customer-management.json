@@ -1,0 +1,68 @@
+{
+  "title": "顧客管理",
+  "lead": "登録された顧客と、その顧客が購入した注文を確認できます。",
+  "searchLabel": "顧客IDまたは注文番号",
+  "searchHint": "顧客ID・注文番号を省略せずに入力してください。氏名・メールアドレスによる検索は準備中です。",
+  "search": "検索する",
+  "reset": "条件をクリア",
+  "statusLabel": "アカウントの状態",
+  "all": "すべて",
+  "empty": "該当する顧客がいません。検索条件を確認してください。",
+  "registeredAt": "登録日",
+  "customerId": "顧客ID",
+  "history": "購入履歴を見る",
+  "historyTitle": "顧客の購入履歴",
+  "historyLead": "この顧客のアカウントに紐付いた注文を表示しています。",
+  "ordersEmpty": "この顧客に紐付いた注文はまだありません。",
+  "orderNumber": "注文番号",
+  "orderedAt": "注文日",
+  "total": "注文時の合計",
+  "orderStatus": "注文の状態",
+  "payment": "支払いの状態",
+  "fulfillment": "お届けの状態",
+  "unknown": "未確認",
+  "multiple": "複数の状態あり・要確認",
+  "next": "次のページ",
+  "first": "最初のページ",
+  "back": "顧客一覧へ戻る",
+  "login": "運営画面へ戻る",
+  "anonymized": "匿名化済みのため、購入履歴は表示しません。",
+  "scope": "現在は閲覧専用です。氏名・連絡先の登録、対応メモ、メール配信は準備中です。",
+  "statuses": {
+    "ACTIVE": "利用中",
+    "DISABLED": "利用停止中",
+    "ANONYMIZED": "匿名化済み"
+  },
+  "orderStatuses": {
+    "PENDING_CONFIRMATION": "確認中",
+    "CONFIRMED": "注文確定",
+    "CANCELLED": "キャンセル済み",
+    "CLOSED": "完了"
+  },
+  "paymentStatuses": {
+    "AUTHORIZED": "与信確保済み",
+    "CAPTURED": "支払済み",
+    "FAILED": "支払い失敗",
+    "CANCELLED": "取消済み",
+    "PARTIALLY_REFUNDED": "一部返金済み",
+    "REFUNDED": "返金済み",
+    "REQUIRES_PAYMENT_METHOD": "支払い方法の入力待ち",
+    "REQUIRES_ACTION": "追加認証待ち",
+    "PROCESSING": "支払い確認中",
+    "DISPUTED": "異議申立て中"
+  },
+  "fulfillmentStatuses": {
+    "UNFULFILLED": "発送前",
+    "READY": "発送準備済み",
+    "SHIPPED": "発送済み",
+    "DELIVERED": "配達済み",
+    "CANCELLED": "取消済み",
+    "RETURNED": "返品済み",
+    "SCHEDULED": "発送予定",
+    "PROCESSING": "発送準備中"
+  },
+  "messages": {
+    "INVALID": "検索条件が正しくありません。条件をクリアしてやり直してください。",
+    "UNAVAILABLE": "顧客情報を取得できませんでした。時間をおいて再度お試しください。"
+  }
+}

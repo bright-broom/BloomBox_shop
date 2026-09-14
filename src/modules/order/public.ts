@@ -24,3 +24,5 @@ export {
 
 export { type CustomerOrderSummary, type CustomerOrderHistoryQuery, CustomerOrderHistoryUnavailableError } from "./application/customer-order-history";
 export type { CustomerOrderDetail, CustomerOrderDetailQuery } from "./application/customer-order-detail";
+
+export { SUPPORT_ORDER_PAGE_SIZE, type SupportOrder, type SupportOrderHistory } from './application/support-order-history';

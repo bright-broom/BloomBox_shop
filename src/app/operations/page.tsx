@@ -1,4 +1,5 @@
 import { catalogManagementContent } from "@/shared/infrastructure/content/catalog-management-content";
+import { customerManagementContent } from "@/shared/infrastructure/content/customer-management-content";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { z } from "zod";
@@ -22,6 +23,7 @@ export default async function OperatorLogin({ searchParams }: { searchParams: Pr
           <p>{state.bound ? copy.boundNote : copy.unboundNote}</p>
           {state.bound ? <Link className="primary-button" href="/operations/fulfillments">{fulfillmentInboxContent.title}</Link> : null}
           {state.bound ? <Link className="text-link" prefetch={false} href="/operations/catalog">{catalogManagementContent.title}</Link> : null}
+          {state.bound ? <Link className="text-link" prefetch={false} href="/operations/customers">{customerManagementContent.title}</Link> : null}
           {state.bound ? <Link className="text-link" prefetch={false} href="/operations/permissions">{operatorPermissionsContent.title}</Link> : null}
           {!state.bound ? <details><summary>{copy.registration}</summary><p>{copy.registrationNote}</p><code>{state.subject}</code></details> : null}
           <form action={endOperatorLogin}><button className="secondary-button" type="submit">{copy.signOut}</button></form>
