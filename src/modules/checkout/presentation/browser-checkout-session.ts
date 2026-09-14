@@ -138,7 +138,11 @@ export function storeCart(
   notifyCheckoutSessionChanged();
 }
 
-export function removeCart(storage: CheckoutStorage): void {
+/** With an expected request, removal only applies to the cart that started the operation. */
+export function removeCart(storage: CheckoutStorage, expectedRequestId?: string): void {
+  if (expectedRequestId !== undefined && readRecoverableCart(storage)?.requestId !== expectedRequestId) {
+    throw new CartChangedError();
+  }
   try {
     // Invalidate approval first; retain the cart until dependent cleanup succeeds.
     storage.removeItem(REVIEW_STORAGE_KEY);

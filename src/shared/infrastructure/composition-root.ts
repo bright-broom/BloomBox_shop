@@ -1,7 +1,7 @@
 import { PostgresCustomerPurchasePerformance } from "@/modules/order/infrastructure/postgres-customer-purchase-performance";
 import { PostgresInventoryReservations } from "@/modules/inventory/infrastructure/postgres-inventory-reservations";
 import { PostgresStockAvailabilityReader } from "@/modules/inventory/infrastructure/postgres-stock-availability-reader";
-import { CancelPurchaseIntent } from "@/modules/checkout/application/cancel-purchase-intent";
+import { CancelPurchaseIntent, type CheckoutSessionCanceller } from "@/modules/checkout/application/cancel-purchase-intent";
 import { readCurrentPurchaseCustomer } from "./security/customer-auth/purchase-customer";
 import { PostgresCheckoutBuyerWriter } from "@/modules/customer/infrastructure/postgres-checkout-buyer-writer";
 import { ReadShopifyReference } from "@/modules/payment/application/read-shopify-reference";
@@ -24,6 +24,7 @@ import { StartCheckout } from "@/modules/checkout/application/start-checkout";
 import { InMemoryPurchaseIntentRepository } from "@/modules/checkout/infrastructure/in-memory-purchase-intent-repository";
 import { PostgresPurchaseIntentRepository } from "@/modules/checkout/infrastructure/postgres-purchase-intent-repository";
 import {
+  StripeCheckoutSessionCanceller,
   StripeCheckoutSessionProvider,
   StripeSdkCheckoutApi,
 } from "@/modules/checkout/infrastructure/stripe/stripe-checkout-session-provider";
@@ -66,7 +67,7 @@ export const application = {
   searchProducts: new SearchProducts(productRepository),
   getProduct: new GetProduct(productRepository),
   createPurchaseIntent,
-  cancelPurchaseIntent: new CancelPurchaseIntent(purchaseIntentRepository, readCurrentPurchaseCustomer),
+  cancelPurchaseIntent: new CancelPurchaseIntent(purchaseIntentRepository, readCurrentPurchaseCustomer, createCheckoutSessionCanceller()),
   preparePurchase: new PreparePurchase(createPurchaseIntent, startCheckout),
   getOrderStatus: new GetOrderStatus(createOrderStatusQuery()),
   lookupPostalCode: new LookupPostalCode(new ZipcloudPostalAddressRepository()),
@@ -113,6 +114,13 @@ function createStartCheckout(intents: PurchaseIntentRepository): StartCheckout |
     config.apiVersion,
   );
   return new StartCheckout(intents, provider, undefined, acceptsNewCheckout, readCurrentPurchaseCustomer);
+}
+
+function createCheckoutSessionCanceller(): CheckoutSessionCanceller | undefined {
+  if (loadCheckoutProviderMode() === "preview") return undefined;
+  // Deliberately independent of acceptsNewCheckout: a paused intake must still let a
+  // customer close an already issued checkout. Release stays with the verified expiry event.
+  return new StripeCheckoutSessionCanceller(loadStripeConfig());
 }
 
 let stripeWebhookReceiver: ReceiveProviderWebhook | undefined;

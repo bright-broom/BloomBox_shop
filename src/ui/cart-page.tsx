@@ -3,7 +3,7 @@
 import { quoteLoyalty } from "@/modules/customer/public";
 import type { CustomerLoyaltyState } from "@/shared/infrastructure/customer-loyalty";
 import { customerAccountContent } from "@/shared/infrastructure/content/customer-account-content";
-import { createPurchaseIntentAction } from "@/modules/checkout/presentation/actions";
+import { cancelPurchaseIntentAction, createPurchaseIntentAction } from "@/modules/checkout/presentation/actions";
 import {
   readRecoverableCart,
   removeCart,
@@ -38,6 +38,8 @@ export function CartPage({
 }) {
   const router = useRouter();
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [removalNotice, setRemovalNotice] = useState<string | null>(null);
   const revision = useCheckoutSessionRevision();
   const cart: BrowserCartItem | null | undefined = (revision === null || revision === CHECKOUT_SESSION_UNAVAILABLE)
     ? undefined
@@ -57,13 +59,36 @@ export function CartPage({
     }
   }, {});
 
-  function clearCart() {
-    if (pending) return;
+  async function clearCart() {
+    if (pending || removing || !cart) return;
     setRemoveError(null);
+    setRemovalNotice(null);
+    const requestId = cart.requestId;
+    let notice: string | null = null;
+    if (!previewMode) {
+      // A prepared purchase may hold a box. Keep the cart until the server confirms cancellation.
+      setRemoving(true);
+      try {
+        const result = await cancelPurchaseIntentAction(requestId);
+        if ("error" in result) {
+          setRemoveError(result.error);
+          return;
+        }
+        // Production does not clear the cart after payment. Never let clearing it read as an order cancellation.
+        if (result.status === "completed") notice = giftExperienceContent.cart.completedNotice;
+      } catch {
+        setRemoveError(giftExperienceContent.cart.cancelFailed);
+        return;
+      } finally {
+        setRemoving(false);
+      }
+    }
     try {
-      removeCart(window.sessionStorage);
-    } catch {
-      setRemoveError(giftExperienceContent.cart.removeError);
+      setRemovalNotice(notice);
+      removeCart(window.sessionStorage, requestId);
+    } catch (error) {
+      setRemovalNotice(null);
+      setRemoveError(error instanceof CartChangedError ? error.message : giftExperienceContent.cart.removeError);
     }
   }
 
@@ -75,6 +100,7 @@ export function CartPage({
   if (!cart) {
     return (
       <div className="checkout-empty">
+        {removalNotice ? <p className="checkout-notice" role="status">{removalNotice}</p> : null}
         <p className="eyebrow">YOUR CART IS EMPTY</p>
         <h2>カートは空です。</h2>
         <p>贈りたい花を選び、お届け日とメッセージを設定してください。</p>
@@ -111,6 +137,7 @@ export function CartPage({
         {checkoutCancelled ? (
           <p className="checkout-notice" role="status">
             Stripe の決済は行われていません。カートの内容を保持しているため、もう一度お進みいただけます。
+            {giftExperienceContent.cart.checkoutCancelledHint}
           </p>
         ) : null}
         {previewMode ? (
@@ -134,8 +161,11 @@ export function CartPage({
           </dl>
           <div className="cart-item-actions">
             <Link className="text-link" href={`/gift/${encodeURIComponent(cart.productId)}`}>内容を変更する</Link>
-            <button className="text-button" type="button" onClick={clearCart} disabled={pending}>カートから削除</button>
+            <button className="text-button" type="button" onClick={() => { void clearCart(); }} disabled={pending || removing}>
+              {removing ? giftExperienceContent.cart.cancelPending : "カートから削除"}
+            </button>
           </div>
+          {removing ? <p className="form-hint" role="status">{giftExperienceContent.cart.cancelPending}</p> : null}
           {removeError ? <p className="form-error" role="alert">{removeError}</p> : null}
         </article>
       </div>
@@ -163,7 +193,7 @@ export function CartPage({
               入力内容の有効期限が切れています。ギフト設定を更新してください。
             </p>
           ) : null}
-          <button className="primary-button form-submit" type="submit" disabled={pending || !deliveryDateAvailable || shippingUnavailable || loyaltyUnavailable}>
+          <button className="primary-button form-submit" type="submit" disabled={pending || removing || !deliveryDateAvailable || shippingUnavailable || loyaltyUnavailable}>
             {pending ? "安全に準備しています…" : "購入手続きへ"}
             <span aria-hidden="true">→</span>
           </button>
