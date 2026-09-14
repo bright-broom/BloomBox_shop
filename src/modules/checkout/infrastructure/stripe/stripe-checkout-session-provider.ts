@@ -10,6 +10,7 @@ import {
   PurchaseCancellationUnconfirmedError,
   type CheckoutSessionCanceller,
 } from "../../application/cancel-purchase-intent";
+import { PurchaseCheckoutClosedError, PurchaseCheckoutCompletedError } from "../../application/start-checkout";
 import type { StripeConfig } from "@/shared/infrastructure/config/stripe-config";
 
 type StripeCheckoutRequest = Readonly<{
@@ -38,6 +39,7 @@ type StripeCheckoutSessionResource = Readonly<{
   url: string | null;
   expires_at: number;
   livemode: boolean;
+  status?: string | null;
 }>;
 
 export interface StripeCheckoutSessionsClient {
@@ -178,7 +180,17 @@ export class StripeSdkCheckoutApi implements StripeCheckoutApi {
   }
 
   async retrieve(sessionId: string): Promise<StripeCheckoutResponse> {
-    return mapStripeSession(await this.sessions.retrieve(sessionId), this.config);
+    const session = await this.sessions.retrieve(sessionId);
+    // A session can end before its verified event is processed. Report the purchase as closed or completed
+    // instead of a malformed response; payment and inventory facts still follow the verified events.
+    if (session.status === "expired" || session.status === "complete") {
+      const expectedIdPrefix = this.config.mode === "test" ? "cs_test_" : "cs_live_";
+      if (session.id !== sessionId || !session.id.startsWith(expectedIdPrefix) || session.livemode !== (this.config.mode === "live")) {
+        throw new StripeCheckoutResponseError();
+      }
+      throw session.status === "complete" ? new PurchaseCheckoutCompletedError() : new PurchaseCheckoutClosedError();
+    }
+    return mapStripeSession(session, this.config);
   }
 }
 

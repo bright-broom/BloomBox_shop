@@ -9,12 +9,17 @@ import { PREVIEW_SHIPPING_AMOUNT } from "../domain/preview-pricing";
 import { formatMoney } from "@/shared/domain/money";
 import { application } from "@/shared/infrastructure/composition-root";
 import { reportUnexpectedError } from "@/shared/infrastructure/observability/report-unexpected-error";
-import { ProductUnavailableError } from "../application/create-purchase-intent";
+import { ProductUnavailableError, PurchaseIntentIdempotencyConflictError } from "../application/create-purchase-intent";
 import {
   PurchaseCancellationUnavailableError,
   PurchaseCancellationUnconfirmedError,
 } from "../application/cancel-purchase-intent";
-import { PurchaseIntentNotFoundError } from "../application/start-checkout";
+import {
+  CheckoutWindowExpiredError,
+  PurchaseCheckoutClosedError,
+  PurchaseCheckoutCompletedError,
+  PurchaseIntentNotFoundError,
+} from "../application/start-checkout";
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { PurchaseCustomerMismatchError } from "../domain/purchase-customer";
 import { CheckoutPausedError } from "../application/checkout-paused-error";
@@ -65,8 +70,14 @@ export async function createPurchaseIntentAction(
       },
     };
   } catch (error) {
+    // An ended purchase is an expected state of the cart, not a fault to report.
+    if (error instanceof PurchaseCheckoutCompletedError) return { completed: true };
+    if (error instanceof PurchaseCheckoutClosedError || error instanceof CheckoutWindowExpiredError) {
+      return { restart: true, error: giftExperienceContent.cart.checkoutRestartRequired };
+    }
     if (
-      error instanceof LoyaltyUnavailableError
+      error instanceof PurchaseIntentIdempotencyConflictError
+      || error instanceof LoyaltyUnavailableError
       || error instanceof InsufficientInventoryError
       || error instanceof ShippingPriceUnavailableError
       || error instanceof InventoryUnavailableError

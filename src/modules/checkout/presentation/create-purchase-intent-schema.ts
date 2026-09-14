@@ -42,4 +42,8 @@ export type CreatePurchaseIntentFormState = Readonly<{
   checkout?: Readonly<{
     url: string;
   }>;
+  /** The purchase this cart prepared ended without payment; the browser keeps the gift under a new request. */
+  restart?: true;
+  /** Checkout for this cart was already completed; the browser clears the stale cart. */
+  completed?: true;
 }>;
