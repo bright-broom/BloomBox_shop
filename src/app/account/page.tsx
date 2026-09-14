@@ -13,5 +13,5 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   if (state.status === "disabled" || state.status === "signed-out" || state.status === "expired") redirect("/account/login");
   const controls = state.status === "ready" ? <form action={endCustomerLogin}><button className="secondary-button" type="submit">{copy.signOut}</button></form>
     : <form action={startCustomerLogin}><button className="primary-button" type="submit">{copy.signIn}</button></form>;
-  return <CustomerAccountPanel state={state} controls={controls} loginError={Boolean(params.error)} />;
+  return <CustomerAccountPanel state={state} controls={controls} loginError={Boolean(params.error)} hasPreviousPage={Boolean(params.after)} />;
 }
