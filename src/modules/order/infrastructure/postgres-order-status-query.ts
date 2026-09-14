@@ -4,6 +4,7 @@ import type { DatabaseClient } from "@/shared/infrastructure/database/postgres-c
 import type { OrderStatusQuery, OrderStatusRecord } from "../application/order-status-query";
 
 const rowSchema = z.object({
+  purchase_intent_id: z.string().uuid(),
   purchase_intent_status: z.enum([
     "DRAFT", "READY_FOR_CHECKOUT", "CHECKOUT_CREATED", "CONVERTED", "EXPIRED", "ABANDONED",
   ]),
@@ -41,6 +42,7 @@ export class PostgresOrderStatusQuery implements OrderStatusQuery {
   async findByCheckoutReference(reference: string): Promise<OrderStatusRecord | null> {
     const rows = await this.sql`
       SELECT
+        intent.id AS purchase_intent_id,
         intent.status AS purchase_intent_status,
         intent.display_id AS purchase_intent_display_id,
         item.product_name_snapshot AS product_name,
@@ -91,6 +93,7 @@ export class PostgresOrderStatusQuery implements OrderStatusQuery {
     const total = row.total_minor === null ? undefined : toSafeInteger(row.total_minor);
     if ((total === undefined) !== (row.currency === null)) throw new InvalidOrderStatusProjectionError();
     return {
+      purchaseIntentId: row.purchase_intent_id,
       purchaseIntentStatus: row.purchase_intent_status,
       purchaseIntentDisplayId: row.purchase_intent_display_id,
       productId: row.catalog_product_id,

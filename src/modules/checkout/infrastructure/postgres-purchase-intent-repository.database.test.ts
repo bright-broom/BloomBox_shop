@@ -261,6 +261,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
     const publicStatus = await new PostgresOrderStatusQuery(sql)
       .findByCheckoutReference(checkoutId);
     expect(publicStatus).toMatchObject({
+      purchaseIntentId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/),
       purchaseIntentStatus: "CONVERTED",
       orderStatus: "CONFIRMED",
       paymentStatus: "CAPTURED",

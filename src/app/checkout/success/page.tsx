@@ -7,6 +7,7 @@ import {
   type OrderProgress,
 } from "@/modules/order/public";
 import { OrderStatusRefresh } from "@/ui/order-status-refresh";
+import { CompletedCheckoutCartCleanup } from "@/ui/completed-checkout-cart-cleanup";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -111,6 +112,8 @@ export default async function CheckoutReturnPage({ searchParams }: CheckoutRetur
         </dl>
       ) : null}
       {reference && progress === "PROCESSING" ? <OrderStatusRefresh reference={reference} /> : null}
+      {/* Production keeps the browser cart after payment; once the order exists, clear the cart that started it. */}
+      {order?.orderCreated ? <CompletedCheckoutCartCleanup purchaseIntentId={order.purchaseIntentId} /> : null}
       <div className="confirmation-actions">
         {order && ["PAYMENT_FAILED", "CHECKOUT_EXPIRED"].includes(progress) ? (
           <Link className="primary-button" href={`/gift/${encodeURIComponent(order.productId)}`}>
