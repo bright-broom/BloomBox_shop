@@ -439,7 +439,7 @@ h1, h2, h3 { font-weight: 500; line-height: var(--leading-heading); }
   .footer-meta { width: 100%; }
 }
 @media (max-width: 767px) {
-  :root { --page-gutter: 24px; --header-height: 54px; --space-section: 96px; --text-display: clamp(64px, 20vw, 145px); }
+  :root { --page-gutter: 24px; --header-height: 54px; --space-section: 96px; --text-display: clamp(56px, 18vw, 145px); }
   .service-bar { padding-inline: var(--space-4); }
   .service-bar span:not(:first-child) { display: none; }
   .site-header { padding-inline: 20px; gap: var(--space-5); }
