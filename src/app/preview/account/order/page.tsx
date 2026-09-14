@@ -15,5 +15,6 @@ export default async function CustomerOrderPreview({ searchParams }: { searchPar
     subtotalYen: large ? 8000 : 4000, shippingYen: large ? 0 : 1000, taxYen: 0, discountYen: 0,
     payment: "CAPTURED", fulfillment: large ? "SHIPPED" : "PENDING_FULFILLMENT", cancelled: false,
     items: [{ name: large ? copy.detail.sampleLargeProduct : copy.detail.sampleProduct, quantity: 1, unitYen: large ? 8000 : 4000, totalYen: large ? 8000 : 4000 }],
+    shipment: null,
   } }} />;
 }

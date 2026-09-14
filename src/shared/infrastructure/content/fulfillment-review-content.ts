@@ -14,6 +14,6 @@ export const fulfillmentReviewContentSchema = z.object({
   orderState: text, fulfillmentState: text,
   orderStates: z.object({ PENDING_CONFIRMATION: text, CONFIRMED: text, CANCELLED: text, CLOSED: text }),
   fulfillmentStates: z.object({ UNFULFILLED: text, SCHEDULED: text, PROCESSING: text, READY: text, SHIPPED: text,
-    DELIVERED: text, CANCELLED: text, RETURNED: text }),
+    DELIVERED: text, CANCELLED: text, RETURNED: text, ON_HOLD: text }),
 }).strict();
 export const fulfillmentReviewContent = fulfillmentReviewContentSchema.parse(content);

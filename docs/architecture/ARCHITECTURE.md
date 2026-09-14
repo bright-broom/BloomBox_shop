@@ -135,3 +135,5 @@ Before a material change, answer:
 - [ADR 0011: 自作商品の運営管理](adr/0011-native-catalog-management.md) — Google主体と独立した管理権限、専用接続、商品・在庫変更の監査。
 
 - [ADR 0014: 広告コンバージョン連携](adr/0014-advertising-conversions.md) — 同意と暗号化したクリック情報、確定購入に基づくGoogle/Meta/Webhook送信。実アカウント未接続。
+
+- [ADR 0015: 自作注文の発送運用](adr/0015-native-fulfillment-operations.md) — 保留を含む発送状態、専用権限・接続、送信番号による重複防止、宛先閲覧の記録、1注文1箱の発送記録。本番配送は未承認。

@@ -38,7 +38,8 @@ export class PostgresCustomerOrderHistory implements CustomerOrderHistoryQuery, 
         totalYen: row.total_minor, subtotalYen: row.subtotal_minor, taxYen: row.tax_minor,
         shippingYen: row.shipping_minor, discountYen: row.discount_minor, cancelled: row.status === "CANCELLED",
         payment: onlyState(row.payment_states), fulfillment: onlyState(row.fulfillment_states),
-        items: row.items.map((item) => ({ name: item.name, quantity: item.quantity, unitYen: item.unit_minor, totalYen: item.total_minor })) };
+        items: row.items.map((item) => ({ name: item.name, quantity: item.quantity, unitYen: item.unit_minor, totalYen: item.total_minor })),
+        shipment: null };
     } catch { throw new CustomerOrderHistoryUnavailableError(); }
   }
   async read(customerId: string, after: string | null) {
