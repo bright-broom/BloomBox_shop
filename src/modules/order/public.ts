@@ -27,3 +27,4 @@ export type { CustomerOrderDetail, CustomerOrderDetailQuery } from "./applicatio
 
 export { SUPPORT_ORDER_PAGE_SIZE, type SupportOrder, type SupportOrderHistory } from './application/support-order-history';
 export type { CustomerPurchasePerformance } from "./application/customer-purchase-performance";
+export type { AdvertisingPurchase, AdvertisingPurchaseQuery } from "./application/advertising-purchase-query";

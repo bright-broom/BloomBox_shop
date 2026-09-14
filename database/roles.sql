@@ -177,3 +177,7 @@ GRANT SELECT (id, display_id, buyer_id, status, commerce_provider, currency, tot
   ON bloombox.orders TO bloombox_customer_support;
 GRANT SELECT (order_id, status) ON bloombox.payments, bloombox.fulfillments TO bloombox_customer_support;
 GRANT INSERT ON bloombox.customer_support_accesses TO bloombox_customer_support;
+
+-- Advertising activation requires these grants; the public customer-only role is unchanged.
+GRANT SELECT, INSERT, UPDATE ON bloombox.advertising_consents, bloombox.advertising_deliveries TO bloombox_application;
+GRANT SELECT, UPDATE, DELETE ON bloombox.advertising_consents, bloombox.advertising_deliveries TO bloombox_worker;

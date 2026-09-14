@@ -176,3 +176,5 @@ Version 2.2 · 2026-09-13 · 対象：公開サイト、商品一覧・詳細、
 ## 11. 視覚見本
 
 v2.2の配色は[ホーム](evidence/mint-home-desktop.png)、[マイページ](evidence/mint-account-desktop.png)、[モバイルのギフト入力](evidence/mint-gift-mobile.png)を参照。v2.1の単色グリーンとv2.0の青い画面例は過去の検証記録としてのみ保持する。各画像は実装から取得した表示例であり、トークンやレスポンシブ規約の正本は上記のCSSと表。
+
+広告計測の同意UIは既存の `secondary-button`・`text-button` とsemantic tokensを再利用する。共通frontend-designガイドに照らし、新しいUIライブラリは不要と判断。承諾と拒否は同じ視覚的な強さと48px以上の操作領域。フッターから再設定でき、非モーダルの説明領域は狭幅で最大60dvh・内部スクロール。プレビューでは実送信しない旨を表示する。
