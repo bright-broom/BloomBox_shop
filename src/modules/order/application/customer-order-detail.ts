@@ -1,6 +1,6 @@
 import type { CustomerOrderSummary } from "./customer-order-history";
 
-export type CustomerOrderDetail = CustomerOrderSummary & Readonly<{
+export type CustomerOrderDetail = Omit<CustomerOrderSummary, "items"> & Readonly<{
   subtotalYen: number; taxYen: number; shippingYen: number; discountYen: number;
   items: readonly Readonly<{ name: string; quantity: number; unitYen: number; totalYen: number }>[];
 }>;

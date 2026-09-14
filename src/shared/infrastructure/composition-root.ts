@@ -1,3 +1,4 @@
+import { PostgresCustomerPurchasePerformance } from "@/modules/order/infrastructure/postgres-customer-purchase-performance";
 import { PostgresInventoryReservations } from "@/modules/inventory/infrastructure/postgres-inventory-reservations";
 import { PostgresStockAvailabilityReader } from "@/modules/inventory/infrastructure/postgres-stock-availability-reader";
 import { CancelPurchaseIntent } from "@/modules/checkout/application/cancel-purchase-intent";
@@ -56,6 +57,7 @@ const createPurchaseIntent = new CreatePurchaseIntent(
   undefined,
   acceptsNewCheckout,
   readCurrentPurchaseCustomer,
+  loadRuntimeMode() === "preview" ? undefined : new PostgresCustomerPurchasePerformance(getApplicationDatabaseClient()),
 );
 const startCheckout = createStartCheckout(purchaseIntentRepository);
 

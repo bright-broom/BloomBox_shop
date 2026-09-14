@@ -1,5 +1,6 @@
 "use server";
 
+import { LoyaltyUnavailableError } from "@/modules/customer/public";
 import { InsufficientInventoryError, InventoryUnavailableError } from "@/modules/inventory/public";
 import { DeliveryDateUnavailableError } from "@/modules/fulfillment/public";
 import { productId } from "@/modules/catalog/public";
@@ -57,7 +58,8 @@ export async function createPurchaseIntentAction(
     };
   } catch (error) {
     if (
-      error instanceof InsufficientInventoryError
+      error instanceof LoyaltyUnavailableError
+      || error instanceof InsufficientInventoryError
       || error instanceof ShippingPriceUnavailableError
       || error instanceof InventoryUnavailableError
       || error instanceof ProductUnavailableError

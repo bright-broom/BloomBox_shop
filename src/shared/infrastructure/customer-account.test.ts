@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CustomerLoginRequiredError } from "@/modules/customer/public";
-const mocks = vi.hoisted(() => ({ config: vi.fn(), credential: vi.fn(), read: vi.fn(), detail: vi.fn(), headers: vi.fn() }));
+const mocks = vi.hoisted(() => ({ config: vi.fn(), credential: vi.fn(), read: vi.fn(), detail: vi.fn(), spend: vi.fn(), headers: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: mocks.headers }));
 vi.mock("./config/customer-account-config", () => ({ loadCustomerAccountConfig: mocks.config }));
 vi.mock("./security/customer-auth/service", () => ({ readCustomerCredential: mocks.credential }));
 vi.mock("./database/database-connections", () => ({ getApplicationDatabaseClient: vi.fn() }));
 vi.mock("@/modules/order/infrastructure/postgres-customer-order-history", () => ({ PostgresCustomerOrderHistory: class { read = mocks.read; readDetail = mocks.detail; } }));
+vi.mock("@/modules/order/infrastructure/postgres-customer-purchase-performance", () => ({ PostgresCustomerPurchasePerformance: class { readEligibleSpend = mocks.spend; } }));
 import { loadCustomerAccount, loadCustomerOrderDetail } from "./customer-account";
 afterEach(() => vi.resetAllMocks());
 describe("customer account composition", () => {
@@ -28,9 +29,13 @@ describe("customer account composition", () => {
     mocks.config.mockReturnValue({}); mocks.headers.mockResolvedValue(new Headers());
     mocks.credential.mockResolvedValue({ customerId, name: "Native customer", email: "customer@example.test" });
     mocks.read.mockResolvedValue({ orders: [], nextCursor: null });
+    mocks.spend.mockResolvedValue(12000);
     expect(await loadCustomerAccount(undefined)).toMatchObject({ status: "ready", account: { name: "Native customer", orders: [] } });
     expect(mocks.read).toHaveBeenCalledWith(customerId, null);
+    expect(mocks.spend).toHaveBeenCalledWith(customerId);
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.spend.mockRejectedValue(new Error("PRIVATE_PERFORMANCE"));
+    expect(await loadCustomerAccount(undefined)).toMatchObject({ status: "ready", account: { orders: [] }, loyalty: { status: "unavailable" } });
     mocks.read.mockRejectedValue(new Error("PRIVATE_DATABASE_DETAILS"));
     expect(await loadCustomerAccount(undefined)).toEqual({ status: "unavailable" });
     expect(JSON.stringify(log.mock.calls)).not.toContain("PRIVATE_DATABASE_DETAILS"); log.mockRestore();

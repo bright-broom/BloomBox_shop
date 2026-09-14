@@ -1,5 +1,8 @@
 "use client";
 
+import { quoteLoyalty } from "@/modules/customer/public";
+import type { CustomerLoyaltyState } from "@/shared/infrastructure/customer-loyalty";
+import { customerAccountContent } from "@/shared/infrastructure/content/customer-account-content";
 import { createPurchaseIntentAction } from "@/modules/checkout/presentation/actions";
 import {
   readRecoverableCart,
@@ -25,7 +28,9 @@ export function CartPage({
   checkoutCancelled,
   previewMode,
   catalogPrices,
+  loyalty = null,
 }: {
+  loyalty?: CustomerLoyaltyState | null;
   added: boolean;
   checkoutCancelled: boolean;
   previewMode: boolean;
@@ -87,6 +92,11 @@ export function CartPage({
   const shippingUnavailable = (cart.productId.startsWith("native_") && !catalogPrice)
     || (catalogPrice !== undefined && cart.quantity !== SHIPPING_QUOTE_MAX_QUANTITY);
 
+  const loyaltyApplies = !previewMode && cart.productId.startsWith("native_");
+  const loyaltyUnavailable = loyaltyApplies && loyalty?.status === "unavailable";
+  const discount = loyaltyApplies && loyalty?.status === "ready" && !shippingUnavailable
+    ? quoteLoyalty(loyalty.progress.eligibleSpendYen, subtotal.amount).discountYen : 0;
+
   return (
     <div className="cart-layout">
       <div className="cart-main">
@@ -134,9 +144,12 @@ export function CartPage({
         <h2>ご注文内容</h2>
         <dl>
           <div><dt>商品小計</dt><dd>{formatMoney(subtotal)}</dd></div>
+          {discount > 0 ? <div><dt>{customerAccountContent.loyalty.cartDiscount}</dt><dd>−{formatMoney(money(discount))}</dd></div> : null}
           <div><dt>送料</dt><dd>{catalogPrice ? formatMoney(money(catalogPrice.shippingAmount)) : "決済前に表示"}</dd></div>
-          <div className="checkout-total-row"><dt>お支払い合計</dt><dd>{catalogPrice ? formatMoney(money(subtotal.amount + catalogPrice.shippingAmount)) : "決済前に確定"}</dd></div>
+          <div className="checkout-total-row"><dt>お支払い合計</dt><dd>{catalogPrice ? formatMoney(money(subtotal.amount - discount + catalogPrice.shippingAmount)) : "決済前に確定"}</dd></div>
         </dl>
+        {loyaltyUnavailable ? <p role="alert" className="form-error">{customerAccountContent.loyalty.cartUnavailable}</p> : null}
+        {discount > 0 ? <p className="form-hint">{customerAccountContent.loyalty.cartEstimate}</p> : null}
         <form action={formAction}>
           <input type="hidden" name="requestId" value={cart.requestId} />
           <input type="hidden" name="productId" value={cart.productId} />
@@ -150,7 +163,7 @@ export function CartPage({
               入力内容の有効期限が切れています。ギフト設定を更新してください。
             </p>
           ) : null}
-          <button className="primary-button form-submit" type="submit" disabled={pending || !deliveryDateAvailable || shippingUnavailable}>
+          <button className="primary-button form-submit" type="submit" disabled={pending || !deliveryDateAvailable || shippingUnavailable || loyaltyUnavailable}>
             {pending ? "安全に準備しています…" : "購入手続きへ"}
             <span aria-hidden="true">→</span>
           </button>

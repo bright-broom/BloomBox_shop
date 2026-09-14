@@ -1,3 +1,4 @@
+import { loyaltyProgress } from "@/modules/customer/public";
 import { Children, isValidElement, type ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { CartPage } from "@/ui/cart-page";
@@ -108,4 +109,21 @@ it("prevents removal while purchase preparation is pending", () => {
   harness.pending = false;
   removeButton(render()).click();
   expect(readRecoverableCart(storage)).toBeNull();
+});
+
+it.each(["ready", "unavailable", "preview"] as const)("keeps native cart rewards explicit in %s state", (state) => {
+  const cart = readRecoverableCart(storage);
+  if (!cart) throw new Error("Missing fixture cart");
+  const productId = "native_12345678-abcd-4000-8000-123456789012";
+  storeCart(storage, { ...cart, productId, unitAmount: 1 }); // Server catalog replaces stale/browser prices.
+  const tree = CartPage({ added: false, checkoutCancelled: false, previewMode: state === "preview",
+    catalogPrices: [{ productId, unitAmount: 4000, shippingAmount: 1000 }],
+    loyalty: state === "unavailable" ? { status: "unavailable" } : { status: "ready", progress: loyaltyProgress(12000) } });
+  const nodes = elements(tree), text = nodes.flatMap((item) => Array.isArray(item.children) ? item.children : [item.children]).filter((child) => typeof child === "string" || typeof child === "number").join(" ");
+  const submit = nodes.find((item) => item.elementType === "button" && item.type === "submit");
+  expect(submit?.disabled).toBe(state === "unavailable");
+  if (state === "ready") { expect(text).toContain("4,920"); expect(text).toContain("会員割引"); }
+  else expect(text).not.toContain("会員割引");
+  if (state === "unavailable") expect(alerts(tree)).toHaveLength(1);
+  if (state === "preview") expect(text).toContain("5,000");
 });

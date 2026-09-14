@@ -114,6 +114,8 @@ Decision records:
 - [ADR 0009: Native commerce and Google customers](adr/0009-native-commerce-and-google-customers.md) — current direction; activation blocked.
 - [ADR 0012: Customer support directory](adr/0012-customer-support-directory.md) — dedicated operator access and audited native customer/order reads; production access unconfigured.
 
+- [ADR 0013: Customer rank discounts](adr/0013-customer-rank-discounts.md) — derived paid-purchase performance, immutable pricing snapshots; rates provisional and production blocked.
+
 The production catalog reader uses PostgreSQL; see [native catalog](../operations/NATIVE_CATALOG.md). Publication and manual availability are not inventory reservation. Purchase customer binding is implemented through a server-owned identity reader and immutable intent references; Customer owns buyer creation inside the existing acceptance transaction. See [purchase customer binding](../operations/PURCHASE_CUSTOMER_BINDING.md). Native inventory reservations, verified-payment commitment and safe release are implemented under [ADR 0010](adr/0010-native-inventory-reservations.md). New production checkout remains paused pending live inventory/payment recovery and fulfillment evidence.
 
 ## Architecture decision test

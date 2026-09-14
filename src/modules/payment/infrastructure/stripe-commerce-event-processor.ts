@@ -1,3 +1,4 @@
+import { restoreLoyaltyQuote } from "@/modules/customer/public";
 import { InventoryUnavailableError, type InventoryReservations } from "@/modules/inventory/public";
 import type { CheckoutBuyerWriter } from "@/modules/customer/public";
 import { randomUUID } from "node:crypto";
@@ -63,6 +64,9 @@ const purchaseIntentRowSchema = z.object({
   currency: z.literal("JPY"),
   subtotal_minor: integerValueSchema(),
   shipping_minor: integerValueSchema().nullable().default(null),
+  loyalty_snapshot: z.unknown().default(null),
+  loyalty_discount_minor: integerValueSchema().default(0),
+  customer_id: z.uuid().nullable().default(null),
   delivery_date: z.string(),
   pii_key_id: z.string().nullable(),
   recipient_ciphertext: z.instanceof(Buffer).nullable(),
@@ -171,6 +175,9 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
           intent.currency,
           intent.subtotal_minor,
           intent.shipping_minor,
+          intent.loyalty_snapshot,
+          intent.loyalty_discount_minor,
+          intent.customer_id,
           intent.delivery_date::text,
           intent.pii_key_id,
           intent.recipient_ciphertext,
@@ -205,21 +212,28 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
       }
 
       const itemSubtotal = toSafeInteger(intent.item_subtotal_minor);
+      const loyalty = intent.loyalty_snapshot === null ? null : restoreLoyaltyQuote(intent.loyalty_snapshot, itemSubtotal);
+      const loyaltyDiscount = loyalty?.discountYen ?? 0;
+      if (loyaltyDiscount !== toSafeInteger(intent.loyalty_discount_minor) || (loyalty !== null && (
+        !intent.customer_id || !intent.catalog_product_id.startsWith("native_") || intent.quantity !== 1
+        || intent.shipping_minor === null || totalDetails.amount_discount !== 0
+      ))) throw new InvalidStripeCommerceEventError();
+      const netSubtotal = itemSubtotal - loyaltyDiscount;
       if (
         currency.toUpperCase() !== intent.currency
-        || amountSubtotal !== itemSubtotal
+        || amountSubtotal !== netSubtotal
         || toSafeInteger(intent.subtotal_minor) !== itemSubtotal
       ) {
         throw new InvalidStripeCommerceEventError();
       }
       const shipping = totalDetails.amount_shipping ?? 0;
-      const discount = totalDetails.amount_discount;
+      const discount = totalDetails.amount_discount + loyaltyDiscount;
       const reportedTax = totalDetails.amount_tax;
       const tax = this.taxBehavior === "exclusive" ? reportedTax : 0;
       const includedTax = this.taxBehavior === "inclusive" ? reportedTax : 0;
       if (intent.shipping_minor !== null && (
-        totalDetails.amount_shipping === null || shipping !== toSafeInteger(intent.shipping_minor) || discount !== 0
-        || this.taxBehavior !== "inclusive" || amountTotal !== itemSubtotal + shipping
+        totalDetails.amount_shipping === null || shipping !== toSafeInteger(intent.shipping_minor) || totalDetails.amount_discount !== 0
+        || this.taxBehavior !== "inclusive" || amountTotal !== netSubtotal + shipping
       )) throw new InvalidStripeCommerceEventError();
       if (this.taxBehavior === "unspecified" && reportedTax !== 0) {
         throw new InvalidStripeCommerceEventError();
@@ -285,7 +299,7 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
           ${this.createId()}, ${orderId}, ${intent.catalog_product_id},
           ${intent.external_product_id},
           ${intent.product_name_snapshot}, ${intent.quantity},
-          ${toSafeInteger(intent.unit_amount_minor)}, 0, 0, ${itemSubtotal}, ${intent.currency}, 0
+          ${toSafeInteger(intent.unit_amount_minor)}, 0, ${loyaltyDiscount}, ${netSubtotal}, ${intent.currency}, 0
         )
       `;
       await transaction`
