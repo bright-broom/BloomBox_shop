@@ -54,7 +54,12 @@ export class PostgresInventoryReservations implements InventoryReservations {
       if (beforeProvider) {
         if (purchase.commerce_provider !== null || !["DRAFT", "READY_FOR_CHECKOUT"].includes(purchase.status)
           || (reason === "INTENT_EXPIRED" && purchase.expires_at > occurredAt)) throw new InventoryUnavailableError();
-      } else if (purchase.status !== "CHECKOUT_CREATED" || purchase.commerce_provider !== "STRIPE") throw new InventoryUnavailableError();
+      } else if (purchase.commerce_provider !== "STRIPE" || !(
+        purchase.status === "CHECKOUT_CREATED"
+        // Stripe was selected but the creation response was lost, so the purchase stays READY_FOR_CHECKOUT without a
+        // session ID. Only its verified provider expiry may release it (ADR 0010); payment facts still need a session.
+        || (purchase.status === "READY_FOR_CHECKOUT" && reason === "CHECKOUT_EXPIRED")
+      )) throw new InventoryUnavailableError();
       const updated = target === "COMMITTED" ? await this.tx`UPDATE bloombox.inventory_stock
         SET reserved = reserved - ${row.quantity}, on_hand = on_hand - ${row.quantity}, version = version + 1
         WHERE product_id = ${row.product_id} AND reserved >= ${row.quantity} RETURNING product_id`
