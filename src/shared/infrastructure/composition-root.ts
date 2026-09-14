@@ -44,6 +44,10 @@ import { PostgresWebhookInbox } from "@/modules/payment/infrastructure/postgres-
 import { StripeWebhookVerifier } from "@/modules/payment/infrastructure/stripe-webhook-verifier";
 import { StripeCommerceEventProcessor } from "@/modules/payment/infrastructure/stripe-commerce-event-processor";
 import { StripeEventReconciler } from "@/modules/payment/infrastructure/stripe-event-reconciler";
+import {
+  StripeSdkCheckoutSessionFinder,
+  StripeUnrecordedCheckoutRecovery,
+} from "@/modules/payment/infrastructure/stripe-unrecorded-checkout-recovery";
 import { PostgresDataRetentionJob } from "./database/data-retention-job";
 import { GetOrderStatus, type OrderStatusQuery } from "@/modules/order/public";
 import { PostgresOrderStatusQuery } from "@/modules/order/infrastructure/postgres-order-status-query";
@@ -191,6 +195,20 @@ export function getCommerceDataRetentionJob(): PostgresDataRetentionJob {
   }
   commerceDataRetentionJob ??= new PostgresDataRetentionJob(getWorkerDatabaseClient(), undefined, (tx) => new PostgresInventoryReservations(tx));
   return commerceDataRetentionJob;
+}
+
+let stripeUnrecordedCheckoutRecovery: StripeUnrecordedCheckoutRecovery | undefined;
+
+export function getStripeUnrecordedCheckoutRecovery(): StripeUnrecordedCheckoutRecovery {
+  if (loadCheckoutProviderMode() !== "stripe" || loadRuntimeMode() !== "production") {
+    throw new Error("Stripe unrecorded checkout recovery is disabled");
+  }
+  stripeUnrecordedCheckoutRecovery ??= new StripeUnrecordedCheckoutRecovery(
+    getWorkerDatabaseClient(),
+    new StripeSdkCheckoutSessionFinder(loadStripeConfig()),
+    (tx) => new PostgresInventoryReservations(tx),
+  );
+  return stripeUnrecordedCheckoutRecovery;
 }
 
 /** Capture-only receiver; deliberately no Shopify processor is composed into the worker. */

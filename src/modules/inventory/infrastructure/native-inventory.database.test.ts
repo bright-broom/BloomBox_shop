@@ -15,6 +15,7 @@ import { CancelPurchaseIntent, type CheckoutSessionCanceller } from "@/modules/c
 import { PostgresPurchaseIntentRepository } from "@/modules/checkout/infrastructure/postgres-purchase-intent-repository";
 import { PostgresCheckoutBuyerWriter } from "@/modules/customer/infrastructure/postgres-checkout-buyer-writer";
 import { StripeCommerceEventProcessor } from "@/modules/payment/infrastructure/stripe-commerce-event-processor";
+import { StripeUnrecordedCheckoutRecovery, type StripeCheckoutSessionFinder } from "@/modules/payment/infrastructure/stripe-unrecorded-checkout-recovery";
 import { PostgresDataRetentionJob } from "@/shared/infrastructure/database/data-retention-job";
 import { AesGcmDataProtector } from "@/shared/infrastructure/security/aes-gcm-data-protector";
 import { InsufficientInventoryError } from "../public";
@@ -251,6 +252,65 @@ describeDatabase("native inventory reservations", () => {
     expect(await sql`SELECT id FROM bloombox.audit_logs WHERE resource_id = ${intent.id} AND action = 'checkout.expired.unrecorded_session'`).toHaveLength(1);
     await create.execute(input(id));
     expect(await balance(id)).toEqual({ on_hand: 1, reserved: 1 });
+  });
+
+  it("settles an expired unrecorded Stripe checkout from a provider lookup and never releases one that could still be paid", async () => {
+    const lost = await stock(1), paid = await stock(1), raced = await stock(1), recorded = await stock(1);
+    const lostIntent = await create.execute(input(lost)), paidIntent = await create.execute(input(paid));
+    const racedIntent = await create.execute(input(raced)), recordedIntent = await create.execute(input(recorded));
+    for (const intent of [lostIntent, paidIntent, racedIntent]) await repo.claimCommerceProvider(intent.id, "STRIPE");
+    await event(recordedIntent, "checkout.session.expired"); // records a session ID, so its own event path settles it
+    const lookups: string[] = [];
+    const finder: StripeCheckoutSessionFinder = {
+      findByPurchaseReference: async (purchaseIntentId) => {
+        lookups.push(purchaseIntentId);
+        if (purchaseIntentId === paidIntent.id) return [{ id: "cs_test_paid", status: "complete", paymentStatus: "paid" }];
+        if (purchaseIntentId === racedIntent.id) {
+          // The verified expiry event settles this purchase while Stripe is being queried.
+          const checkoutId = `cs_test_${racedIntent.id.replaceAll("-", "")}`;
+          await processor.process({ provider: "STRIPE", providerAccountId: "acct_example", externalEventId: `evt_${randomUUID()}`,
+            eventType: "checkout.session.expired", externalObjectId: checkoutId, apiVersion: "test", occurredAt: now(),
+            payload: { objectType: "checkout_session", id: checkoutId, purchaseIntentId: racedIntent.id, paymentIntentId: null,
+              paymentStatus: "unpaid", checkoutStatus: "expired", amountTotal: 4000, amountSubtotal: 4000, currency: "jpy",
+              totalDetails: { amount_discount: 0, amount_shipping: 0, amount_tax: 0 }, customerId: null, customerDetails: null, collectedInformation: null } });
+          return [{ id: checkoutId, status: "expired", paymentStatus: "unpaid" }];
+        }
+        return [];
+      },
+    };
+    const minutesAfterExpiry = (minutes: number) => new Date(lostIntent.expiresAt.getTime() + minutes * 60 * 1000);
+    const recoveryAt = (at: Date) => new StripeUnrecordedCheckoutRecovery(sql, finder, (tx) => new PostgresInventoryReservations(tx), () => at);
+    const releases = (intentId: string) => sql`SELECT id FROM bloombox.inventory_movements WHERE purchase_intent_id = ${intentId} AND kind = 'RELEASED'`;
+    const audits = (intentId: string, action: string) => sql`SELECT id FROM bloombox.audit_logs WHERE resource_id = ${intentId} AND action = ${action}`;
+
+    await recoveryAt(minutesAfterExpiry(10)).execute();
+    expect(lookups).not.toContain(lostIntent.id);
+    expect(await balance(lost)).toEqual({ on_hand: 1, reserved: 1 });
+
+    const settled = await recoveryAt(minutesAfterExpiry(20)).execute();
+    expect(settled.heldForReview).toBe(1);
+    expect(await balance(lost)).toEqual({ on_hand: 1, reserved: 0 });
+    expect((await repo.findById(lostIntent.id))?.status).toBe("EXPIRED");
+    expect(await audits(lostIntent.id, "checkout.expired.provider_lookup")).toHaveLength(1);
+    expect(await sql`SELECT id FROM bloombox.outbox_events WHERE aggregate_id = ${lostIntent.id} AND event_type = 'checkout.purchase_intent.expired'`).toHaveLength(1);
+    expect(await balance(paid)).toEqual({ on_hand: 1, reserved: 1 });
+    expect((await repo.findById(paidIntent.id))?.status).toBe("READY_FOR_CHECKOUT");
+    expect(await audits(paidIntent.id, "checkout.unrecorded_session.review_required")).toHaveLength(1);
+    expect(await balance(raced)).toEqual({ on_hand: 1, reserved: 0 });
+    expect(await releases(racedIntent.id)).toHaveLength(1);
+    expect(await audits(racedIntent.id, "checkout.expired.provider_lookup")).toHaveLength(0);
+    expect(lookups).not.toContain(recordedIntent.id);
+    expect(await balance(recorded)).toEqual({ on_hand: 1, reserved: 1 });
+
+    lookups.length = 0;
+    const repeated = await recoveryAt(minutesAfterExpiry(25)).execute();
+    expect(repeated.heldForReview).toBe(0);
+    expect(lookups).not.toContain(lostIntent.id);
+    expect(lookups).not.toContain(paidIntent.id);
+    expect(await releases(lostIntent.id)).toHaveLength(1);
+    expect(await audits(paidIntent.id, "checkout.unrecorded_session.review_required")).toHaveLength(1);
+    await create.execute(input(lost));
+    expect(await balance(lost)).toEqual({ on_hand: 1, reserved: 1 });
   });
 
   it("closes an issued checkout on customer cancellation but releases only on the verified expiry event", async () => {
