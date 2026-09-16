@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { homeContent, homeContentSchema } from "@/shared/infrastructure/content/home-content";
 import { findStorefrontPage } from "@/shared/infrastructure/content/storefront-content";
@@ -9,6 +9,14 @@ import { PreviewFooterLinks } from "./preview-footer-links";
 import { SizeComparison } from "./size-comparison";
 import { productId, type Product } from "@/modules/catalog/public";
 import { money } from "@/shared/domain/money";
+
+// A synthetic registered photograph is isolated to this presentation test.
+vi.mock("@/shared/infrastructure/config/native-catalog-image-config", async (original) => {
+  const actual = await original<typeof import("@/shared/infrastructure/config/native-catalog-image-config")>();
+  return { ...actual, productImageAssets: [...actual.productImageAssets, {
+    src: "/images/products/sample.png", label: "Synthetic registered photograph", kind: "photograph",
+  }] };
+});
 
 const product: Product = {
   id: productId("prod_bloombox_m"), externalReference: "sample", slug: "bloom-box-m", name: "BLOOM BOX M",
