@@ -2,6 +2,7 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { customerPortalContent as portalCopy } from "@/shared/infrastructure/content/customer-portal-content";
 import { operationsConsoleContent as copy } from "@/shared/infrastructure/content/operations-console-content";
 import { OperationsIcon } from "./operations-icon";
 export function OperationsShell({
@@ -39,6 +40,7 @@ export function OperationsShell({
               <span>{copy[item.key]}</span>
             </Link>
           ))}
+          <Link href="/operations/requests" prefetch={false} aria-current={path === "/operations/requests" ? "page" : undefined}><OperationsIcon name="customers" /><span>{portalCopy.support}</span></Link>
         </nav>
         <div className="ops-sidebar-bottom">
           <Link href="/">

@@ -1,3 +1,4 @@
+import { AccountPortalNavigation } from "./account-portal";
 import { CustomerLoyaltyPanel } from "./customer-loyalty";
 import type { ReactNode } from "react";
 import Link from "next/link";
@@ -13,6 +14,7 @@ export function CustomerAccountPanel({ state, controls, loginError = false, prev
     <header className="account-heading"><div><p className="eyebrow">{copy.eyebrow}</p><h1>{copy.title}</h1></div>
       <Link className="secondary-button" href="/flowers"><AccountIcon name="flower" />{copy.browse}<AccountIcon name="arrow" /></Link></header>
     {preview ? <aside className="account-notice"><strong>{copy.previewTitle}</strong><p>{copy.previewNote}</p></aside> : null}
+    {state.status === "ready" ? <AccountPortalNavigation preview={preview} /> : null}
     <div className="account-layout">
       <nav className="account-navigation" aria-label={copy.title}>
         {state.status === "ready" && state.loyalty ? <a href="#account-loyalty"><AccountIcon name="gift" />{copy.loyalty.navigation}</a> : null}
@@ -55,7 +57,7 @@ export function CustomerAccountPanel({ state, controls, loginError = false, prev
             <div className="account-session"><AccountIcon name="logout" />{controls}</div>
             <details className="account-profile-help"><summary><AccountIcon name="info" /><span>{copy.profileHelp}</span><AccountIcon name="chevron" /></summary><p>{copy.profileNote}</p><p>{copy.sessionNote}</p></details></> : <p>{copy.loginNote}</p>}
         </section>
-        <section id="account-support" className="account-support"><Link href="/contact"><span className="account-support-icon"><AccountIcon name="help" /></span><span><strong>{copy.contact}</strong><small>{copy.supportNote}</small></span><AccountIcon name="arrow" /></Link></section>
+        <section id="account-support" className="account-support"><Link href={preview ? "/preview/account/support" : state.status === "ready" ? "/account/support" : "/contact"}><span className="account-support-icon"><AccountIcon name="help" /></span><span><strong>{copy.contact}</strong><small>{copy.supportNote}</small></span><AccountIcon name="arrow" /></Link></section>
         </aside>
       </div>
     </div>

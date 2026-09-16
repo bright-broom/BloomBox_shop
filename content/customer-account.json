@@ -20,7 +20,7 @@
   "name": "お名前",
   "email": "メールアドレス",
   "notRegistered": "未登録",
-  "profileNote": "Googleログイン時のお名前とメールアドレスを表示しています。",
+  "profileNote": "お名前はプロフィール設定、メールアドレスはGoogleで本人確認した情報を表示しています。",
   "orderNumber": "ご注文番号",
   "orderDate": "ご注文日",
   "total": "ご注文時の合計",

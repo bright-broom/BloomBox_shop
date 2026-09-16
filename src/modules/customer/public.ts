@@ -12,3 +12,5 @@ export { CustomerManagementError, CUSTOMER_DIRECTORY_PAGE_SIZE, type ManagedCust
 export { CUSTOMER_SUPPORT_SEARCH_MAX_LENGTH } from "./domain/customer-management-policy";
 export { LOYALTY_POLICY_VERSION, LOYALTY_TIERS, loyaltyProgress, quoteLoyalty, restoreLoyaltyQuote, LoyaltyUnavailableError,
   type LoyaltyProgress, type LoyaltyQuote } from "./domain/customer-loyalty";
+export { ACCOUNT_LIMITS, AccountPortalError, emptyAccountPreferences, changeAccount, type AddressEntry, type AccountPreferences, type AccountChange } from './domain/customer-portal';
+export type { AccountActor, PortalSnapshot, AccountRequest, AccountRequestKind, CustomerPortalRepository } from './application/customer-portal';

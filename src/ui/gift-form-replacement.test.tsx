@@ -14,6 +14,7 @@ import { giftExperienceContent } from "@/shared/infrastructure/content/gift-expe
 const harness = vi.hoisted(() => ({ values: [] as unknown[], cursor: 0, push: vi.fn(), cancel: vi.fn() }));
 vi.mock("react", async (original) => ({
   ...await original<typeof import("react")>(),
+  useRef: (initial: unknown) => ({ current: initial }),
   useState: (initial: unknown) => {
     const index = harness.cursor++;
     if (index >= harness.values.length) harness.values.push(initial);

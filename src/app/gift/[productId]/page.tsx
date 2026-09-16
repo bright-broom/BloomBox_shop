@@ -1,3 +1,4 @@
+import { loadCustomerPortal } from "@/shared/infrastructure/customer-portal";
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { PreviewMetric } from "@/ui/preview-metric";
 import { productId } from "@/modules/catalog/public";
@@ -33,6 +34,8 @@ export default async function GiftPage({ params }: GiftPageProps) {
   const sizeProducts = product.previewOffer ? (await application.listProducts.execute()).filter((candidate) => candidate.previewOffer?.family === product.previewOffer?.family) : [];
   const sizeOptions = sizeProducts.map((candidate) => ({ id: candidate.id, name: candidate.name, size: candidate.previewOffer!.size, price: candidate.price, shippingAmount: candidate.previewOffer!.shippingAmount }));
   const now = new Date();
+  const portal = await loadCustomerPortal();
+  const savedRecipients = portal.status === 'ready' ? portal.snapshot.preferences.addresses.map(({ id, name, label }) => ({ id, name, label })) : [];
 
   return (
     <section className="gift-page section-shell">
@@ -67,6 +70,7 @@ export default async function GiftPage({ params }: GiftPageProps) {
           <p className="summary-note">{product.previewOffer ? giftExperienceContent.launch.notice : "税込・送料別"}</p>
         </aside>
         {product.available ? <GiftForm
+          savedRecipients={savedRecipients}
           sizeOptions={sizeOptions}
           productId={product.id}
           productName={product.name}

@@ -1,3 +1,4 @@
+import { customerPortalContent as portalCopy } from "@/shared/infrastructure/content/customer-portal-content";
 import { SizeComparison } from "@/ui/size-comparison";
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { application } from "@/shared/infrastructure/composition-root";
@@ -100,7 +101,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
         ) : (
           <p className="unavailable-note">次回の入荷まで、いましばらくお待ちください。</p>
         )}
-        {product.previewOffer ? <SizeComparison products={[product, ...relatedProducts]} selectedId={product.id} /> : null}
+        <Link className="text-link" href={`/account/favorites?add=${encodeURIComponent(product.id)}`}>{portalCopy.addFavorite}</Link>
+          {product.previewOffer ? <SizeComparison products={[product, ...relatedProducts]} selectedId={product.id} /> : null}
         <dl className="detail-list">
           <div><dt>花材</dt><dd>{product.flowers.join("、")}</dd></div>
           <div><dt>つくり手</dt><dd>{product.grower}</dd></div>

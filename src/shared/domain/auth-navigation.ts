@@ -6,8 +6,8 @@ const uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 export function loginDestination(value: unknown, area: LoginArea): string {
   const home = area === "customer" ? ACCOUNT_HOME : OPERATOR_HOME;
   if (typeof value !== "string") return home;
-  if (area === "customer") return value === home || new RegExp(`^/account/orders/${uuid}$`, "i").test(value) ? value : home;
-  return [home, "/operations/orders", "/operations/reports", "/operations/settings", "/operations/catalog", "/operations/customers", "/operations/permissions", "/operations/fulfillments"].includes(value)
+  if (area === "customer") return [home, "/account/profile", "/account/addresses", "/account/favorites", "/account/settings", "/account/support"].includes(value) || new RegExp(`^/account/orders/${uuid}$`, "i").test(value) ? value : home;
+  return [home, "/operations/requests", "/operations/orders", "/operations/reports", "/operations/settings", "/operations/catalog", "/operations/customers", "/operations/permissions", "/operations/fulfillments"].includes(value)
     || new RegExp(`^/operations/customers/${uuid}$`, "i").test(value)
     || new RegExp(`^/operations/fulfillments/[a-z0-9][a-z0-9-]*\\.myshopify\\.com/${uuid}$`, "i").test(value) ? value : home;
 }

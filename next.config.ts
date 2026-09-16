@@ -33,6 +33,7 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      { source: "/gift/:path*", headers: [{ key: "Cache-Control", value: "private, no-store, max-age=0" }] },
       { source: "/:path*", headers: securityHeaders },
       {
         source: "/checkout/:path*",
