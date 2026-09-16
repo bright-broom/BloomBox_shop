@@ -41,12 +41,12 @@ export default async function InformationPage({ params }: InformationPageProps) 
       {page.notice ? <p className="content-notice" role="note">{page.notice}</p> : null}
       <div className={`content-sections content-sections-${page.kind}`}>
         {page.sections.map((section, index) => page.kind === "faq" ? (
-          <details key={section.title} className="faq-item" open={index === 0}>
+          <details key={section.title} id={section.id} className="faq-item" open={index === 0}>
             <summary>{section.title}</summary>
             <div>{section.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div>
           </details>
         ) : (
-          <section key={section.title}>
+          <section key={section.title} id={section.id}>
             <h2>{section.title}</h2>
             {section.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
             {section.items ? (

@@ -7,6 +7,7 @@ const storefrontItemSchema = z.object({
 });
 
 const storefrontSectionSchema = z.object({
+  id: z.string().regex(/^[a-z0-9-]+$/).optional(),
   title: z.string().trim().min(1).max(120),
   body: z.array(z.string().trim().min(1).max(800)).max(8),
   items: z.array(storefrontItemSchema).max(20).optional(),
@@ -38,6 +39,12 @@ const storefrontContentSchema = z.object({
   const slugs = new Set(value.pages.map((page) => page.slug));
   if (slugs.size !== value.pages.length) {
     context.addIssue({ code: "custom", message: "Storefront page slugs must be unique" });
+  }
+  for (const page of value.pages) {
+    const ids = page.sections.flatMap((section) => section.id ? [section.id] : []);
+    if (new Set(ids).size !== ids.length) {
+      context.addIssue({ code: "custom", message: "Storefront section IDs must be unique within each page" });
+    }
   }
 });
 

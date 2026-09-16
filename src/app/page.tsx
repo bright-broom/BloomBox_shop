@@ -5,6 +5,9 @@ import { siteContent } from "@/shared/infrastructure/content/site-content";
 import Image from "next/image";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { HomeAnnouncements, HomeAssurance, HomeDelivery, HomeFaq, HomeGallery, HomeMembership, HomeReviews } from "@/ui/home-sections";
+import { homeContent } from "@/shared/infrastructure/content/home-content";
+import { loadRuntimeMode } from "@/shared/infrastructure/config/runtime-config";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { alternates: { canonical: "/" } };
@@ -12,9 +15,11 @@ export const metadata: Metadata = { alternates: { canonical: "/" } };
 export default async function HomePage() {
   const products = await application.listProducts.execute();
   const { hero, home } = siteContent;
+  const now = new Date();
 
   return (
     <>
+      <HomeAnnouncements now={now} />
       <section className="hero" aria-labelledby="hero-title">
         <Image src={hero.imageUrl} alt={hero.imageAlt} fill priority sizes="100vw" className="hero-image" />
         <div className="hero-copy">
@@ -49,13 +54,16 @@ export default async function HomePage() {
           </div>
           <Link className="secondary-button" href="/flowers">{home.collection.action}<span aria-hidden="true">↗</span></Link>
         </div>
-        {products.some((product) => product.previewOffer) ? <SizeComparison products={products} /> : <div className="product-grid">
+        <HomeGallery products={products} />
+        {products.some((product) => product.previewOffer) ? <SizeComparison products={products} guidance={homeContent.comparison} /> : <div className="product-grid">
           {products.length > 0 ? products.map((product) => (
             <ProductCard key={product.id} product={product} />
           )) : <p className="catalog-empty" role="status">{siteContent.catalog.emptyMessage}</p>}
         </div>}
       </section>
 
+      <HomeDelivery now={now} preview={loadRuntimeMode() === "preview"} />
+      <HomeAssurance />
       <section className="how-it-works section-shell" aria-labelledby="guide-title">
         <div className="dark-section-heading">
           <div>
@@ -75,6 +83,9 @@ export default async function HomePage() {
         </ol>
         <Link className="secondary-button" href="/guide">{home.guide.action}<span aria-hidden="true">↗</span></Link>
       </section>
+      <HomeReviews />
+      <HomeFaq />
+      <HomeMembership />
     </>
   );
 }

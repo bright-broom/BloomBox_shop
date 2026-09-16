@@ -1,0 +1,54 @@
+{
+  "announcementsTitle": "大切なお知らせ",
+  "announcements": [],
+  "gallery": {
+    "eyebrow": "INSIDE THE BOX",
+    "title": "箱を開けた、その先に。",
+    "items": []
+  },
+  "comparison": {
+    "title": "サイズ選びのヒント",
+    "pending": "いまは、ご予算から。花の量や大きさの比較は、実物の準備ができ次第ご案内します。",
+    "sizes": []
+  },
+  "delivery": {
+    "eyebrow": "DELIVERY",
+    "title": "贈りたい日に、想いを添えて。",
+    "rangeLabel": "いま選べるお届け希望日",
+    "previewLabel": "テスト購入で選べるお届け希望日",
+    "note": "日本時間を基準にした希望日の入力範囲です。到着を保証するものではありません。地域・天候・受付状況により、ご希望に沿えない場合があります。",
+    "action": "配送のご案内"
+  },
+  "assurance": {
+    "eyebrow": "WITH CARE",
+    "title": "贈る前に、知っておきたいこと。",
+    "draftNote": "販売前のご案内です。包装や到着時の対応条件は、正式公開までにお知らせします。",
+    "items": [
+      { "icon": "gift", "title": "包装について", "page": "about", "section": "preparation" },
+      { "icon": "mail", "title": "メッセージカード", "page": "faq", "section": "message" },
+      { "icon": "card", "title": "金額の分かる書類", "page": "faq", "section": "gift-documents" },
+      { "icon": "help", "title": "お届け時のお困りごと", "page": "contact", "section": "arrival-problem" }
+    ],
+    "action": "詳しく見る"
+  },
+  "faq": {
+    "eyebrow": "QUESTIONS",
+    "title": "よくあるご質問",
+    "sectionIds": ["flowers", "delivery-date", "gift-documents", "message"],
+    "action": "すべての質問を見る",
+    "contact": "解決しないときは、お問い合わせ"
+  },
+  "membership": {
+    "eyebrow": "YOUR BLOOMBOX",
+    "title": "贈った時間を、マイページに。",
+    "description": "ご注文の履歴も、お気に入りも、ひとつの場所に。Googleアカウントでログインできます。",
+    "benefitTitle": "購入実績に応じた会員特典",
+    "benefitNote": "ランク別の自動割引を準備しています。割引率・適用条件は正式なご案内をお待ちください。",
+    "action": "マイページへ"
+  },
+  "reviews": {
+    "eyebrow": "GIFT STORIES",
+    "title": "花を贈った、その後の話。",
+    "items": []
+  }
+}
