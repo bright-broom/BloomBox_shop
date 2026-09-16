@@ -1,3 +1,5 @@
+import { PostgresCatalogHistory } from "@/modules/catalog/infrastructure/postgres-catalog-history";
+import { PostgresStockHistory } from "@/modules/inventory/infrastructure/postgres-stock-history";
 import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -126,4 +128,43 @@ if (url && (!["127.0.0.1","localhost"].includes(new URL(url).hostname) || !new U
     const next=await withCatalogManager(manager,actor,(tx)=>new PostgresCatalogManager(tx).list(after));
     expect(next.products.every(p=>p.id>after)).toBe(true);
   });
+  it("reads all catalog field changes and stock adjustments using the scoped role, with stable product-specific cursors", async () => {
+    const p = await product();
+    for (let version = 1; version <= 31; version++) {
+      await save({ ...p, requestId: randomUUID(), expectedVersion: version, name: `名称${version}`, shippingAmount: version === 31 ? 0 : null });
+      await change(adjustment(p.id, 1, version - 1));
+    }
+    const readCatalog = (before?: number) => withCatalogManager(manager, actor, (tx) => new PostgresCatalogHistory(tx).read(p.id, before));
+    const readStock = (before?: number) => withCatalogManager(manager, actor, (tx) => new PostgresStockHistory(tx).read(p.id, before));
+    const first = await readCatalog();
+    expect(first.entries).toHaveLength(30); expect(first.next).toBe(3);
+    expect(first.entries[0]).toMatchObject({ version: 32, operatorId: actor.operatorId, changes: [
+      { field: "name", before: "名称30", after: "名称31" }, { field: "shippingAmount", before: null, after: 0 },
+    ] });
+    // New writes between pages never duplicate older results; a different product is excluded.
+    await save({ ...p, requestId: randomUUID(), expectedVersion: 32, name: "新しい変更" });
+    await product();
+    const second = await readCatalog(first.next!);
+    expect(second.entries.map((entry) => entry.version)).toEqual([2, 1]); expect(second.next).toBeNull();
+    expect(second.entries[1].changes).toHaveLength(14);
+    expect(second.entries[1].changes.every((entry) => entry.before === null)).toBe(true);
+    const stock = await readStock(); expect(stock.entries).toHaveLength(30); expect(stock.next).toBe(2);
+    expect(stock.entries[0]).toMatchObject({ beforeQuantity: 30, afterQuantity: 31, delta: 1, reason: "RECEIVED" });
+    expect((await readStock(stock.next!)).entries.map((entry) => entry.version)).toEqual([1]);
+    await change({ ...adjustment(p.id, -1, 31), reason: "CORRECTION" });
+    expect((await readStock()).entries[0]).toMatchObject({ beforeQuantity: 31, afterQuantity: 30, delta: -1, reason: "CORRECTION" });
+    for (const Reader of [PostgresCatalogHistory, PostgresStockHistory]) {
+      await expect(withCatalogManager(manager, actor, async (tx) => await new Reader(tx).read(randomUUID()))).resolves.toEqual({ entries: [], next: null });
+      await expect(withCatalogManager(manager, actor, async (tx) => await new Reader(tx).read("injection"))).rejects.toMatchObject({ code: "INVALID" });
+      for (const before of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+        await expect(withCatalogManager(manager, actor, async (tx) => await new Reader(tx).read(p.id, before))).rejects.toMatchObject({ code: "INVALID" });
+      }
+      await expect(withCatalogManager(manager, { ...actor, operatorId: randomUUID() }, async (tx) => await new Reader(tx).read(p.id))).rejects.toMatchObject({ code: "DENIED" });
+      await expect(withCatalogManager(manager, { ...actor, expiresAt: new Date(0) }, async (tx) => await new Reader(tx).read(p.id))).rejects.toMatchObject({ code: "DENIED" });
+    }
+    await owner`UPDATE bloombox.native_catalog_operators SET enabled=false WHERE operator_id=${actor.operatorId}`;
+    try { await expect(readCatalog()).rejects.toMatchObject({ code: "DENIED" }); await expect(readStock()).rejects.toMatchObject({ code: "DENIED" }); }
+    finally { await owner`UPDATE bloombox.native_catalog_operators SET enabled=true WHERE operator_id=${actor.operatorId}`; }
+  });
+
 });
