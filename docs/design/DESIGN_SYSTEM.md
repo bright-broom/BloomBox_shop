@@ -175,6 +175,14 @@ Version 2.2 · 2026-09-13 · 対象：公開サイト、商品一覧・詳細、
 
 ## 11. 視覚見本
 
+### トップの購入前案内（2026-09-17）
+
+共通frontend-designスキルとREADME/GUIDELINES/CATALOGを確認し、トップには `lucide-react@1.46.0`（ISC、npm公式パッケージ、[取得元・使用ガイド](https://lucide.dev/guide/react)）を採用。花・カード・箱・配送など同じ線幅で図解できる点から選定した。`HomeIcon`で必要なアイコンを静的importし、既存のnative details、Next Image、mintトークンと組み合わせる。顧客画面等の既存AccountIconは変更しない。新たなClient Component、CDN、アニメーションライブラリは追加しない。
+
+花＋メッセージ→ギフトの概念図、用途カード、贈るまでの3ステップ、配送の流れに適用。図解は商品仕様や実際の発送状況を表さない。用途リンクは販売可能な商品の用途だけ表示し、既存の絞り込みへ接続する。装飾SVGは読み上げ対象から外し、操作には短いラベルを残す。動きはhover時の小さな変化に限定し、prefers-reduced-motionでは動かさない。スマホは縦積みとし、図中カードの傾きも解除する。
+
+配送/会員パネルとFAQは約1.618:1のPCカラム、内部余白は24px×1.618を基準にし、767px以下で1列へ切り替える。安心情報は短いラベルとアイコンを常時表示し、条件はキーボード操作可能なdisclosureにまとめる。レビュー・写真・お知らせが0件なら空の枠を出さない。検証結果・残る事業条件は [TOP_PAGE.md](../operations/TOP_PAGE.md) を参照。
+
 v2.2の配色は[ホーム](evidence/mint-home-desktop.png)、[マイページ](evidence/mint-account-desktop.png)、[モバイルのギフト入力](evidence/mint-gift-mobile.png)を参照。v2.1の単色グリーンとv2.0の青い画面例は過去の検証記録としてのみ保持する。各画像は実装から取得した表示例であり、トークンやレスポンシブ規約の正本は上記のCSSと表。
 
 広告計測の同意UIは既存の `secondary-button`・`text-button` とsemantic tokensを再利用する。共通frontend-designガイドに照らし、新しいUIライブラリは不要と判断。承諾と拒否は同じ視覚的な強さと48px以上の操作領域。フッターから再設定でき、非モーダルの説明領域は狭幅で最大60dvh・内部スクロール。プレビューでは実送信しない旨を表示する。

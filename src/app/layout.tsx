@@ -7,7 +7,7 @@ import { loadCheckoutProviderMode } from "@/shared/infrastructure/config/checkou
 import { loadSiteUrlConfig } from "@/shared/infrastructure/config/site-url-config";
 import { MobileNavigation } from "@/ui/mobile-navigation";
 import { HeaderCartLink } from "@/ui/header-cart-link";
-import { referralContent } from "@/shared/infrastructure/content/referral-content";
+import { PreviewFooterLinks } from "@/ui/preview-footer-links";
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { customerAccountContent } from "@/shared/infrastructure/content/customer-account-content";
 import { AdvertisingConsent } from "@/ui/advertising-consent";
@@ -101,8 +101,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                 <Link href="/faq">よくあるご質問</Link>
                 <Link href="/account" prefetch={false}>{customerAccountContent.title}</Link>
                 <Link href="/gift-next">{giftExperienceContent.recipient.label}</Link>
-                {loadRuntimeMode() === "preview" ? <Link href="/preview/gift-experience">{giftExperienceContent.preview.navLabel}</Link> : null}
-                {loadRuntimeMode() === "preview" && loadCheckoutProviderMode() === "preview" ? <Link href="/referrals">{referralContent.navLabel}</Link> : null}
+                <PreviewFooterLinks runtime={loadRuntimeMode()} checkout={loadCheckoutProviderMode()} />
               </nav>
               <nav className="footer-nav" aria-label="BloomBoxについて">
                 <Link href="/about">私たちについて</Link>
