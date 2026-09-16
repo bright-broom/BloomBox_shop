@@ -43,8 +43,8 @@ flowchart TB
     <th>BLOOM BOX L</th>
   </tr>
   <tr>
-    <td align="center"><img src="public/images/products/bloombox-m-concept.png" width="180" alt="縦長の赤いMサイズのパッケージ案"></td>
-    <td align="center"><img src="public/images/products/bloombox-l-concept.png" width="180" alt="縦長の赤いLサイズのパッケージ案"></td>
+    <td align="center"><img src="public/images/products/bloombox-blue-concept.png" width="180" alt="Mサイズに使用する青い縦長のパッケージ案"></td>
+    <td align="center"><img src="public/images/products/bloombox-blue-concept.png" width="180" alt="Lサイズに使用する青い縦長のパッケージ案"></td>
   </tr>
   <tr>
     <td align="center">商品4,000円＋送料1,000円<br/><strong>合計5,000円</strong></td>
