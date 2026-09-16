@@ -20,11 +20,11 @@ describe("catalog content", () => {
     expect(products.every((product) => product.description.includes("箱の寸法は現在準備中"))).toBe(true);
   });
 
-  it("loads distinct, bundled package images for M and L", async () => {
+  it("loads the shared blue package image for both M and L", async () => {
     const products = loadCatalog();
-    expect(new Set(products.map((product) => product.imageUrl)).size).toBe(2);
+    expect(new Set(products.map((product) => product.imageUrl)).size).toBe(1);
     for (const product of products) {
-      expect(product.imageUrl).toBe(`/images/products/bloombox-${product.previewOffer?.size.toLowerCase()}-concept.png`);
+      expect(product.imageUrl).toBe("/images/products/bloombox-blue-concept.png");
       const asset = await readFile(`public${product.imageUrl}`);
       expect(asset.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     }
