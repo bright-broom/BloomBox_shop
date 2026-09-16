@@ -59,7 +59,8 @@
     "CANCELLED": "取消済み",
     "RETURNED": "返品済み",
     "SCHEDULED": "発送予定",
-    "PROCESSING": "発送準備中"
+    "PROCESSING": "発送準備中",
+    "ON_HOLD": "保留中"
   },
   "messages": {
     "INVALID": "検索条件が正しくありません。条件をクリアしてやり直してください。",

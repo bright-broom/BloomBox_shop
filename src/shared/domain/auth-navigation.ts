@@ -7,7 +7,7 @@ export function loginDestination(value: unknown, area: LoginArea): string {
   const home = area === "customer" ? ACCOUNT_HOME : OPERATOR_HOME;
   if (typeof value !== "string") return home;
   if (area === "customer") return value === home || new RegExp(`^/account/orders/${uuid}$`, "i").test(value) ? value : home;
-  return [home, "/operations/catalog", "/operations/customers", "/operations/permissions", "/operations/fulfillments"].includes(value)
+  return [home, "/operations/orders", "/operations/reports", "/operations/settings", "/operations/catalog", "/operations/customers", "/operations/permissions", "/operations/fulfillments"].includes(value)
     || new RegExp(`^/operations/customers/${uuid}$`, "i").test(value)
     || new RegExp(`^/operations/fulfillments/[a-z0-9][a-z0-9-]*\\.myshopify\\.com/${uuid}$`, "i").test(value) ? value : home;
 }

@@ -28,3 +28,5 @@ export type { CustomerOrderDetail, CustomerOrderDetailQuery, CustomerOrderShipme
 export { SUPPORT_ORDER_PAGE_SIZE, type SupportOrder, type SupportOrderHistory } from './application/support-order-history';
 export type { CustomerPurchasePerformance } from "./application/customer-purchase-performance";
 export type { AdvertisingPurchase, AdvertisingPurchaseQuery } from "./application/advertising-purchase-query";
+
+export { OPERATOR_ORDER_PAGE_SIZE, OPERATOR_ORDER_SEARCH_LIMIT, OPERATOR_REPORT_PERIODS, type OperatorOrderFilter, type OperatorOrderPage, type OperatorOrderReport } from "./application/operator-orders";

@@ -10,6 +10,10 @@ describe("separate local login destinations", () => {
     expect(loginDestination("/operations/catalog", "customer")).toBe("/account");
     expect(loginDestination("/account", "operator")).toBe("/operations");
     expect(loginDestination(`/operations/customers/${id}`, "operator")).toBe(`/operations/customers/${id}`);
+    for (const path of ["/operations/orders", "/operations/reports", "/operations/settings"]) {
+      expect(loginDestination(path,"operator")).toBe(path);
+      expect(loginDestination(path,"customer")).toBe("/account");
+    }
     expect(loginDestination("/operations/unknown", "operator")).toBe("/operations");
     expect(loginHref("operator", "/operations/catalog")).toBe("/operations/login?next=%2Foperations%2Fcatalog");
   });
