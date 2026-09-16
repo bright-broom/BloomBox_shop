@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({ customer: vi.fn(), operator: vi.fn(), account:
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }), redirect: (url: string) => { throw new Error(`redirect:${url}`); }, notFound: () => { throw new Error("NOT_FOUND"); } }));
 vi.mock("./auth-entry", () => ({ loadCustomerEntry: mocks.customer, loadOperatorEntry: mocks.operator, requireOperatorLogin: mocks.guard }));
 vi.mock("./operator-auth/operations-console", () => ({ openOperatorOrders: mocks.orders, openOperatorReport: mocks.report }));
+vi.mock("../customer-portal", () => ({ loadCustomerPortal: async () => ({ status: "unavailable" }) }));
 vi.mock("../customer-account", () => ({ loadCustomerAccount: mocks.account }));
 vi.mock("./operator-auth/native-catalog-management", () => ({ readManagedCatalog: mocks.catalog }));
 vi.mock("@/app/account/actions", () => ({ startCustomerLogin: vi.fn(), endCustomerLogin: vi.fn() }));

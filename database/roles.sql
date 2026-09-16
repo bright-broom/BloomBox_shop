@@ -181,3 +181,11 @@ GRANT INSERT ON bloombox.customer_support_accesses TO bloombox_customer_support;
 -- Advertising activation requires these grants; the public customer-only role is unchanged.
 GRANT SELECT, INSERT, UPDATE ON bloombox.advertising_consents, bloombox.advertising_deliveries TO bloombox_application;
 GRANT SELECT, UPDATE, DELETE ON bloombox.advertising_consents, bloombox.advertising_deliveries TO bloombox_worker;
+
+-- Customer self-service. Preferences are encrypted and cannot be read by support operators.
+GRANT SELECT, INSERT, UPDATE, DELETE ON bloombox.customer_portals TO bloombox_application;
+GRANT SELECT, INSERT ON bloombox.customer_requests TO bloombox_application;
+GRANT SELECT ON bloombox.customer_requests TO bloombox_customer_support;
+GRANT UPDATE (status, key_id, ciphertext, revision, updated_at) ON bloombox.customer_requests TO bloombox_customer_support;
+GRANT SELECT ON bloombox.data_subject_requests TO bloombox_customer_support;
+GRANT INSERT ON bloombox.customer_request_changes TO bloombox_customer_support;

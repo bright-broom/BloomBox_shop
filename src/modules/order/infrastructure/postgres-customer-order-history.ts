@@ -10,9 +10,11 @@ const rowSchema = z.object({ id: z.uuid(), display_id: z.string().min(1).max(100
   items: z.array(z.object({ name: z.string().min(1), quantity: z.number().int().positive() })).default([]),
   payment_states: z.array(z.string()).nullable(), fulfillment_states: z.array(z.string()).nullable() });
 const yen = z.coerce.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-const detailSchema = rowSchema.extend({ subtotal_minor: yen, tax_minor: yen, shipping_minor: yen, discount_minor: yen,
+const shipmentSchema = z.object({ carrier: z.string().min(1).max(80), trackingNumber: z.string().min(1).max(100), shippedAt: z.iso.datetime(), deliveredAt: z.iso.datetime().nullable() });
+const detailSchema = rowSchema.extend({ shipment: shipmentSchema.nullable(),
+  refunds: z.array(z.object({ amountYen: yen, currency: z.literal('JPY'), status: z.enum(['REQUESTED','PROCESSING','SUCCEEDED','FAILED','CANCELLED']), createdAt: z.iso.datetime() })), subtotal_minor: yen, tax_minor: yen, shipping_minor: yen, discount_minor: yen,
   items: z.array(z.object({ name: z.string().min(1), quantity: z.number().int().positive(), currency: z.literal("JPY"),
-    unit_minor: yen, total_minor: yen }).strict()).min(1) });
+    unit_minor: yen, total_minor: yen, product_id: z.string().nullable() }).strict()).min(1) });
 export class PostgresCustomerOrderHistory implements CustomerOrderHistoryQuery, CustomerOrderDetailQuery {
   constructor(private readonly sql: DatabaseClient) {}
   async readDetail(customerId: string, orderId: string) {
@@ -25,8 +27,17 @@ export class PostgresCustomerOrderHistory implements CustomerOrderHistoryQuery, 
           to_char(orders.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
           payment.states AS payment_states, fulfillment.states AS fulfillment_states,
           (SELECT jsonb_agg(jsonb_build_object('name', item.product_name_snapshot, 'quantity', item.quantity,
-            'currency', item.currency, 'unit_minor', item.unit_amount_minor::text, 'total_minor', item.line_total_minor::text)
-            ORDER BY item.position) FROM bloombox.order_items item WHERE item.order_id = orders.id) AS items
+            'currency', item.currency, 'unit_minor', item.unit_amount_minor::text, 'total_minor', item.line_total_minor::text, 'product_id', item.catalog_product_id)
+            ORDER BY item.position) FROM bloombox.order_items item WHERE item.order_id = orders.id) AS items,
+          (SELECT CASE WHEN count(*) = 1 AND count(s.shipped_at) = 1 AND count(s.carrier_code) = 1 AND count(s.tracking_reference) = 1
+            AND (SELECT count(*) FROM bloombox.fulfillments WHERE order_id = orders.id) = 1
+            THEN (jsonb_agg(jsonb_build_object('carrier', s.carrier_code, 'trackingNumber', s.tracking_reference,
+              'shippedAt', to_char(s.shipped_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+              'deliveredAt', to_char(s.delivered_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')))->0) ELSE NULL END
+            FROM bloombox.shipments s JOIN bloombox.fulfillments f ON f.id = s.fulfillment_id WHERE f.order_id = orders.id) AS shipment,
+          coalesce((SELECT jsonb_agg(jsonb_build_object('amountYen', r.amount_minor::text, 'currency', r.currency, 'status', r.status,
+            'createdAt', to_char(r.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) ORDER BY r.created_at, r.id)
+            FROM bloombox.refunds r JOIN bloombox.payments p ON p.id = r.payment_id WHERE p.order_id = orders.id), '[]'::jsonb) AS refunds
         FROM bloombox.orders orders JOIN bloombox.buyers buyer ON buyer.id = orders.buyer_id
         JOIN bloombox.customer_accounts customer ON customer.id = buyer.customer_id AND customer.status = 'ACTIVE'
         LEFT JOIN LATERAL (SELECT array_agg(DISTINCT status) AS states FROM bloombox.payments WHERE order_id = orders.id) payment ON TRUE
@@ -38,8 +49,8 @@ export class PostgresCustomerOrderHistory implements CustomerOrderHistoryQuery, 
         totalYen: row.total_minor, subtotalYen: row.subtotal_minor, taxYen: row.tax_minor,
         shippingYen: row.shipping_minor, discountYen: row.discount_minor, cancelled: row.status === "CANCELLED",
         payment: onlyState(row.payment_states), fulfillment: onlyState(row.fulfillment_states),
-        items: row.items.map((item) => ({ name: item.name, quantity: item.quantity, unitYen: item.unit_minor, totalYen: item.total_minor })),
-        shipment: null };
+        items: row.items.map((item) => ({ name: item.name, quantity: item.quantity, unitYen: item.unit_minor, totalYen: item.total_minor, productId: item.product_id ?? undefined })),
+        shipment: row.shipment, refunds: row.refunds.map(({ amountYen, status, createdAt }) => ({ amountYen, status, createdAt })) };
     } catch { throw new CustomerOrderHistoryUnavailableError(); }
   }
   async read(customerId: string, after: string | null) {

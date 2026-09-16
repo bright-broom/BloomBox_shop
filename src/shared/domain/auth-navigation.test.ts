@@ -14,6 +14,12 @@ describe("separate local login destinations", () => {
       expect(loginDestination(path,"operator")).toBe(path);
       expect(loginDestination(path,"customer")).toBe("/account");
     }
+    for (const section of ['profile','addresses','favorites','settings','support']) {
+      expect(loginDestination('/account/'+section,'customer')).toBe('/account/'+section);
+      expect(loginDestination('/account/'+section,'operator')).toBe('/operations');
+    }
+    expect(loginDestination('/account/export','customer')).toBe('/account');
+    expect(loginDestination('/operations/requests','operator')).toBe('/operations/requests');
     expect(loginDestination("/operations/unknown", "operator")).toBe("/operations");
     expect(loginHref("operator", "/operations/catalog")).toBe("/operations/login?next=%2Foperations%2Fcatalog");
   });

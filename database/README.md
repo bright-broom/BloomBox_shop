@@ -72,3 +72,7 @@ Migration 0021 adds Inventory-owned stock, reservations and movement history. Ap
 ### 0025: 会員割引の購入時スナップショット
 
 `0025_customer_loyalty_snapshot.sql` は `purchase_intents.loyalty_snapshot`（JSON: version/tier/eligibleSpendYen/basisPoints/discountYen）と `loyalty_discount_minor`（bigint）を追加。NULL/0は既存取引または割引対象外で、実績不足と障害を同一視しません。v1規則・本人紐付け・送料確定・額の整合性を制約で確認し、保存後はトリガーで変更禁止。ロール追加なし。実績はOrder側の読み取りから計算し、ポイント財布や別の集計テーブルは作りません。アプリ/worker配備より前に適用し、戻す際も割引済み取引を処理できるworkerとmigrationを保持します。[運用・検証](../docs/operations/CUSTOMER_LOYALTY.md)。
+
+### 0027: 顧客セルフサービス
+
+暗号化設定・問い合わせ・回答変更記録を追加。`roles.sql` の追加GRANTと既存PII keyringが必要。追加テーブルに初期の個人情報は投入しない。[導入手順](../docs/operations/CUSTOMER_SELF_SERVICE.md)を参照。ロールバック時もテーブル・台帳・暗号化鍵を保持する。

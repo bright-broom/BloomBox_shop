@@ -20,7 +20,8 @@ import {
   DELIVERY_LEAD_TIME_DAYS,
 } from "@/modules/fulfillment/public";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { customerPortalContent as portalCopy } from "@/shared/infrastructure/content/customer-portal-content";
+import { useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { CheckoutStorageUnavailable } from "@/ui/checkout-storage-unavailable";
 import { CHECKOUT_SESSION_UNAVAILABLE, useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
@@ -29,6 +30,7 @@ import { formatMoney, multiplyMoney, type Money } from "@/shared/domain/money";
 type SizeOption = { id: string; name: string; size: "M" | "L"; price: Money; shippingAmount: number };
 
 type GiftFormProps = {
+  savedRecipients?: readonly { id: string; name: string; label: string }[];
   sizeOptions?: readonly SizeOption[];
   productId: string;
   productName: string;
@@ -49,9 +51,10 @@ export function GiftForm(props: GiftFormProps) {
 
 function GiftConfigurationForm({
   productId: initialProductId, productName: initialProductName, unitPrice: initialUnitPrice, shippingAmount, minDeliveryDate, maxDeliveryDate, initialCart, sizeOptions = [],
-  previewMode = false,
+  previewMode = false, savedRecipients = [],
 }: GiftFormProps & { initialCart: BrowserCartItem | null }) {
   // Snapshot the cart once: a background revision must not overwrite in-progress typing.
+  const recipientInput = useRef<HTMLInputElement>(null);
   const [cartAtOpen] = useState(initialCart);
   const editingCart = cartAtOpen && (cartAtOpen.productId === initialProductId || sizeOptions.some((option) => option.id === cartAtOpen.productId)) ? cartAtOpen : null;
   const [selectedId, setSelectedId] = useState(initialProductId);
@@ -180,9 +183,14 @@ function GiftConfigurationForm({
         <FieldError id="quantity-error" messages={state.fieldErrors?.quantity} />
       </div>
       <div className="form-field">
+        {savedRecipients.length ? <><label htmlFor="saved-recipient">{portalCopy.savedRecipients}</label><select id="saved-recipient" defaultValue="" onChange={event => {
+          const recipient = savedRecipients.find(item => item.id === event.target.value);
+          if (recipient && recipientInput.current) recipientInput.current.value = recipient.name;
+        }}><option value="">{portalCopy.selectRecipient}</option>{savedRecipients.map(item => <option key={item.id} value={item.id}>{item.label} · {item.name}</option>)}</select><p className="field-note">{portalCopy.addressUsage}</p></> : null}
         <label htmlFor="recipientName"><span>02</span> お届けする方のお名前 <i aria-hidden="true">*</i></label>
         <input
           aria-invalid={Boolean(state.fieldErrors?.recipientName?.length)}
+          ref={recipientInput}
           id="recipientName"
           defaultValue={editingCart?.recipientName ?? ""}
           name="recipientName"
