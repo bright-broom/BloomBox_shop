@@ -137,3 +137,5 @@ Before a material change, answer:
 - [ADR 0014: 広告コンバージョン連携](adr/0014-advertising-conversions.md) — 同意と暗号化したクリック情報、確定購入に基づくGoogle/Meta/Webhook送信。実アカウント未接続。
 
 - [ADR 0015: 自作注文の発送運用](adr/0015-native-fulfillment-operations.md) — 保留を含む発送状態、専用権限・接続、送信番号による重複防止、宛先閲覧の記録、1注文1箱の発送記録。本番配送は未承認。
+
+- [ADR 0016: 自作注文の取消・返金・返品・再配送の初期運用](adr/0016-native-refunds-and-cancellations.md) — 返金はStripe管理画面で行いWebhookで反映、発送前取消の手順、在庫を自動で戻さない、返送・再発送は初期対象外。取消・返品条件は未承認。
