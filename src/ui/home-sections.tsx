@@ -4,15 +4,15 @@ import type { Product } from "@/modules/catalog/public";
 import { getEarliestDeliveryDate, getLatestDeliveryDate } from "@/modules/fulfillment/public";
 import { activeHomeAnnouncements, homeContent, homeSection, type HomeContent } from "@/shared/infrastructure/content/home-content";
 import { storefrontContent } from "@/shared/infrastructure/content/storefront-content";
-import { AccountIcon } from "./account-icon";
+import { HomeIcon } from "./home-icon";
 
 export function HomeAnnouncements({ now, content = homeContent }: { now: Date; content?: HomeContent }) {
   const items = activeHomeAnnouncements(content, now);
   if (!items.length) return null;
   return <aside className="home-announcements section-shell" aria-labelledby="home-news-title">
-    <h2 id="home-news-title"><AccountIcon name="info" />{content.announcementsTitle}</h2>
+    <h2 id="home-news-title"><HomeIcon name="info" />{content.announcementsTitle}</h2>
     <ul>{items.map((item) => <li key={item.id} className={item.severity === "important" ? "is-important" : undefined}>
-      <h3>{item.href ? <Link href={item.href}>{item.title}<AccountIcon name="arrow" /></Link> : item.title}</h3>
+      <h3>{item.href ? <Link href={item.href}>{item.title}<HomeIcon name="arrow" /></Link> : item.title}</h3>
       <p>{item.body}</p>
     </li>)}</ul>
   </aside>;
@@ -41,12 +41,15 @@ function CalendarDate({ value }: { value: string }) {
 
 export function HomeDelivery({ now, preview }: { now: Date; preview: boolean }) {
   const copy = homeContent.delivery;
-  return <section className="home-delivery section-shell" aria-labelledby="home-delivery-title">
+  return <section id="delivery" className="home-delivery section-shell" aria-labelledby="home-delivery-title">
     <div className="home-panel">
       <div><p className="eyebrow">{copy.eyebrow}</p><h2 id="home-delivery-title">{copy.title}</h2>
-        <Link className="text-link" href="/shipping-returns">{copy.action}<AccountIcon name="arrow" /></Link>
+        <ol className="home-delivery-route" aria-label={homeContent.visual.deliverySteps.label}>
+          {homeContent.visual.deliverySteps.items.map((label, index) => <li key={label}><span className="home-route-node"><HomeIcon name={(["box", "truck", "heart"] as const)[index]} size={28} /></span><span>{label}</span></li>)}
+        </ol>
+        <Link className="text-link" href="/shipping-returns">{copy.action}<HomeIcon name="arrow" /></Link>
       </div>
-      <div className="home-delivery-window"><AccountIcon name="truck" />
+      <div className="home-delivery-window"><HomeIcon name="truck" />
         <p>{preview ? copy.previewLabel : copy.rangeLabel}</p>
         <p className="home-date-range"><CalendarDate value={getEarliestDeliveryDate(now)} /><span aria-hidden="true">—</span><CalendarDate value={getLatestDeliveryDate(now)} /></p>
         <p className="field-note">{copy.note}</p>
@@ -61,9 +64,9 @@ export function HomeAssurance() {
     <p className="eyebrow">{copy.eyebrow}</p><h2 id="home-care-title">{copy.title}</h2>
     {storefrontContent.publicationStatus === "draft" ? <p className="field-note">{copy.draftNote}</p> : null}
     <div className="home-care-grid">{copy.items.map((item) => <details className="home-care-item" key={item.section}>
-      <summary><AccountIcon name={item.icon} /><span>{item.title}</span><AccountIcon name="chevron" /></summary>
+      <summary><HomeIcon name={item.icon} /><span>{item.title}</span><HomeIcon name="chevron" /></summary>
       <div>{homeSection(item.page, item.section).body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
-        <Link className="text-link" href={`/${item.page}#${item.section}`} aria-label={`${item.title}：${copy.action}`}>{copy.action}<AccountIcon name="arrow" /></Link>
+        <Link className="text-link" href={`/${item.page}#${item.section}`} aria-label={`${item.title}：${copy.action}`}>{copy.action}<HomeIcon name="arrow" /></Link>
       </div>
     </details>)}</div>
   </section>;
@@ -72,15 +75,16 @@ export function HomeAssurance() {
 export function HomeFaq() {
   const copy = homeContent.faq;
   return <section className="home-section home-faq section-shell" aria-labelledby="home-faq-title">
-    <div><p className="eyebrow">{copy.eyebrow}</p><h2 id="home-faq-title">{copy.title}</h2>
-      <Link className="text-link" href="/faq">{copy.action}<AccountIcon name="arrow" /></Link>
+    <div><span className="home-faq-mark"><HomeIcon name="help" size={44} /></span><p className="eyebrow">{copy.eyebrow}</p><h2 id="home-faq-title">{copy.title}</h2>
+      <p className="field-note">{homeContent.visual.faqNote}</p>
+      <Link className="text-link" href="/faq">{copy.action}<HomeIcon name="arrow" /></Link>
     </div>
     <div>{copy.sectionIds.map((id) => {
       const section = homeSection("faq", id);
       return <details className="faq-item" key={id}><summary>{section.title}</summary>
         <div>{section.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div>
       </details>;
-    })}<Link className="text-link" href="/contact">{copy.contact}<AccountIcon name="help" /></Link></div>
+    })}<Link className="text-link" href="/contact">{copy.contact}<HomeIcon name="help" /></Link></div>
   </section>;
 }
 
@@ -89,8 +93,13 @@ export function HomeMembership() {
   return <section className="home-membership section-shell" aria-labelledby="home-membership-title">
     <div className="home-panel"><div><p className="eyebrow">{copy.eyebrow}</p>
       <h2 id="home-membership-title">{copy.title}</h2><p>{copy.description}</p>
-      <Link className="primary-button" href="/account" prefetch={false}>{copy.action}<AccountIcon name="arrow" /></Link>
-    </div><div className="home-membership-note"><AccountIcon name="sprout" />
+      <nav className="home-account-links" aria-label={homeContent.visual.accountLinks.label}>
+        <Link href="/account" prefetch={false}><HomeIcon name="box" /><span>{homeContent.visual.accountLinks.orders}</span></Link>
+        <Link href="/account/favorites" prefetch={false}><HomeIcon name="heart" /><span>{homeContent.visual.accountLinks.favorites}</span></Link>
+        <Link href="/account/addresses" prefetch={false}><HomeIcon name="pin" /><span>{homeContent.visual.accountLinks.addresses}</span></Link>
+      </nav>
+      <Link className="primary-button" href="/account" prefetch={false}>{copy.action}<HomeIcon name="arrow" /></Link>
+    </div><div className="home-membership-note"><HomeIcon name="sprout" />
       <h3>{copy.benefitTitle}</h3><p>{copy.benefitNote}</p>
     </div></div>
   </section>;

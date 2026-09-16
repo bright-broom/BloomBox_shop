@@ -24,7 +24,7 @@
 - `content/storefront.json`：FAQ・包装・到着時対応の本文。トップへコピーしない。参照IDの削除・重複・不整合は検証で拒否される。
 - お届け希望日は `modules/fulfillment/public.ts` の既存関数を使用。UIに日数や地域別ルールを複製しない。トップはリクエストごとの描画で、翌日へ進んだ後の再読み込みにも追従する。
 - M/Lの価格・送料・合計は既存の商品情報とpreviewTotals。今回の編集用contentに価格を追加しない。
-- コンポーネントはServer Componentとnative details。クライアントライブラリ、新規API、DB変更、環境変数追加はない。
+- コンポーネントはServer Componentとnative details。LucideのSVG描画用依存を追加したが、新たなClient Component、新規API、DB変更、環境変数追加はない。
 
 ## お知らせの追加・終了
 
@@ -66,3 +66,11 @@
 ## 復旧
 
 この変更のコミットをrevertして再配備する。DB・認証・決済・広告の設定は変更していない。お知らせ等の内容だけを戻す場合は対象contentの差分を戻し、content検査と表示確認を行う。
+
+## 図解と用途別導線の追加（2026-09-17）
+
+- `content/home.json` の `visual` にページ内ナビ、花とメッセージの概念図、用途、配送フロー、会員ショートカットの短い文言を集約し、Zodで検証する。
+- `home-story.tsx` は利用可能な商品の用途だけを表示し、既存の `/flowers?occasion=` に接続する。空・販売停止では用途枠を出さない。
+- `lucide-react@1.46.0` の採用理由、ライセンス、適用範囲は [DESIGN_SYSTEM.md](../design/DESIGN_SYSTEM.md#トップの購入前案内2026-09-17) を参照。pnpm 10.23.0によるlockfile更新に伴うメタデータ正規化を含むが、既存依存の解決版は変更していない。
+- `pnpm check:ci` 成功（1,223件成功、DB試験235件skip、静的検査・production build成功）。`pnpm audit --prod --audit-level high` は既知の脆弱性なし。
+- ビルド済み画面でページ内リンクのキーボード操作と誕生日の商品一覧への遷移を確認。実効幅1280/320 CSS pxでPC・スマホ表示を確認。320pxではページおよび新設home要素のscrollWidth/clientWidthを比較し、横はみ出しなし。実機Safari・公開Vercelへの反映は未確認。

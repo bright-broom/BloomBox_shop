@@ -24,17 +24,42 @@
     "title": "贈る前に、知っておきたいこと。",
     "draftNote": "販売前のご案内です。包装や到着時の対応条件は、正式公開までにお知らせします。",
     "items": [
-      { "icon": "gift", "title": "包装について", "page": "about", "section": "preparation" },
-      { "icon": "mail", "title": "メッセージカード", "page": "faq", "section": "message" },
-      { "icon": "card", "title": "金額の分かる書類", "page": "faq", "section": "gift-documents" },
-      { "icon": "help", "title": "お届け時のお困りごと", "page": "contact", "section": "arrival-problem" }
+      {
+        "icon": "gift",
+        "title": "包装について",
+        "page": "about",
+        "section": "preparation"
+      },
+      {
+        "icon": "mail",
+        "title": "メッセージカード",
+        "page": "faq",
+        "section": "message"
+      },
+      {
+        "icon": "card",
+        "title": "金額の分かる書類",
+        "page": "faq",
+        "section": "gift-documents"
+      },
+      {
+        "icon": "help",
+        "title": "お届け時のお困りごと",
+        "page": "contact",
+        "section": "arrival-problem"
+      }
     ],
     "action": "詳しく見る"
   },
   "faq": {
     "eyebrow": "QUESTIONS",
     "title": "よくあるご質問",
-    "sectionIds": ["flowers", "delivery-date", "gift-documents", "message"],
+    "sectionIds": [
+      "flowers",
+      "delivery-date",
+      "gift-documents",
+      "message"
+    ],
     "action": "すべての質問を見る",
     "contact": "解決しないときは、お問い合わせ"
   },
@@ -50,5 +75,53 @@
     "eyebrow": "GIFT STORIES",
     "title": "花を贈った、その後の話。",
     "items": []
+  },
+  "visual": {
+    "shortcuts": {
+      "label": "贈りものづくりのご案内",
+      "flowers": "花を選ぶ",
+      "message": "ことばを添える",
+      "delivery": "贈る日を考える"
+    },
+    "diagram": {
+      "flower": "季節の花",
+      "message": "あなたのことば",
+      "result": "ひとつの贈りものに。",
+      "eyebrow": "MADE WITH FEELING",
+      "caption": "花とことばを組み合わせる、贈りものづくりのイメージ。"
+    },
+    "occasions": {
+      "eyebrow": "A LITTLE REASON",
+      "title": "今日は、どんな気持ちを贈ろう。",
+      "items": [
+        {
+          "label": "ありがとう",
+          "note": "いつもの感謝を、花に。"
+        },
+        {
+          "label": "誕生日",
+          "note": "一年に一度の、うれしい日に。"
+        },
+        {
+          "label": "記念日",
+          "note": "ふたりの大切な節目に。"
+        }
+      ]
+    },
+    "deliverySteps": {
+      "label": "お届けまでの流れのイメージ",
+      "items": [
+        "ご準備",
+        "配送",
+        "お受け取り"
+      ]
+    },
+    "accountLinks": {
+      "label": "マイページでできること",
+      "orders": "購入履歴",
+      "favorites": "お気に入り",
+      "addresses": "お届け先"
+    },
+    "faqNote": "気になることを、ひとつずつ。"
   }
 }

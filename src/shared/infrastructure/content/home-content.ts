@@ -27,6 +27,16 @@ const sectionReference = z.object({
 });
 
 export const homeContentSchema = z.object({
+  visual: z.object({
+    shortcuts: z.object({ label: text, flowers: text, message: text, delivery: text }).strict(),
+    diagram: z.object({ flower: text, message: text, result: text, eyebrow: text, caption: text }).strict(),
+    occasions: heading.extend({ items: z.array(z.object({
+      label: z.enum(["ありがとう", "誕生日", "記念日"]), note: text,
+    }).strict()).length(3) }),
+    deliverySteps: z.object({ label: text, items: z.array(text).length(3) }).strict(),
+    accountLinks: z.object({ label: text, orders: text, favorites: text, addresses: text }).strict(),
+    faqNote: text,
+  }).strict(),
   announcementsTitle: text,
   announcements: z.array(announcement).max(10),
   gallery: heading.extend({ items: z.array(photo.extend({

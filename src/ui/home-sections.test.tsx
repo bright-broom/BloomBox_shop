@@ -4,6 +4,7 @@ import { homeContent, homeContentSchema } from "@/shared/infrastructure/content/
 import { findStorefrontPage } from "@/shared/infrastructure/content/storefront-content";
 import { getEarliestDeliveryDate, getLatestDeliveryDate } from "@/modules/fulfillment/public";
 import { HomeAnnouncements, HomeAssurance, HomeDelivery, HomeFaq, HomeGallery, HomeMembership, HomeReviews } from "./home-sections";
+import { HomeOccasions } from "./home-story";
 import { PreviewFooterLinks } from "./preview-footer-links";
 import { SizeComparison } from "./size-comparison";
 import { productId, type Product } from "@/modules/catalog/public";
@@ -17,6 +18,14 @@ const product: Product = {
 };
 
 describe("home customer guidance", () => {
+  it("offers only occasions with available products and encodes the existing catalog filter", () => {
+    const html = renderToStaticMarkup(<HomeOccasions products={[{ ...product, occasion: ["誕生日"] }]} />);
+    expect(html).toContain(`href="/flowers?occasion=${encodeURIComponent("誕生日")}"`);
+    expect(html).not.toContain(encodeURIComponent("記念日"));
+    expect(renderToStaticMarkup(<HomeOccasions products={[]} />)).toBe("");
+    expect(renderToStaticMarkup(<HomeOccasions products={[{ ...product, available: false, occasion: ["誕生日"] }]} />)).toBe("");
+  });
+
   it("renders no empty editorial sections or invented reviews", () => {
     expect(renderToStaticMarkup(<HomeAnnouncements now={new Date()} />)).toBe("");
     expect(renderToStaticMarkup(<HomeGallery products={[]} />)).toBe("");
