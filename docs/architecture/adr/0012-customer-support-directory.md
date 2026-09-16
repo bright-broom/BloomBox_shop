@@ -27,3 +27,9 @@ An external CRM would add a provider, data transfer, ownership and synchronizati
 Apply migration 0024 and the roles file with migration authority, configure a dedicated database login, and grant access only to an approved operator. Local synthetic-session and isolated-DB evidence is separate from real Google and production verification. Audit retention/access procedures and operator assignments need approval before production use. See [CUSTOMER_MANAGEMENT.md](../../operations/CUSTOMER_MANAGEMENT.md).
 
 To disable support access, revoke the support grant and wait for active transactions, then remove the support connection. Revert the application change if required. Preserve audit records and migration history; do not modify customer, order or payment facts as rollback.
+
+## 2026-09-17: Operations console extension
+
+The requested management console adds native order-directory and period-summary reads under the same explicit support authority. Order owns the contracts and SQL projection; Shared security continues to authorize and audit disclosure in a bounded transaction. No new role, table, credential fallback or write permission is introduced. `HISTORY` records now also cover cross-customer native order history and aggregate history reads; aggregate reads carry an empty customer-ID list. This action type does not distinguish directory and report subtypes; detailed export/analytics audit requirements remain future work.
+
+Native guest/unlinked and anonymized-customer orders may appear in the non-PII operational order ledger and aggregates. This never creates an ownership link or exposes an anonymized customer's support history. Customer/recipient contact data, Google identities and payment identifiers remain outside the projection. Order totals are explicitly labelled order value rather than cash receipts or net sales. See [OPERATIONS_CONSOLE.md](../../operations/OPERATIONS_CONSOLE.md) for definitions and activation limits.

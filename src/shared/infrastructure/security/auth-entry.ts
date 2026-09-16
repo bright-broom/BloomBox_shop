@@ -32,5 +32,6 @@ export async function loadOperatorEntry(): Promise<OperatorEntry> {
 /** Page-entry UX only. Existing data-layer role/ownership checks remain mandatory. */
 export async function requireOperatorLogin(destination: string): Promise<void> {
   const state = await loadOperatorEntry();
-  if (state.status !== "ready" || !state.bound) redirect(loginHref("operator", destination));
+  if (state.status !== "ready") redirect(loginHref("operator", destination));
+  if (!state.bound) redirect("/operations/settings");
 }

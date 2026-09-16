@@ -1,8 +1,9 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-const mocks = vi.hoisted(() => ({ customer: vi.fn(), operator: vi.fn(), account: vi.fn(), guard: vi.fn(), catalog: vi.fn() }));
-vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error(`redirect:${url}`); }, notFound: () => { throw new Error("NOT_FOUND"); } }));
+const mocks = vi.hoisted(() => ({ customer: vi.fn(), operator: vi.fn(), account: vi.fn(), guard: vi.fn(), catalog: vi.fn(), orders: vi.fn(), report: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }), redirect: (url: string) => { throw new Error(`redirect:${url}`); }, notFound: () => { throw new Error("NOT_FOUND"); } }));
 vi.mock("./auth-entry", () => ({ loadCustomerEntry: mocks.customer, loadOperatorEntry: mocks.operator, requireOperatorLogin: mocks.guard }));
+vi.mock("./operator-auth/operations-console", () => ({ openOperatorOrders: mocks.orders, openOperatorReport: mocks.report }));
 vi.mock("../customer-account", () => ({ loadCustomerAccount: mocks.account }));
 vi.mock("./operator-auth/native-catalog-management", () => ({ readManagedCatalog: mocks.catalog }));
 vi.mock("@/app/account/actions", () => ({ startCustomerLogin: vi.fn(), endCustomerLogin: vi.fn() }));
@@ -39,15 +40,18 @@ describe("dedicated login and destination pages", () => {
   });
   it("does not send unregistered operators into a login loop or grant them management access", async () => {
     mocks.operator.mockResolvedValue({ status: "ready", subject: "verified_subject", bound: false });
-    await expect(Operations()).rejects.toThrow("redirect:/operations/login");
-    const html = renderToStaticMarkup(await OperatorLogin({ searchParams: Promise.resolve({}) }));
-    expect(html).toContain("担当者登録の確認が必要"); expect(html).not.toContain('href="/operations/catalog"');
+    await expect(OperatorLogin({ searchParams: Promise.resolve({}) })).rejects.toThrow("redirect:/operations");
+    const html = renderToStaticMarkup(await Operations());
+    expect(html).toContain("担当者登録が必要");
+    expect(mocks.orders).not.toHaveBeenCalled(); expect(mocks.report).not.toHaveBeenCalled();
   });
   it("opens the management hub for registered operators and keeps role enforcement before data access", async () => {
     mocks.operator.mockResolvedValue({ status: "ready", subject: "verified", bound: true });
     await expect(OperatorLogin({ searchParams: Promise.resolve({ next: "/operations/catalog" }) })).rejects.toThrow("redirect:/operations/catalog");
+    mocks.orders.mockResolvedValue({ orders: [], next: null });
+    mocks.report.mockResolvedValue({ days: 30, orders: 0, orderValueYen: 0, captured: 0, refunds: 0, awaitingShipment: 0, cancelled: 0, daily: [], since: new Date().toISOString(), until: new Date().toISOString() });
     const html = renderToStaticMarkup(await Operations());
-    for (const path of ["catalog", "customers", "permissions", "fulfillments"]) expect(html).toContain(`/operations/${path}`);
+    for (const path of ["catalog", "customers", "orders", "settings"]) expect(html).toContain(`/operations/${path}`);
     mocks.guard.mockRejectedValue(new Error("redirect:/operations/login"));
     await expect(Catalog({ searchParams: Promise.resolve({}) })).rejects.toThrow("redirect:");
     expect(mocks.catalog).not.toHaveBeenCalled();
