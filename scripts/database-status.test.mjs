@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 import postgres from "postgres";
 import { describe, expect, it } from "vitest";
 import { databaseStatusConfig, compareMigrationHistory, inspectDatabaseStatus } from "./lib/database-status.mjs";
+import { psqlInspectionOptions } from "./lib/database-status-psql.mjs";
 import { loadMigrations, migrateDatabase } from "./lib/database-migrations.mjs";
 
 const migrations = [1, 2].map((i) => ({ version: `000${i}`, name: `step_${i}`, checksum: `${i}`.repeat(64), fileName: `000${i}_step_${i}.sql` }));
@@ -37,6 +38,22 @@ describe("read-only migration preflight", () => {
     expect(databaseStatusConfig({ DATABASE_STATUS_URL: "postgres://reader:secret@db.example/db" }).ssl).toBe("verify-full");
     expect(databaseStatusConfig({ DATABASE_STATUS_URL: "postgres://reader:secret@127.0.0.1/db", DATABASE_STATUS_SSL_MODE: "disable" }).ssl).toBe(false);
   });
+  it("honors channel binding only through an explicit native client without weakening TLS", () => {
+    const env = { DATABASE_STATUS_URL: "postgres://reader:secret@db.example/db?sslmode=require&channel_binding=require", DATABASE_STATUS_PSQL: "/usr/bin/psql" };
+    const config = databaseStatusConfig(env);
+    const options = psqlInspectionOptions(config, { PGHOST: "wrong", PGOPTIONS: "unsafe", PGSERVICE: "wrong", PGPASSFILE: "/wrong", PATH: "/bin" });
+    expect(options.env).toMatchObject({ PGHOST: "db.example", PGSSLMODE: "verify-full", PGCHANNELBINDING: "require", PGPASSWORD: "secret", PATH: "/bin" });
+    expect(options.env).not.toHaveProperty("PGOPTIONS"); expect(options.env).not.toHaveProperty("PGSERVICE");
+    expect(options.env.PGPASSFILE).not.toBe("/wrong");
+    expect(options.input).not.toContain("secret");
+    expect(options.input).toContain("READ ONLY;");
+    expect(options.input).toContain("SET LOCAL statement_timeout");
+    for (const query of ["sslmode=disable", "host=elsewhere", "options=unsafe", "channel_binding=disable", "channel_binding=require&channel_binding=disable"]) {
+      expect(() => databaseStatusConfig({ ...env, DATABASE_STATUS_URL: "postgres://reader:secret@db.example/db?" + query })).toThrow("INVALID_CONFIGURATION");
+    }
+    expect(() => databaseStatusConfig({ ...env, DATABASE_STATUS_PSQL: "psql" })).toThrow("INVALID_CONFIGURATION");
+    expect(() => databaseStatusConfig({ ...env, DATABASE_STATUS_PSQL: undefined })).toThrow("INVALID_CONFIGURATION");
+  });
   it("does not expose credentials in CLI configuration errors", () => {
     const result = spawnSync(process.execPath, ["scripts/database-status.mjs"], { encoding: "utf8",
       env: { DATABASE_STATUS_URL: "https://reader:synthetic-secret@private-host/db" }, timeout: 5000 });
@@ -47,7 +64,7 @@ describe("read-only migration preflight", () => {
 
 const integration = process.env.TEST_RESTORE_DRILL_ADMIN_URL;
 (integration ? describe : describe.skip)("isolated PostgreSQL schema inspection", () => {
-  it("does not initialize or change the DB and works with a SELECT-only role", async () => {
+  it.each([undefined, process.env.TEST_PSQL].filter((value, index) => index === 0 || value))("does not initialize/change the DB and enforces SELECT-only permissions (client %s)", async (psql) => {
     const config = databaseStatusConfig({ DATABASE_STATUS_URL: integration, DATABASE_STATUS_SSL_MODE: "disable" });
     const adminUrl = new URL(config.databaseUrl);
     if (adminUrl.pathname !== "/postgres") throw new Error("Use a disposable loopback admin database");
@@ -60,10 +77,10 @@ const integration = process.env.TEST_RESTORE_DRILL_ADMIN_URL;
       await admin.unsafe(`CREATE DATABASE ${name} TEMPLATE template0`);
       const url = new URL(adminUrl); url.pathname = `/${name}`;
       db = postgres(url.toString(), { ssl: false, max: 1 });
-      const inspect = () => inspectDatabaseStatus({ databaseUrl: url.toString(), ssl: false, migrationsDirectory: directory });
+      const inspect = () => inspectDatabaseStatus({ databaseUrl: url.toString(), ssl: false, psql, migrationsDirectory: directory });
       expect(await inspect()).toMatchObject({ status: "pending", applied: 0, ledgerPresent: false });
       const pendingCli = spawnSync(process.execPath, ["scripts/database-status.mjs"], { encoding: "utf8", timeout: 15000,
-        env: { DATABASE_STATUS_URL: url.toString(), DATABASE_STATUS_SSL_MODE: "disable" } });
+        env: { DATABASE_STATUS_URL: url.toString(), DATABASE_STATUS_SSL_MODE: "disable", DATABASE_STATUS_PSQL: psql } });
       expect(pendingCli.status).toBe(1);
       expect(JSON.parse(pendingCli.stdout)).toMatchObject({ status: "pending", applied: 0, ledgerPresent: false });
       expect(pendingCli.stderr).toBe("");
@@ -78,11 +95,13 @@ const integration = process.env.TEST_RESTORE_DRILL_ADMIN_URL;
       await admin.unsafe(`CREATE ROLE ${role} LOGIN PASSWORD '${suffix}'`);
       await db.unsafe(`GRANT USAGE ON SCHEMA bloombox TO ${role}; GRANT SELECT ON bloombox.schema_migrations TO ${role}`);
       const reader = new URL(url); reader.username = role; reader.password = suffix;
-      expect(await inspectDatabaseStatus({ databaseUrl: reader.toString(), ssl: false, migrationsDirectory: directory })).toMatchObject({ status: "pending", applied: 1 });
+      expect(await inspectDatabaseStatus({ databaseUrl: reader.toString(), ssl: false, psql, migrationsDirectory: directory })).toMatchObject({ status: "pending", applied: 1 });
+      await db.unsafe(`REVOKE SELECT ON bloombox.schema_migrations FROM ${role}`);
+      await expect(inspectDatabaseStatus({ databaseUrl: reader.toString(), ssl: false, psql, migrationsDirectory: directory })).rejects.toThrow("INSPECTION_FORBIDDEN");
       await db`UPDATE bloombox.schema_migrations SET checksum = ${"0".repeat(64)}`;
       await expect(inspect()).rejects.toThrow("MIGRATION_HISTORY_MISMATCH");
       const mismatchCli = spawnSync(process.execPath, ["scripts/database-status.mjs"], { encoding: "utf8", timeout: 15000,
-        env: { DATABASE_STATUS_URL: url.toString(), DATABASE_STATUS_SSL_MODE: "disable" } });
+        env: { DATABASE_STATUS_URL: url.toString(), DATABASE_STATUS_SSL_MODE: "disable", DATABASE_STATUS_PSQL: psql } });
       expect(mismatchCli.status).toBe(1); expect(mismatchCli.stdout).toBe("");
       expect(mismatchCli.stderr).toBe("Database schema inspection: MIGRATION_HISTORY_MISMATCH\n");
       expect((await loadMigrations(directory)).length).toBe(2);
