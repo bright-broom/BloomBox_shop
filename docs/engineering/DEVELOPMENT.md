@@ -55,6 +55,10 @@ Future exceptions require evidence of failed resolution, a reviewed exact versio
 
 Reference: [pnpm 10 exact-version release-age exceptions](https://pnpm.io/10.x/settings#minimumreleaseageexclude).
 
+### ESLint 10 compatibility
+
+ESLint 10 uses the existing Next.js flat configurations through the official `@eslint/compat` adapter while bundled React/import/accessibility plugins still call removed context methods. Do not disable rules or suppress peer warnings to pass the migration. Node.js 24 is the project baseline; Node.js 23 is unsupported by ESLint 10. The real-config smoke tests in `scripts/eslint-config.test.mjs` must continue to detect invalid code. See [migration evidence, dependency review, and removal conditions](ESLINT_10_MIGRATION.md); remaining tooling work stays in #142.
+
 ## Risk-based verification
 
 Test the changed behavior and likely regression, then choose the smallest sufficient gate:
