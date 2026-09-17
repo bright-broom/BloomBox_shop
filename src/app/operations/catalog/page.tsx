@@ -4,6 +4,7 @@ import Link from "next/link";
 import { randomUUID } from "node:crypto";
 import { notFound } from "next/navigation";
 import { z } from "zod";
+import { catalogHistoryContent as historyCopy } from "@/shared/infrastructure/content/catalog-history-content";
 import { CatalogManagementError } from "@/modules/catalog/public";
 import { catalogManagementContent as copy } from "@/shared/infrastructure/content/catalog-management-content";
 import { readManagedCatalog } from "@/shared/infrastructure/security/operator-auth/native-catalog-management";
@@ -20,11 +21,13 @@ export default async function CatalogManagement({searchParams}:{searchParams:Pro
     {state.error ? <p role="alert">{state.error}</p> : null}
     {state.page ? <><details className="catalog-management-card"><summary>{copy.newProduct}</summary>
       <CatalogManagementForm id={randomUUID()} requestId={randomUUID()} action={saveCatalogManagement}/></details>
+      <Link className="text-link" prefetch={false} href="/operations/catalog/history">{historyCopy.title}</Link>
       <h2>{copy.products}</h2><p>{copy.stockMeaning}</p>
       {!state.page.products.length ? <p>{copy.empty}</p> : null}
       {state.page.products.map((product) => { const stock = state.page.stock.find((s) => s.productId === product.id);
         return <article className="catalog-management-card" key={product.id}><h3>{product.name}</h3><p>{copy.statuses[product.status]} · {product.available ? copy.yes : copy.no}</p>
           {stock ? <dl className="catalog-stock-summary"><div><dt>{copy.onHand}</dt><dd>{stock.onHand}</dd></div><div><dt>{copy.reserved}</dt><dd>{stock.reserved}</dd></div><div><dt>{copy.sellable}</dt><dd>{stock.onHand-stock.reserved}</dd></div></dl> : <p>{copy.unregistered}</p>}
+          <Link className="text-link" prefetch={false} href={`/operations/catalog/history?productId=${product.id}`}>{historyCopy.link}</Link>
           <StockManagementForm productId={product.id} stock={stock} requestId={randomUUID()} action={saveCatalogManagement}/>
           <details><summary>{copy.edit}</summary><CatalogManagementForm product={product} id={product.id} requestId={randomUUID()} action={saveCatalogManagement}/></details>
         </article>; })}
