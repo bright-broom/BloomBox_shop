@@ -33,6 +33,12 @@ ESLint公式の `@eslint/compat@2.1.1` を開発依存へ追加し、既存の `
 - 一部上流プラグイン（React 7.37.5、jsx-a11y 6.10.2、import 2.32.0）のpeer範囲にESLint 10が未記載のため、インストール時の警告は残る。警告を隠す設定やpeer範囲の偽装は行わない。公式adapterによる互換動作と、このプロジェクトで検証できた範囲を根拠にする。全ルール・全入力での互換性を証明したわけではない。
 - TypeScript majorのAST API移行、Node型の更新、実機のエディター拡張は別途検証が必要。#142全体を完了として閉じない。
 
+## main統合後のlockfile修復（2026-09-18）
+
+PR #204取り込み後のmain `030b3ff` をPR #207へ統合した `e455490` では、manifestのReact型指定が旧版へ戻り、lockfile内のStripe解決情報も22.6.1のまま残った。固定インストールで指定不一致を再現し、型指定の修正後にはStripe 22.6.2のsnapshot欠落を再現した。
+
+`@types/react` / `@types/react-dom` をmainと同じ `^19.3.0` に戻し、pnpm 10.23.0の `install --lockfile-only --fix-lockfile` でlockfileを再生成した。Stripe 22.6.2とESLint 10/compatを維持する。再生成にはpeer参照とプラットフォームmetadataの正規化も含む。新たな依存版の選定やCIの固定検査の解除は行わない。修復後の `pnpm install --frozen-lockfile` と全依存監査が成功。全体試験・build・CI結果はPR #207に記録する。
+
 ## 撤去・切り戻し
 
 担当は `bright-broom`、追跡は #142。次回の `eslint-config-next` または内包プラグイン更新時にnative ESLint 10対応とpeer宣言を確認する。対応版が揃ったらadapterを外し、7つの検出試験・全体Lint・型・テスト・buildを通した専用PRで開発依存も削除する。
