@@ -1,3 +1,6 @@
+import { PostgresCommerceBacklog } from "@/modules/payment/infrastructure/postgres-commerce-backlog";
+import { PostgresPurgedInboxRecovery } from "@/modules/payment/infrastructure/postgres-purged-inbox-recovery";
+import { StripeInboxRecoverySource } from "@/modules/payment/infrastructure/stripe-inbox-recovery-source";
 import { PostgresCustomerPurchasePerformance } from "@/modules/order/infrastructure/postgres-customer-purchase-performance";
 import { PostgresInventoryReservations } from "@/modules/inventory/infrastructure/postgres-inventory-reservations";
 import { PostgresStockAvailabilityReader } from "@/modules/inventory/infrastructure/postgres-stock-availability-reader";
@@ -245,4 +248,15 @@ export function getShopifyWebhookReceiver(): ReceiveProviderWebhook<Uint8Array, 
 export function getShopifyReferenceReader(): ReadShopifyReference | null {
   const config = loadShopifyAdminConfig();
   return config ? new ReadShopifyReference(new ShopifyAdminOrderReader(config)) : null;
+}
+
+export function getStripeInboxRecovery(): PostgresPurgedInboxRecovery {
+  if (loadCheckoutProviderMode() !== "stripe" || loadRuntimeMode() !== "production") throw new Error("Stripe inbox recovery is disabled");
+  const config = loadStripeConfig();
+  return new PostgresPurgedInboxRecovery(getWorkerDatabaseClient(), config.accountId,
+    new StripeInboxRecoverySource(config), new AesGcmDataProtector(loadDataProtectionConfig()));
+}
+export function getCommerceBacklog(): PostgresCommerceBacklog {
+  if (loadCheckoutProviderMode() !== "stripe" || loadRuntimeMode() !== "production") throw new Error("Commerce backlog is disabled");
+  return new PostgresCommerceBacklog(getWorkerDatabaseClient(), loadStripeConfig().accountId);
 }

@@ -14,3 +14,5 @@ export {
   type FailedInboxRequeueRequest,
   type FailedInboxRequeueResult,
 } from "./application/requeue-failed-inbox-events";
+
+export { parseRestorePurgedInboxRequest } from "./application/restore-purged-inbox-event";

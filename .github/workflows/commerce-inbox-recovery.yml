@@ -1,0 +1,65 @@
+name: Commerce Inbox Recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "inspect: 滞留を確認 / restore: 削除済み本文をStripeから復元"
+        required: true
+        type: choice
+        options: [inspect, restore]
+      event_id:
+        description: "restore対象のStripeイベントID (evt_...)。一度に1件"
+        type: string
+      incident_issue:
+        description: "調査と修正の記録があるIssue番号（restore時必須）"
+        type: number
+      after:
+        description: "inspectの次ページカーソル。初回は空欄"
+        type: string
+      confirm:
+        description: "原因修正を配備済みで、このイベントを通常の処理に戻す"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: commerce-inbox-recovery
+  cancel-in-progress: false
+jobs:
+  recovery:
+    if: github.ref == 'refs/heads/main' && (inputs.operation == 'inspect' || inputs.confirm == true)
+    environment: Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
+      COMMERCE_WORKER_SECRET: ${{ secrets.COMMERCE_WORKER_SECRET }}
+      OPERATION: ${{ inputs.operation }}
+      EVENT_ID: ${{ inputs.event_id }}
+      INCIDENT_ISSUE: ${{ inputs.incident_issue }}
+      AFTER: ${{ inputs.after }}
+      REQUESTED_BY: ${{ github.actor }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: 本文を公開せず調査または再取得
+        run: |
+          node --input-type=module <<'NODE'
+          const { formatInboxRecoveryOutput } = await import('./scripts/commerce-inbox-recovery-output.mjs');
+          const { PRODUCTION_BASE_URL: base, COMMERCE_WORKER_SECRET: secret, OPERATION: operation } = process.env;
+          const origin = new URL(base);
+          if (origin.protocol !== 'https:' || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash || !secret) throw new Error('Invalid configuration');
+          const restore = operation === 'restore';
+          const url = new URL(restore ? '/api/internal/commerce-inbox-restore' : '/api/internal/commerce-backlog', origin);
+          if (!restore && process.env.AFTER) url.searchParams.set('after', process.env.AFTER);
+          const response = await fetch(url, { method: restore ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(55000),
+            headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
+            body: restore ? JSON.stringify({ externalEventId: process.env.EVENT_ID, incidentIssue: Number(process.env.INCIDENT_ISSUE), requestedBy: process.env.REQUESTED_BY }) : undefined });
+          if (!response.ok) throw new Error(`Recovery HTTP ${response.status}`);
+          const data = await response.json();
+          const output = formatInboxRecoveryOutput(operation, data);
+          for (const line of output.lines) console.log(line);
+          if (!output.successful) process.exitCode = 1;
+          NODE
