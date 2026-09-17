@@ -72,6 +72,10 @@ jobs:
           pnpm exec vitest run scripts/database-restore-drill.test.mjs
       - name: Build production bundle
         run: pnpm build
+      - name: Install browser for script-boundary regression
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Verify browser script boundary and hydration
+        run: pnpm test:browser-security
 
   dependency-audit:
     name: Production dependency audit

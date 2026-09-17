@@ -1,5 +1,11 @@
 # Engineering Governance
 
+**2026-09-18 live correction:** the repository is now private. The main branch reports
+`protected: false`; rulesets return a plan-related 403, and restoring the existing
+Production reviewer is rejected with a plan-related 422. The September 17 settings
+below are historical, not currently enforced protection. Actions SHA pinning is now
+required and verified. See [current evidence and limits](BROWSER_SCRIPT_SECURITY.md).
+
 This policy turns architecture, design, security, and release expectations into owned decisions and enforceable checks.
 
 ## Accountability

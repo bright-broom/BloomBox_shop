@@ -21,7 +21,8 @@
     "stripe:verify:test": "node scripts/verify-stripe-test-mode.mjs",
     "test:database": "vitest run --config vitest.database.config.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:browser-security": "playwright test"
   },
   "dependencies": {
     "jose": "6.2.12",
@@ -36,11 +37,13 @@
   },
   "devDependencies": {
     "@eslint/compat": "2.1.1",
+    "@playwright/test": "1.62.0",
     "@types/node": "^24.13.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "eslint": "^10.10.0",
     "eslint-config-next": "^16.3.4",
+    "parse5": "8.0.1",
     "typescript": "^5.9.3",
     "vitest": "^5.0.0"
   },

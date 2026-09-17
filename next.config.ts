@@ -15,7 +15,6 @@ const remotePatterns = [...remoteImageHosts].map(
   (hostname) => ({ protocol: "https" as const, hostname }),
 );
 const securityHeaders = [
-  { key: "Content-Security-Policy", value: "base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'" },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
   { key: "Permissions-Policy", value: "camera=(), geolocation=(), microphone=()" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -49,7 +48,6 @@ const nextConfig: NextConfig = {
         { key: "Referrer-Policy", value: "same-origin" },
       ] },
       ...["/operations/:path*", "/api/operator-auth/:path*"].map((source) => ({ source, headers: [
-        { key: "Content-Security-Policy", value: "base-uri 'self'; form-action 'self' https://accounts.google.com; frame-ancestors 'none'; object-src 'none'" },
         { key: "Cache-Control", value: "private, no-store, max-age=0" },
         // Native form POSTs need an Origin; no-referrer would turn it into null.
         // same-origin still suppresses Referer on navigation to Google or other sites.
@@ -57,7 +55,6 @@ const nextConfig: NextConfig = {
         { key: "X-Robots-Tag", value: "noindex, nofollow" },
       ] })),
       ...["/account/:path*", "/api/customer-auth/:path*"].map((source) => ({ source, headers: [
-        { key: "Content-Security-Policy", value: "base-uri 'self'; form-action 'self' https://accounts.google.com; frame-ancestors 'none'; object-src 'none'" },
         { key: "Cache-Control", value: "private, no-store, max-age=0" },
         { key: "Referrer-Policy", value: source === "/account/:path*" ? "same-origin" : "no-referrer" },
         { key: "X-Robots-Tag", value: "noindex, nofollow" },
