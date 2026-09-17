@@ -1,5 +1,6 @@
 import catalog from "../../../../content/catalog.json";
 import { z } from "zod";
+import { isNativeCatalogImageUrl } from "@/shared/infrastructure/config/native-catalog-image-config";
 import { money } from "@/shared/domain/money";
 import { productId, type Product } from "../domain/product";
 
@@ -10,7 +11,7 @@ const catalogItemSchema = z.object({
   subtitle: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(500),
   priceAmount: z.number().int().nonnegative(),
-  imageUrl: z.union([z.url(), z.string().regex(/^\/images\/products\/[a-z0-9-]+\.(?:png|webp|jpg)$/)]),
+  imageUrl: z.string().max(2048).refine(isNativeCatalogImageUrl),
   imageAlt: z.string().trim().min(1).max(160),
   palette: z.string().trim().min(1).max(100),
   occasion: z.array(z.string().trim().min(1)).min(1),

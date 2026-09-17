@@ -36,6 +36,21 @@ if (url && (!["127.0.0.1","localhost"].includes(new URL(url).hostname) || !new U
   async function product(){const p=draft();await save(p);return p;}
   const adjustment=(id:string,delta=10,version=0):StockChange=>({productId:id,delta,expectedVersion:version,requestId:randomUUID(),reason:"RECEIVED"});
   async function balance(id:string){const [r]=await owner`SELECT on_hand,reserved,version::text AS version FROM bloombox.inventory_stock WHERE product_id=${id}`;return r;}
+  it("saves deployed images and reads the same reference through the customer catalog", async () => {
+    const imageUrl = "/images/products/bloombox-blue-concept.png";
+    const p = { ...draft(), imageUrl };
+    await save(p);
+    const publish = { ...p, requestId: randomUUID(), expectedVersion: 1, status: "PUBLISHED" as const, available: true };
+    await save(publish); await save(publish);
+    await change(adjustment(p.id));
+    const repository = new PostgresProductRepository(owner, new PostgresStockAvailabilityReader(owner));
+    expect((await repository.findBySlug(p.slug))?.imageUrl).toBe(imageUrl);
+    const changes = await owner`SELECT command FROM bloombox.catalog_changes WHERE product_id=${p.id}`;
+    expect(changes).toHaveLength(2);
+    expect(changes.every((row) => row.command.imageUrl === imageUrl)).toBe(true);
+    await expect(save({ ...publish, requestId: randomUUID(), expectedVersion: 2, imageUrl: "/images/products/unregistered.png" })).rejects.toMatchObject({ code: "INVALID" });
+    expect((await repository.findBySlug(p.slug))?.imageUrl).toBe(imageUrl);
+  });
   it("audits shipping edits with scoped credentials, preserves zero versus missing and rejects unsafe amounts", async () => {
     const p = { ...draft(), shippingAmount: null };
     await save(p);
