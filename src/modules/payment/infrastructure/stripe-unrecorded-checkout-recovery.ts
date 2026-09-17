@@ -34,6 +34,13 @@ export class StripeCheckoutLookupResponseError extends Error {
   }
 }
 
+export class StripeCheckoutLookupAccountError extends Error {
+  constructor() {
+    super("Stripe checkout lookup account could not be verified");
+    this.name = "StripeCheckoutLookupAccountError";
+  }
+}
+
 type ListedCheckoutSession = Readonly<{
   id: string;
   client_reference_id: string | null;
@@ -76,18 +83,26 @@ export class StripeSdkCheckoutSessionFinder implements StripeCheckoutSessionFind
   }
 }
 
-function sdkCheckoutSessionList(config: StripeConfig): StripeCheckoutSessionList {
-  // Checkout Session read is an existing application-key permission; the event key stays limited to Events.
-  const stripe = new Stripe(config.checkoutSecretKey, {
+export function sdkCheckoutSessionList(config: StripeConfig, stripe = new Stripe(config.checkoutSecretKey, {
     appInfo: { name: "BloomBox", version: "0.1.0" },
     maxNetworkRetries: 2,
     timeout: 10_000,
     telemetry: false,
-  });
-  return ({ createdFrom, createdTo }) => stripe.checkout.sessions.list(
-    { created: { gte: createdFrom, lte: createdTo }, limit: 100 },
-    { apiVersion: config.apiVersion },
-  );
+  })): StripeCheckoutSessionList {
+  return async function* ({ createdFrom, createdTo }) {
+    // An empty list is evidence for releasing inventory only within the expected account.
+    // Verify the key's own account on every lookup; never select an account via Stripe-Account.
+    try {
+      const account = await stripe.accounts.retrieveCurrent({}, { apiVersion: config.apiVersion });
+      if (account.id !== config.accountId) throw new StripeCheckoutLookupAccountError();
+    } catch {
+      throw new StripeCheckoutLookupAccountError();
+    }
+    yield* stripe.checkout.sessions.list(
+      { created: { gte: createdFrom, lte: createdTo }, limit: 100 },
+      { apiVersion: config.apiVersion },
+    );
+  };
 }
 
 export type UnrecordedCheckoutDecision = "RELEASE" | "REVIEW";
