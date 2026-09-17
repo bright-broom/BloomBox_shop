@@ -1,5 +1,7 @@
 # Shopify注文と購入試行の関連付け
 
+> 移行範囲（2026-09-17）：この文書は旧Shopifyアダプターと既存取引の契約・検証記録です。現行の新規商品・顧客・注文・在庫は [ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md) の自作PostgreSQL、顧客はGoogle直接認証、次の決済接続はStripeです。以下を新規導入の指示や現在の公開接続証拠にせず、既存取引の接続先・資格情報・データは無断で変更／削除しません。[現行の入口](HANDOFF.md)を参照。
+
 2026-09-11時点。Checkoutが所有する不変の関連付けを、内部ワークフロー`AssociateShopifyOrder`に実装しました。`ReadShopifyReference`で正式データを取得してから、Checkoutの公開契約`ShopifyOrderLinker`を呼びます。PaymentがCheckoutのテーブルを直接書き換える構成にはしません。
 
 注文・入金・返金・配送の状態反映、購入者アカウントの認証、公開購入経路、Inbox消費ワーカーへの接続はこの段階では行いません。関連付け成功は「この注文が保存済みの購入試行のカートから作成された」という内部記録です。入金済みや発送可能、閲覧者が購入者本人であることを意味しません。

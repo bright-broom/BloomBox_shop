@@ -1,5 +1,7 @@
 # Native customer account with Google login
 
+> 2026-09-17更新：公開HTTPSのGoogle本人画面と、プロフィール・住所帳・返金表示・退会等の後続実装は [セルフサービス公開検証](CUSTOMER_SELF_SERVICE_RELEASE_2026-09-17.md) に記録済み。下記初期実装時点の未実装・未確認は過去の範囲です。実Stripe経由の購入E2Eは引き続き別検証。[現在の残課題](BACKLOG.md)を参照。
+
 > 検証状況の更新（2026-09-14）：以下の機能追加時点の「2顧客未検証」「実接続未設定」は履歴です。後続の [実Google2顧客の表示分離](CUSTOMER_ORDER_ISOLATION_VERIFICATION.md) で、架空注文の本人表示・相互非表示を確認しました。実Stripeでの認証済み購入、本番HTTPSは未検証です。最新の残件は [BACKLOG.md](BACKLOG.md) を参照。
 
 2026-09-13. The user selected Shopify-independent commerce under [ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md). `/account` now uses Google OIDC directly and native PostgreSQL customer/order records. Shopify Customer Account credentials and operator Google credentials are not accepted for this route.
