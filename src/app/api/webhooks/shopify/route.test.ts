@@ -29,7 +29,7 @@ describe("Shopify webhook route", () => {
     const response = await POST(request(raw));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ received: true, duplicate: result === "DUPLICATE" });
-    expect(execute).toHaveBeenCalledWith(Buffer.from(raw), { signature: "signed", shop: "bloom.myshopify.com", topic: "orders/paid", apiVersion: "2026-07" });
+    expect(execute).toHaveBeenCalledWith(new Uint8Array(Buffer.from(raw)), { signature: "signed", shop: "bloom.myshopify.com", topic: "orders/paid", apiVersion: "2026-07" });
   });
   it("bounds actual streamed bytes even with a false length header", async () => {
     const cancel = vi.fn();
@@ -54,7 +54,7 @@ describe("Shopify webhook route", () => {
   });
   it("does not persist an interrupted stream", async () => {
     const stream = new ReadableStream<Uint8Array>({ start(controller) { controller.error(new Error("interrupted")); } });
-    expect((await POST(request(stream))).status).toBe(500);
+    expect((await POST(request(stream))).status).toBe(400);
     expect(execute).not.toHaveBeenCalled();
   });
 });

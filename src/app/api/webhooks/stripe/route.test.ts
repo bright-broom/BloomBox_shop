@@ -47,4 +47,17 @@ describe("Stripe webhook route", () => {
     expect(response.status).toBe(413);
     expect(execute).not.toHaveBeenCalled();
   });
+
+  it("rejects undeclared oversized streams during reading without acknowledging events", async () => {
+    const cancelled = vi.fn();
+    const response = await POST(new Request(new URL("stripe-webhook", import.meta.url), {
+      method: "POST", headers: { "stripe-signature": "signed" }, duplex: "half",
+      body: new ReadableStream<Uint8Array>({
+        pull(c) { c.enqueue(new Uint8Array(600_000)); }, cancel: cancelled,
+      }),
+    } as RequestInit));
+    expect(response.status).toBe(413);
+    expect(cancelled).toHaveBeenCalledOnce();
+    expect(execute).not.toHaveBeenCalled();
+  });
 });
