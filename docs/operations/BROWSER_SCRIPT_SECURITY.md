@@ -21,10 +21,10 @@ Next.js 16.3.4同梱のCSP/Proxy/connectionガイドを確認。実験的SRIや�
 - 関連テストに未承認script、nonce偽装、重複CSP、送信先の拡大、キャッシュ許可、Report-Onlyのみの設定を拒否するケースを追加。
 - PlaywrightのChromiumで実際のproduction buildを起動し、購入・ログイン画面、hydration、nonceの毎回更新、不正スクリプト・外部送信の遮断を確認。
 - ローカルの架空データで、ギフト設定→カート→Server Action→注文者入力→確認→ダミー決済完了を確認。実Stripe・実Googleログインの検証とは区別する。
-- 通常テスト1,449件成功、DB等283件はローカル未設定によりskip。静的検査・型検査・lint・production build成功。DB変更はない。
+- 通常テスト1,474件成功、DB等287件はローカル未設定によりskip。静的検査・型検査・lint・production build成功。DB変更はない。
 - `parse5@8.0.1`（MIT）：HTMLの文字参照・テンプレート等を正しく検査するため、監視・検証用のdevDependencyとして採用。
 - `@playwright/test@1.62.0`（Apache-2.0）：実ブラウザーでCSPの遮断と正常操作を確認するため採用。npm registryの公開版を固定。リリース直後の1.63.0は採用しない。
-- 全依存監査で既存ESLint配下のjs-yaml 4.3.1にGHSA-2883-xcg3-v3hhが見つかったため、4.3.2への限定overrideを設定。修正版の公開日は2026-08-26で7日経過済み。将来ESLint側の解決が修正版以上になったら除去する。更新後の全依存監査は検出0件。
+- 初回の全依存監査で既存ESLint配下のjs-yaml 4.3.1にGHSA-2883-xcg3-v3hhを検出。並行してmainへ入ったESLint 10更新（#207）で当該依存が除去されたため、追加overrideは残さない。統合後の全依存監査は検出0件。
 
 再現手順：`pnpm install --frozen-lockfile`、`pnpm check:ci`、`pnpm exec playwright install chromium`、`pnpm test:browser-security`。ブラウザー試験のサーバーは127.0.0.1:3187、preview/in-memory/dummy checkout専用。実アカウントや秘密値を持ち込まない。CIの既存品質jobにもブラウザー試験を追加。
 
