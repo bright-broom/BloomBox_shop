@@ -43,6 +43,10 @@ To roll back the policy, revert the configuration commit in the affected branche
 
 Provider references: [Git deployment control](https://vercel.com/docs/project-configuration/git-configuration), [manual deployment from a Git SHA](https://vercel.com/docs/git#creating-a-deployment-from-a-git-reference), [ignored-build quota accounting](https://vercel.com/docs/project-configuration/project-settings), and [deployment limits](https://vercel.com/docs/limits).
 
+## Read-only database preflight
+
+Before an approved deployment, run `pnpm db:status` at the candidate SHA using a dedicated `DATABASE_STATUS_URL`. It compares migration history without applying SQL or initializing the database. Pending, mismatched, or unreadable history exits nonzero. This does not replace schema/role review or the protected migration step. See [configuration, evidence, and limits](DATABASE_PREFLIGHT.md).
+
 ## Automated release path
 
 1. A focused PR selects L0-L3 risk and supplies review, verification, and rollback evidence.
