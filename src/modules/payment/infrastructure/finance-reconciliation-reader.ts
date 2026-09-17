@@ -24,7 +24,7 @@ export async function readLocalFinance(sql: DatabaseClient): Promise<LocalFinanc
           WHERE f.payment_id=p.id AND f.transaction_type='CAPTURE' AND e.account_code='STRIPE_CLEARING'),0)::text AS "ledgerCaptured",
         COALESCE((SELECT -sum(e.signed_amount_minor) FROM bloombox.financial_transactions f
           JOIN bloombox.ledger_entries e ON e.financial_transaction_id=f.id
-          WHERE f.payment_id=p.id AND f.transaction_type='REFUND' AND e.account_code='STRIPE_CLEARING'),0)::text AS "ledgerRefunded",
+          WHERE f.payment_id=p.id AND f.transaction_type IN ('REFUND','REFUND_REVERSAL') AND e.account_code='STRIPE_CLEARING'),0)::text AS "ledgerRefunded",
         EXISTS(SELECT f.id FROM bloombox.financial_transactions f LEFT JOIN bloombox.ledger_entries e ON e.financial_transaction_id=f.id
           WHERE f.payment_id=p.id GROUP BY f.id
           HAVING count(e.id)<2 OR sum(e.signed_amount_minor)<>0 OR count(DISTINCT e.currency)<>1
