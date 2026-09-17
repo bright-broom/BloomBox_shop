@@ -104,6 +104,15 @@ describe("POST /api/postal-code", () => {
     expect(response.status).toBe(403);
     expect(execute).not.toHaveBeenCalled();
   });
+
+  it("rejects concurrent undeclared oversized bodies without spending provider calls", async () => {
+    const responses = await Promise.all(Array.from({ length: 100 }, () => POST(new Request(new URL("postal-code", import.meta.url), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: "x".repeat(257),
+    }))));
+    expect(responses.every((response) => response.status === 413)).toBe(true);
+    expect(execute).not.toHaveBeenCalled();
+  });
 });
 
 function request(payload: unknown): Request {
