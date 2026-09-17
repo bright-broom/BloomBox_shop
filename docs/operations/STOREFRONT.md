@@ -1,5 +1,7 @@
 # Storefront operations
 
+> 履歴資料（2026-09-17整理）：以下はShopify中心だった時点のストア契約です。現行の正本は [ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md)、[自作商品](NATIVE_CATALOG.md)、[顧客セルフサービス](CUSTOMER_SELF_SERVICE.md)、[公開判定](RELEASE.md)。顧客・商品・価格・在庫・注文は自作PostgreSQLへ移行し、Google直接認証とStripeを採用しています。下記のShopify所有表を現在の実装指示にせず、旧取引・契約の参照用として保持します。
+
 ## Scope and ownership
 
 BloomBox は、商品発見、商品説明、ギフト設定、購入後の安全な状況確認、案内ページを所有します。Shopify は商品、価格、在庫、顧客、注文、返金の正本です。Stripe を有効化する場合は ADR 0002 の独立した決済境界を使用し、在庫確保方式が承認されるまで本番決済を開始しません。

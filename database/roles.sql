@@ -23,6 +23,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_catalog_manager') THEN
     CREATE ROLE bloombox_catalog_manager NOLOGIN;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_native_fulfillment') THEN
+    CREATE ROLE bloombox_native_fulfillment NOLOGIN;
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bloombox_customer_support') THEN
     CREATE ROLE bloombox_customer_support NOLOGIN;
   END IF;
@@ -189,3 +192,23 @@ GRANT SELECT ON bloombox.customer_requests TO bloombox_customer_support;
 GRANT UPDATE (status, key_id, ciphertext, revision, updated_at) ON bloombox.customer_requests TO bloombox_customer_support;
 GRANT SELECT ON bloombox.data_subject_requests TO bloombox_customer_support;
 GRANT INSERT ON bloombox.customer_request_changes TO bloombox_customer_support;
+
+-- Native fulfillment is a separate least-privilege operator connection.
+GRANT USAGE ON SCHEMA bloombox TO bloombox_native_fulfillment;
+GRANT EXECUTE ON FUNCTION bloombox.lock_native_fulfillment_operator(uuid) TO bloombox_native_fulfillment;
+GRANT SELECT (id, order_id, status, version) ON bloombox.fulfillments TO bloombox_native_fulfillment;
+GRANT UPDATE (id, status, version, updated_at) ON bloombox.fulfillments TO bloombox_native_fulfillment;
+GRANT SELECT (id, display_id, status, commerce_provider, created_at) ON bloombox.orders TO bloombox_native_fulfillment;
+GRANT UPDATE (id) ON bloombox.orders TO bloombox_native_fulfillment;
+GRANT SELECT (id, order_id, status) ON bloombox.payments TO bloombox_native_fulfillment;
+GRANT UPDATE (id) ON bloombox.payments TO bloombox_native_fulfillment;
+GRANT SELECT (order_id, product_name_snapshot, quantity, position) ON bloombox.order_items TO bloombox_native_fulfillment;
+GRANT SELECT (order_id, delivery_date, pii_key_id, address_ciphertext) ON bloombox.order_gift_snapshots TO bloombox_native_fulfillment;
+GRANT SELECT (id, fulfillment_id, carrier_code, tracking_reference, shipped_at, delivered_at)
+  ON bloombox.shipments TO bloombox_native_fulfillment;
+GRANT INSERT ON bloombox.shipments TO bloombox_native_fulfillment;
+GRANT UPDATE (carrier_code, tracking_reference, shipped_at, delivered_at, updated_at)
+  ON bloombox.shipments TO bloombox_native_fulfillment;
+GRANT INSERT ON bloombox.fulfillment_status_transitions, bloombox.native_fulfillment_accesses
+  TO bloombox_native_fulfillment;
+GRANT SELECT, INSERT ON bloombox.native_fulfillment_changes TO bloombox_native_fulfillment;

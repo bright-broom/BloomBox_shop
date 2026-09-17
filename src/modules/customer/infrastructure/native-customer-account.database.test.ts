@@ -208,7 +208,9 @@ describeDatabase("native customer identity and order ownership", () => {
       refunds: [{ amountYen: 1000, status: "SUCCEEDED" }],
     });
     expect(await history.readDetail(b.customerId, id)).toBeNull();
-    await sql`INSERT INTO bloombox.shipments (id, fulfillment_id, carrier_code, tracking_reference, shipped_at, created_at, updated_at) VALUES (${randomUUID()}, ${fulfillment}, 'YAMATO', '999999999999', now(), now(), now())`;
+    const secondFulfillment = randomUUID();
+    await sql`INSERT INTO bloombox.fulfillments (id, order_id, status, created_at, updated_at) VALUES (${secondFulfillment}, ${id}, 'SHIPPED', now(), now())`;
+    await sql`INSERT INTO bloombox.shipments (id, fulfillment_id, carrier_code, tracking_reference, shipped_at, created_at, updated_at) VALUES (${randomUUID()}, ${secondFulfillment}, 'YAMATO', '999999999999', now(), now(), now())`;
     expect((await history.readDetail(a.customerId, id))?.shipment).toBeNull();
   });
   it("filters by the authenticated buyer, excludes legacy/unlinked/recipient orders and paginates without duplicates", async () => {

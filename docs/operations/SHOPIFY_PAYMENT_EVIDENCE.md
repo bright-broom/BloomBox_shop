@@ -1,5 +1,7 @@
 # Shopify決済状態の照合・保存
 
+> 移行範囲（2026-09-17）：この文書は旧Shopifyアダプターと既存取引の契約・検証記録です。現行の新規商品・顧客・注文・在庫は [ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md) の自作PostgreSQL、顧客はGoogle直接認証、次の決済接続はStripeです。以下を新規導入の指示や現在の公開接続証拠にせず、既存取引の接続先・資格情報・データは無断で変更／削除しません。[現行の入口](HANDOFF.md)を参照。
+
 2026-09-11時点。`ReconcileShopifyPayment`が正式な注文・取引データの取得、購入試行との関連付け、決済状態の検証・保存を行います。重複・遅延・取引更新を前提に、Payment所有の`shopify_payment_evidence`へ状態と検証根拠を記録します。
 
 価格照合の追加: 決済保存後、同じ正式API応答の商品・送料・税・割引をOrder所有のルールで照合し、MATCHED/HELDを返します。価格不一致でも有効な決済観測は保存します。これは注文確定ではありません。[金額照合の仕様と残件](SHOPIFY_ORDER_PRICING.md)。

@@ -1,5 +1,7 @@
 # Shopify注文金額の照合
 
+> 移行範囲（2026-09-17）：この文書は旧Shopifyアダプターと既存取引の契約・検証記録です。現行の新規商品・顧客・注文・在庫は [ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md) の自作PostgreSQL、顧客はGoogle直接認証、次の決済接続はStripeです。以下を新規導入の指示や現在の公開接続証拠にせず、既存取引の接続先・資格情報・データは無断で変更／削除しません。[現行の入口](HANDOFF.md)を参照。
+
 2026-09-11時点。`ReconcileShopifyPayment`は決済観測を保存した後、同じAdmin API応答の金額をOrder所有の`assessOrderPricing`へ渡し、`pricing`を返します。これは金額検証です。追加の任意注入Gatewayを通じて[注文確定保存](SHOPIFY_ORDER_ACCEPTANCE.md)へ接続しましたが、発送・通知・公開購入経路は未接続です。
 
 金額照合後の配送期限再確認も内部ワークフローに追加しました。[配送期限照合](SHOPIFY_DELIVERY_TIMING.md)。期限内という判定だけでは注文の確定保存・発送を許可しません。

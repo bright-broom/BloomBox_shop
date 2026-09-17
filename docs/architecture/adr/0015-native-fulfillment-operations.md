@@ -54,7 +54,7 @@ Shared securityが所有する `native_fulfillment_operators`（期限付き・�
 
 ### 6. 宛先の表示
 
-詳細画面に限り、決済確定時に暗号化保存した配送先（氏名・郵便番号・都道府県・市区町村・住所）を復号して表示する。購入者のメールアドレス・電話番号・ギフトメッセージは表示しない。表示のたびに運営者・履行ID・時刻を `native_fulfillment_accesses` へ保存し、保存できなければ表示しない。一覧には宛先を含めない。運営者の閲覧範囲と保持期間の承認はP0-17の公開条件とする。
+詳細画面に限り、決済確定時に暗号化保存した配送先（氏名・郵便番号・都道府県・市区町村・住所）を復号して表示する。購入者のメールアドレス・電話番号・ギフトメッセージは表示しない。保存された`collectedInformation.shipping_details`のみを宛先として使い、`customerDetails`にある購入者の名前や連絡先へフォールバックしない。復号・形式検証に失敗した場合は宛先を非表示にする。表示のたびに運営者・履行ID・時刻を `native_fulfillment_accesses` へ保存し、保存できなければ表示しない。一覧には宛先を含めない。運営者の閲覧範囲と保持期間の承認はP0-17の公開条件とする。
 
 ### 7. 購入者への表示
 
@@ -64,7 +64,9 @@ Shared securityが所有する `native_fulfillment_operators`（期限付き・�
 
 `native_fulfillment_changes` に運営者ID・送信番号・操作・前後の状態・前後のversion・コマンドを追加専用で保存する。状態が変わる操作は、既存の `fulfillment_status_transitions` にも `idempotency_key = requestId` で記録する。ログには宛先・追跡番号を出力しない。
 
-## DB契約（migration 0027）
+## DB契約（migration 0028）
+
+2026-09-17: 0027は顧客セルフサービスで使用済みのため0028を採番する。`shipments`の一意制約は旧取引を含む全行へ適用される。配備前に履行IDごとの重複を調べ、既存の複数発送がある場合は適用を停止して契約を見直す。データを削除して通さない。配送会社・追跡番号のCHECKは`NOT VALID`とし、既存行の書き換えは行わず新規・更新行を検証する。
 
 - `native_fulfillment_operators`: `operator_id uuid PK`、`enabled boolean NOT NULL DEFAULT false`、`valid_until timestamptz NOT NULL`、`created_at timestamptz NOT NULL DEFAULT clock_timestamp()`、`CHECK (valid_until > created_at)`。
 - `lock_native_fulfillment_operator(actor uuid) RETURNS SETOF native_fulfillment_operators`: `SECURITY DEFINER`、`search_path` 固定、`FOR SHARE`、PUBLICの実行権限なし。
@@ -92,7 +94,7 @@ Shared securityが所有する `native_fulfillment_operators`（期限付き・�
 
 ## 展開
 
-1. 新規注文受付の停止を維持したまま、migration 0027と `database/roles.sql` を適用する。
+1. 新規注文受付の停止を維持したまま、migration 0028と `database/roles.sql` を適用する。
 2. `bloombox_native_fulfillment` だけを付与した専用ログインを作り、`DATABASE_NATIVE_FULFILLMENT_URL` を設定する。
 3. 承認済みoperator UUIDの `native_fulfillment_operators` 行を、DB管理者が期限付きで明示登録する。
 4. テスト環境で一覧→詳細→準備→発送→配達→マイページ表示、権限の無効化・期限切れ、再送・競合を確認する。
@@ -101,7 +103,7 @@ Shared securityが所有する `native_fulfillment_operators`（期限付き・�
 
 権限行を `enabled=false` にして新規操作を止める。追加テーブル・履歴・発送記録は削除しない。誤登録は新しい操作（訂正・保留・取消）で記録し、履歴を書き換えない。
 
-旧版のアプリへ戻す場合、`ON_HOLD` の履行は旧画面で未知の状態として表示される。戻す前に保留を解除するか、未知の状態として扱うことを確認する。migration 0027は残す。
+旧版のアプリへ戻す場合、`ON_HOLD` の履行は旧画面で未知の状態として表示される。戻す前に保留を解除するか、未知の状態として扱うことを確認する。migration 0028は残す。
 
 ## 検証
 

@@ -1,5 +1,7 @@
 # Shopify分割配送の数量照合
 
+> 移行範囲（2026-09-17）：この文書は旧Shopifyアダプターと既存取引の契約・検証記録です。現行の新規商品・顧客・注文・在庫は [ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md) の自作PostgreSQL、顧客はGoogle直接認証、次の決済接続はStripeです。以下を新規導入の指示や現在の公開接続証拠にせず、既存取引の接続先・資格情報・データは無断で変更／削除しません。[現行の入口](HANDOFF.md)を参照。
+
 2026-09-12時点。内部の発送受付に`quantityAssessment`を追加し、注文確定時の商品・数量と、Shopifyが返す注文明細・各発送明細を照合します。これは観測結果です。ローカルFulfillmentの作業状態、Order状態、出荷承認、通知を自動更新しません。公開経路・Inbox・本番Gateは無効のままです。
 
 ## 取得と照合
