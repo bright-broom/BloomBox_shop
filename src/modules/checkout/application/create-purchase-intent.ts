@@ -162,5 +162,6 @@ function createDisplayId(createdAt: Date, id: string): string {
   })
     .format(createdAt)
     .replaceAll("/", "");
-  return `BBI-${date}-${id.slice(0, 4).toUpperCase()}`;
+  // Preserve UUID uniqueness; a four-hex suffix collides between unrelated purchases.
+  return `BBI-${date}-${id.toUpperCase()}`;
 }
