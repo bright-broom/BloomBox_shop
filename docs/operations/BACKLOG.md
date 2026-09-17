@@ -99,7 +99,7 @@
 | P1-01 | 自作注文のサポート検索・操作 | 2026-09-17：共通管理画面、自作注文番号/UUID・状態検索、7/30/90日の集計、接続・登録状況を追加。専用権限・参照監査を維持。実担当者紐付け・専用DBの公開接続は未完。[管理画面](OPERATIONS_CONSOLE.md)。 2026-09-14：専用権限による顧客一覧、ID/注文番号検索、本人に紐付いた自作注文の履歴、参照監査を実装・隔離DB検証。氏名/連絡先・対応メモ・変更操作、実Google/本番接続、担当者・監査保持期限は残る。[顧客管理](CUSTOMER_MANAGEMENT.md)。販売時点で担当者・代替手順は必要 |
 | P1-02 | キャンセル・部分返金・返品・再配送 | 返金イベント受信は実装済み、独自指示Use Caseなし。2026-09-16：[ADR 0016](../architecture/adr/0016-native-refunds-and-cancellations.md)で、初期の返金はStripe管理画面で行いWebhookで反映する方針を決定（上限・重複防止はStripe、非同期確定はWebhookと照合レポート）。発送前取消（保留→返金→反映確認→取消）、発送後の返品・再配達、在庫を自動で戻さないこと、異議申し立ての手順を[運用手順](REFUNDS_AND_CANCELLATIONS.md)に整備（文書のみ）。実Stripeでの返金反映の検証（P0-18）、取消期限・返品/再配送の条件（P0-08）、Stripe担当者の権限設定（P0-10）、成功後にStripe側で失敗へ変わった返金の自動訂正（現在は通知を拒否し失敗した通知として担当者が対応）、返送・再発送の操作は残る |
 | P1-03 | Inbox/Outboxの再処理 | Inbox retry/FAILED隔離あり。2026-09-14：原因解消後にStripeの失敗通知を処理待ちへ戻す手動ワークフロー「Commerce Inbox Requeue」を追加。main限定・確認必須・最大20件・行ロック下で失敗状態かつ本文保持中の行だけを戻し、実行者とIssue番号を監査記録（単体試験、DB試験はCIで確認）。[障害対応手順](COMMERCE_WORKER_INCIDENTS.md)。本文削除済み通知の解決手段、滞留表示、Outboxのconsumerと保持/肥大化、通知再送の手順は残る |
-| P1-04 | 売上・返金・入金・手数料の照合 | Ledgerとイベント再取得あり。集計レポート不足。Stripeとの差異検知・調査・入金確認の担当と手順を決定。会計システム全体は新規開発しない |
+| P1-04 | 売上・返金・入金・手数料の照合 | 2026-09-17：PR #192で読取専用のDB/Stripe差異・返金・手数料・入金レポートを実装、単体/隔離DBで検証。実Stripeキー・銀行照合・担当/保持の確定は残る。[財務照合](FINANCE_RECONCILIATION.md) |
 | P1-05 | 負荷・濫用・上限 | Timeout/一部retry/検証あり。購入開始・郵便番号・注文参照・Webhookを実測し、必要なRate Limit/Cache/DB poolを追加。想定販売量で最低限の確認を行う |
 | P1-06 | 商品数増加時の検索・ページング | 自作カタログの上限・待ち時間・DB量を実測し必要な検索/ページングを追加。初期M/Lに大規模検索基盤を追加しない |
 | P1-07 | Dependabotの一時例外整理 | 更新ジョブ復旧は確認済み。`pnpm-workspace.yaml` の採用済み3バージョン例外を2026-09-18以降にrelease-age条件と再照合し、不要なら削除する。日付だけで無条件に解除しない |
@@ -143,3 +143,7 @@
 - 変わる事実には確認日を付け、PR/CI/Environment/アカウント/URLは作業時に再確認。未確認を未設定と断定しない。
 - [HANDOFF](HANDOFF.md) は入口、[ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md) は現行方針、[RELEASE](RELEASE.md) は公開手順、[GOVERNANCE](GOVERNANCE.md) は権限・レビュー。本台帳はそれらの承認を代替しない。
 - 接続の詳細は [STRIPE](STRIPE.md)、[CUSTOMER_ACCOUNT](CUSTOMER_ACCOUNT.md)、[NATIVE_CATALOG_MANAGEMENT](NATIVE_CATALOG_MANAGEMENT.md)、[NATIVE_INVENTORY](NATIVE_INVENTORY.md)、[PURCHASE_SHIPPING](PURCHASE_SHIPPING.md)。各資料の古い未確認記載より後の証拠は、この台帳からたどる。
+
+### Issue解決作業の更新（2026-09-17）
+
+[今回の実装と公開接続の再確認](ISSUE_RESOLUTION_2026-09-17.md)に、発送管理、財務照合、商品画像/履歴、番号衝突修正、GitHub保護の現状と未完条件を記録。監査表の古い状態だけで重複実装しない。
