@@ -3,7 +3,7 @@ import catalog from "./content/catalog.json";
 import site from "./content/site.json";
 import { SHOPIFY_PRODUCT_IMAGE_HOST } from "./src/shared/infrastructure/config/shopify-storefront-config";
 
-import { NATIVE_CATALOG_IMAGE_HOSTS } from "./src/shared/infrastructure/config/native-catalog-image-config";
+import { NATIVE_CATALOG_IMAGE_HOSTS, NATIVE_CATALOG_LOCAL_IMAGE_PATTERNS } from "./src/shared/infrastructure/config/native-catalog-image-config";
 
 const remoteImageUrls = [site.hero.imageUrl, ...catalog.map((product) => product.imageUrl)];
 const remoteImageHosts = new Set([
@@ -30,6 +30,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   images: {
     remotePatterns,
+    localPatterns: NATIVE_CATALOG_LOCAL_IMAGE_PATTERNS,
+    maximumRedirects: 0,
   },
   async headers() {
     return [

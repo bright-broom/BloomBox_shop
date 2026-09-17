@@ -10,3 +10,5 @@ export {
 } from "./application/search-products";
 export { CatalogManagementError, type CatalogFields, type ManagedProduct, type CatalogSave, type ManagementActor } from "./application/manage-catalog";
 export type { CatalogManagementState } from "./presentation/catalog-management-state";
+
+export type { CatalogHistoryField, CatalogHistoryValue, CatalogHistoryEntry, CatalogHistoryPage } from "./application/catalog-history";

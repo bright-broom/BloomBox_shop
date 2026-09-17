@@ -3,6 +3,7 @@ import { useActionState, useId } from "react";
 import type { ManagedProduct, CatalogManagementState } from "@/modules/catalog/public";
 import { MAX_STOCK_QUANTITY, type StockSnapshot } from "@/modules/inventory/public";
 import { catalogManagementContent as copy } from "@/shared/infrastructure/content/catalog-management-content";
+import { productImageAssets } from "@/shared/infrastructure/config/native-catalog-image-config";
 export type CatalogAction = (previous: CatalogManagementState, form: FormData) => Promise<CatalogManagementState>;
 const fields = ["slug", "name", "subtitle", "description", "price", "imageUrl", "imageAlt", "palette", "occasions", "flowers", "grower"] as const;
 const limits = {slug:120, name:80, subtitle:120, description:2000, price:16, imageUrl:2048, imageAlt:200, palette:100, occasions:2419, flowers:2419, grower:120};
@@ -19,9 +20,11 @@ export function CatalogManagementForm({ product, id, requestId, action }: {produ
         return <div className="form-field" key={field}><label htmlFor={`${prefix}-${field}`}>{copy.labels[field]}</label>
           {multiline ? <textarea id={`${prefix}-${field}`} name={field} required rows={3} maxLength={limits[field]} defaultValue={value}/>
             : <input id={`${prefix}-${field}`} name={field} required type={field === "price" ? "number" : "text"} min={field === "price" ? 0 : undefined}
+              list={field === "imageUrl" ? `${prefix}-images` : undefined} aria-describedby={field === "imageUrl" ? `${prefix}-image-hint` : undefined}
               step={field === "price" ? 1 : undefined} maxLength={limits[field]} defaultValue={value}/>}
         </div>; })}
-      <p className="form-hint">{copy.imageHint} {copy.listHint}</p>
+      <datalist id={`${prefix}-images`}>{productImageAssets.map((asset) => <option key={asset.src} value={asset.src}>{asset.label}</option>)}</datalist>
+      <p className="form-hint" id={`${prefix}-image-hint`}>{copy.imageHint}</p><p className="form-hint">{copy.listHint}</p>
       <div className="form-field"><label htmlFor={`${prefix}-shipping`}>{copy.shippingLabel}</label>
         <input id={`${prefix}-shipping`} name="shippingAmount" type="number" min={0} step={1} defaultValue={product?.shippingAmount ?? ""} aria-describedby={`${prefix}-shipping-hint`} />
         <p className="field-note" id={`${prefix}-shipping-hint`}>{copy.shippingHint}</p>

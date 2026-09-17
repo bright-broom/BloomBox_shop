@@ -10,7 +10,7 @@ describe("separate local login destinations", () => {
     expect(loginDestination("/operations/catalog", "customer")).toBe("/account");
     expect(loginDestination("/account", "operator")).toBe("/operations");
     expect(loginDestination(`/operations/customers/${id}`, "operator")).toBe(`/operations/customers/${id}`);
-    for (const path of ["/operations/orders", "/operations/reports", "/operations/settings"]) {
+    for (const path of ["/operations/orders", "/operations/reports", "/operations/settings", "/operations/catalog/history"]) {
       expect(loginDestination(path,"operator")).toBe(path);
       expect(loginDestination(path,"customer")).toBe("/account");
     }
@@ -20,6 +20,8 @@ describe("separate local login destinations", () => {
     }
     expect(loginDestination('/account/export','customer')).toBe('/account');
     expect(loginDestination('/operations/requests','operator')).toBe('/operations/requests');
+    expect(loginHref("operator", "/operations/catalog/history")).toBe("/operations/login?next=%2Foperations%2Fcatalog%2Fhistory");
+    expect(loginDestination("/operations/catalog/history?next=https://evil.example", "operator")).toBe("/operations");
     expect(loginDestination("/operations/unknown", "operator")).toBe("/operations");
     expect(loginHref("operator", "/operations/catalog")).toBe("/operations/login?next=%2Foperations%2Fcatalog");
   });

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { productImageAssets } from "../config/native-catalog-image-config";
 import source from "../../../../content/home.json";
 import { findStorefrontPage } from "./storefront-content";
 
@@ -8,7 +9,7 @@ const heading = z.object({ eyebrow: text, title: text });
 // Editorial links are same-site routes, never arbitrary URLs or encoded redirects.
 const href = z.string().regex(/^\/(?:[a-z0-9-]+\/)*[a-z0-9-]*(?:#[a-z0-9-]+)?$/);
 const photo = z.object({
-  src: z.string().regex(/^\/images\/products\/[a-zA-Z0-9_-]+\.(?:webp|png|jpg|jpeg)$/),
+  src: z.string().refine((src) => productImageAssets.some((asset) => asset.src === src && asset.kind === "photograph")),
   alt: text,
   caption: text,
 }).strict();
