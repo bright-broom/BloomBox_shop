@@ -48,9 +48,16 @@ export async function verifyStripeTestMode(environment, clientsFactory, source =
     const clients = clientsFactory(configuration);
     checkout = clients.checkout;
     const readiness = clients.readiness;
+    // Key prefixes distinguish test/live mode, not the account each key belongs to.
+    // Do not pass an account ID or Stripe-Account override: retrieve each key's own account.
+    let account;
+    for (const role of ["checkout", "reconciliation", "readiness"]) {
+      stage = `account_identity_${role}`;
+      const current = await clients[role].accounts.retrieveCurrent();
+      assert(current?.id === configuration.accountId, "Stripe account identity differs");
+      if (role === "readiness") account = current;
+    }
     stage = "account_contract";
-    const account = await readiness.accounts.retrieveCurrent();
-    assert(account.id === configuration.accountId, "Stripe account identity differs");
     const legacyRate = await readiness.shippingRates.retrieve(configuration.shippingRateId);
     assert(legacyRate.active && legacyRate.livemode === false && legacyRate.type === "fixed_amount"
       && legacyRate.fixed_amount?.currency === "jpy" && legacyRate.tax_behavior === configuration.taxBehavior,
@@ -143,7 +150,7 @@ function assertProbeIdentity(session, probe) {
     && session.client_reference_id === probe.reference && (!probe.sessionId || session.id === probe.sessionId), "Probe Session identity differs");
 }
 
-function createClients(configuration) {
+export function createClients(configuration) {
   const options = { apiVersion: API_VERSION, appInfo: { name: "BloomBox readiness", version: "0.1.0" }, maxNetworkRetries: 2, timeout: 10_000, telemetry: false };
   return {
     checkout: new Stripe(configuration.checkoutSecretKey, options),

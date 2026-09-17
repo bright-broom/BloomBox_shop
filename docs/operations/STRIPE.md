@@ -82,7 +82,7 @@ The application, worker, migration, test, and live Stripe credentials are separa
 
 ## Automated Test Mode account verification
 
-The `Stripe Test Mode Readiness` workflow is a manual, account-backed gate using the protected `stripe-test` GitHub Environment. In addition to the runtime keys above, configure a third, test-only `STRIPE_READINESS_SECRET_KEY`. It needs read access to the current Account, Shipping Rates, Webhook Endpoints, and Tax Settings. It is not deployed with the application.
+The `Stripe Test Mode Readiness` workflow is a manual, account-backed gate using the protected `stripe-test` GitHub Environment. In addition to the runtime keys above, configure a third, test-only `STRIPE_READINESS_SECRET_KEY`. It needs read access to the current Account, Shipping Rates, Webhook Endpoints, and Tax Settings. It is not deployed with the application. All three test keys used by this gate must also allow the read-only current-account request (`GET /v1/account`). Checkout and reconciliation keys keep their separate existing resource permissions; do not grant account writes, Connect account management, or substitute a shared unrestricted key. The actual restricted-key permissions must be verified in the dedicated test environment.
 
 Configure these Environment values:
 
@@ -100,7 +100,7 @@ Variable: STRIPE_TERMS_ACCEPTANCE
 Optional variable: STRIPE_CHECKOUT_CUSTOM_DOMAIN
 ```
 
-ワークフローは本番キー、同一キーの兼用、税別・税未指定を拒否します。アカウント・旧共通送料・Stripe Tax・規約URL・Webhook URL/版/購読イベント・Events読取権限を確認後、M/LのSessionを作成します。金額は検証用 `content/catalog.json` から検証付きで読み、現在はM＝4,000＋1,000円、L＝8,000＋0円です。これは実商品カタログの検証ではありません。
+ワークフローは本番キー、同一キーの兼用、税別・税未指定を拒否します。まずCheckout / Reconciliation / Readinessの各キーで、自分自身のアカウントを取得し、3件すべてが `STRIPE_ACCOUNT_ID` と一致することを確認します。指定アカウントの取得や `Stripe-Account` ヘッダーによる上書きは行いません。別アカウント、ID欠落、不正応答、読取権限不足、通信失敗は、その用途の `account_identity_checkout` / `account_identity_reconciliation` / `account_identity_readiness` 段階で失敗し、Session作成・期限切れ操作へ進みません。その後に旧共通送料・Stripe Tax・規約URL・Webhook URL/版/購読イベント・Events読取権限を確認し、M/LのSessionを作成します。金額は検証用 `content/catalog.json` から検証付きで読み、現在はM＝4,000＋1,000円、L＝8,000＋0円です。これは実商品カタログの検証ではありません。
 
 作成したSessionを再取得し、保存された商品の単価・数量・通貨・税区分と、個別の固定送料を照合します。住所入力前は自動税計算が未完了になり得るため、最終総額を検証済みとは扱いません。顧客情報・カード情報は送信せず、支払操作は行いません。
 
@@ -117,6 +117,19 @@ Optional variable: STRIPE_CHECKOUT_CUSTOM_DOMAIN
 実装の検証: Node 24.21.0 / pnpm 10.23.0で `pnpm check:ci`（通常テスト924件・build）を実行。関連33件ではSDKモックでM/Lの再取得照合、設定不備で外部接続ゼロ、後片付けの失敗・不明応答・途中失敗・本番オブジェクト拒否を確認しました。検証プログラムが生成する識別子を使った署名付き期限切れ通知の除外、通常購入UUID・本番モード・支払い済み通知を除外しないことも確認しました。DBスキーマや注文・在庫の書込処理は変更していません。これらはStripeアカウントへの実接続証拠ではありません。
 
 仕様参照: [Checkout Sessionの再取得](https://docs.stripe.com/api/checkout/sessions/retrieve)、[Sessionの期限切れ](https://docs.stripe.com/api/checkout/sessions/expire)。
+
+### アカウント一致検証の修正（2026-09-18、#120）
+
+main `aa84ba7` の検証ツールはReadinessキーだけのアカウントIDを照合していた。Checkout/Reconciliationキーが別アカウントでも、そのアカウント内の操作が成功すると `connection_verified` になり得た。合成テスト4ケースで修正前の誤成功を再現し、全3キーをSession作成前に照合するよう変更した。アプリ本体の決済処理やキーの権限はこの変更で書き換えていない。
+
+- Node.js 24.21.0 / pnpm 10.23.0で `pnpm check:ci` 成功：通常1,443件、型・Lint・静的検査・build。DB/外部接続用283件はスキップ。production依存監査は既知の脆弱性なし。設定なしのCLIも `configuration` で終了コード1・probe0件となることを確認。
+- 単体/SDK通信の関連32テスト：アカウント不一致・照合不能・不正応答では外部書込ゼロ、SDKエラーの秘密値/アカウント情報を結果へ含めないことを確認。M/Lの料金・期限切れ・後片付けの既存試験も成功。
+- インストール済みStripe SDK 22.6.1を使い、送信先 `/v1/account`、用途ごとの認証キー、固定API版、アカウント上書きなし、全照合前の書込なしを通信モックで確認した。Stripeへ実リクエストを送った証拠ではない。
+- 3キーのアカウントID一致は、Webhook秘密値・実配信・同一Sandbox内の全リソース・最終支払額の検証を代替しない。これらは後続の契約検証と実E2Eで確認する。
+- GitHubの `stripe-test` Environmentなし、Readiness実行0件を今回再確認。必要な3キー・署名秘密値・設定は引き続き外部設定待ち。実際の制限キーでcurrent-account読取ができることを確認してから実行する。確認不能ならゲートを失敗させたままにし、照合の省略や共通キーへの置換で通さない。
+- 切り戻し：変更コミットをrevertし、新規のReadiness実行を停止する。旧版の成功結果だけで接続準備完了を判断しない。DB・本番環境・既存注文に変更はない。
+
+一次資料：[アカウント取得](https://docs.stripe.com/api/accounts/retrieve?lang=node)、[APIキーと権限](https://docs.stripe.com/keys)。現行SDKの `accounts.retrieveCurrent()` が `GET /v1/account` を使うこともソースと通信テストで確認した。
 
 ## Automated flow
 
