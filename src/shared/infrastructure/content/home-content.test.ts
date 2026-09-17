@@ -36,7 +36,7 @@ describe("home content publication", () => {
   });
   it("accepts only local editorial photo paths and requires registered files to exist", () => {
     const item = { id: "sample", productSlug: "bloom-box-m", status: "approved", alt: "検証用", caption: "検証用" };
-    for (const src of ["/images/products/../secret.png", "https://untrusted.example/photo.png", "/images/products/test.svg"]) {
+    for (const src of ["/images/products/../secret.png", "https://untrusted.example/photo.png", "/images/products/test.svg", "/images/products/bloombox-blue-concept.png", "/images/products/unregistered-photo.jpg"]) {
       expect(homeContentSchema.safeParse({ ...homeContent, gallery: { ...homeContent.gallery, items: [{ ...item, src }] } }).success).toBe(false);
     }
     const photos = [...homeContent.gallery.items, ...homeContent.reviews.items.flatMap((item) => item.photo ? [item.photo] : [])];

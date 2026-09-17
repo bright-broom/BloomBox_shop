@@ -1,0 +1,11 @@
+.list { list-style: none; padding: 0; }
+.entry { overflow-wrap: anywhere; }
+.entry h2 { font-size: var(--text-label); }
+.change { border-top: 1px solid var(--line); margin-top: var(--space-5); padding-top: var(--space-4); }
+.change h3 { font-size: var(--text-body); }
+.values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); }
+.values dt, .identifiers dt { color: var(--ink-soft); font-size: var(--text-small); }
+.values dd, .identifiers dd { margin: var(--space-2) 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.identifiers { display: grid; gap: var(--space-3); }
+.pagination { display: flex; flex-wrap: wrap; gap: var(--space-5); }
+@media (max-width: 767px) { .values { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); } }
