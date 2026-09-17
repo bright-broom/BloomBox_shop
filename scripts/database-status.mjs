@@ -5,7 +5,7 @@ try {
   console.log(JSON.stringify(report));
   if (report.status !== "current") process.exitCode = 1;
 } catch (error) {
-  const known = ["INVALID_CONFIGURATION", "INVALID_LOCAL_SEQUENCE", "MIGRATION_HISTORY_MISMATCH"];
+  const known = ["INSPECTION_FORBIDDEN", "INSPECTION_FAILED", "INVALID_CONFIGURATION", "INVALID_LOCAL_SEQUENCE", "MIGRATION_HISTORY_MISMATCH"];
   const code = known.includes(error.message) ? error.message : "INSPECTION_FAILED";
   // Connection errors may contain credentials, hostnames or database messages.
   console.error(`Database schema inspection: ${code}`);

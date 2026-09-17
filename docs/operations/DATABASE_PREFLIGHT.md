@@ -6,29 +6,40 @@
 
 承認された接続先の秘密管理から `DATABASE_STATUS_URL` を環境変数として渡し、対象コミットの作業ディレクトリで `pnpm db:status` を実行する。URL・パスワードをIssue、文書、コマンド履歴に貼らない。通常の `DATABASE_URL` を自動流用しない。証跡には接続先の非機密な環境名と `git rev-parse HEAD` のSHAを別途記録し、URLは記録しない。
 
-- 既定は証明書検証付きTLS。URL query/hashは拒否し、接続オプションの曖昧な上書きを防ぐ。
+- 既定は証明書検証付きTLS。通常のNodeクライアントはURL query/hashを拒否する。認証channel binding付き接続には下記の標準クライアントを明示し、保護オプションを削除しない。
 - `DATABASE_STATUS_SSL_MODE=disable` は明示したloopbackテスト接続だけに許可。遠隔DBでは使えない。
 - 接続ロールは対象DBへのCONNECT、`bloombox`へのUSAGE、`bloombox.schema_migrations`へのSELECTがあればよい。migration所有者や顧客テーブルの読取権限は不要。ロールの作成・付与は本コマンドで行わない。
-- 接続時にread-onlyを指定し、repeatable-read/read-only transaction内で履歴だけを取得。SQLは実行せず、スキーマ・台帳の初期化もしない。接続10秒・各問い合わせ10秒の上限を設ける。
+- repeatable-read/read-only transaction内で履歴だけを取得。未適用migrationのSQLは実行せず、スキーマ・台帳の初期化もしない。タイムアウトは接続プールが拒否する起動パラメーターではなく、transaction内で`SET LOCAL`する。接続10秒・各問い合わせ10秒の上限を設ける。
 
 | 結果 | 終了コード | 対応 |
 | --- | --- | --- |
 | `current` | 0 | 同コミットのmigration履歴に一致。次の配備条件を確認する |
 | `pending` | 1 | JSONの`pending`に未適用ファイルを表示。適用担当が影響・戻し方を確認して別工程で適用する |
 | `MIGRATION_HISTORY_MISMATCH` | 1 | 適用履歴の欠番・重複・未知版・名前/checksum差異。配備を止め、対象環境/コミット/履歴を調査する |
+| `INSPECTION_FORBIDDEN` | 1 | 履歴の読取権限不足。承認された確認用接続先を用意し、アプリ用ロールを安易に拡張しない |
 | `INVALID_CONFIGURATION` / `INVALID_LOCAL_SEQUENCE` / `INSPECTION_FAILED` | 1 | 設定、コード側連番、接続/権限等を調査。成功扱いにしない |
 
 台帳が存在しない場合は`ledgerPresent: false`で全件未適用として返し、何も作成しない。任意のDBエラー文は接続先や秘密値を含む可能性があるため出力せず固定コードにする。JSONは件数とローカルの未適用ファイル名のみで、顧客情報・DBの任意文字列・接続先を含まない。
+
+## channel bindingと接続プールへの対応
+
+`DATABASE_STATUS_PSQL`に管理されたPostgreSQL標準クライアント`psql`の絶対パスを指定すると、そのクライアントを使う。PATHの名前だけでは受け付けない。PostgreSQL 16以降のクライアントを事前に用意する。
+
+この方式だけ、URLの`sslmode=require`または`verify-full`と`channel_binding=require`を受け付ける。TLSは常に`verify-full`へ強め、systemの信頼ストアを使い、channel bindingのrequireを維持する。重複指定、host/起動オプションの差し替え、保護無効化は拒否する。ローカルTLS無効モードとURLオプションは併用しない。接続値は子プロセスの環境へ渡し、引数・ログ・ファイルへ出力しない。
+
+psqlは`-X`で利用者の起動スクリプトを読み込まず、継承PG変数を除去して必要項目だけ設定する。SQLは固定、stdin経由、全体25秒・出力1 MiB制限。接続後の固定SQLは読取専用transaction内の履歴取得だけであり、台帳がなくても作成しない。
+
+標準クライアントとNodeクライアントの両方で、使い捨てDBの空台帳・未適用・不一致・権限取消を検証する。[公開準備の実確認](PUBLIC_READINESS_2026-09-18.md)を参照。TLSと信頼ストアの根拠は[PostgreSQL公式資料](https://www.postgresql.org/docs/16/libpq-connect.html#LIBPQ-CONNECT-SSLROOTCERT)。
 
 ## 判定の限界
 
 これは履歴照合であり、テーブルを手動変更した後の物理スキーマ差分、実効権限の網羅検査、暗号鍵、データの正当性、バックアップ、Stripe、販売開始の承認を証明しない。取得後に別作業でDBが変わる可能性があるため、適用直前/直後に同じSHAで再確認する。適用SQL自体のチェックサム検査は既存migration処理が引き続き行う。
 
-現在mainのファイルは0028まで。公開DBの0027適用は過去の記録であり、今回再確認した状態ではない。公開DBには接続していない。
+現在mainのファイルは0028まで。公開DBの0027適用は過去の記録であり、現在の確認値ではない。後続の公開DB読取検査では権限不足を確認し、適用履歴は取得できていない。
 
 ## 検証・戻し方
 
-通常15件と、使い捨てDBでの実PostgreSQL試験1件が成功。未初期化DB、正常な履歴、未適用の追加SQL、SELECT-onlyロール、不一致、CLI終了コードを確認。検査前後の台帳・サンプル行を比較し、追加SQLが適用されないことを確認した。CIの隔離DB/復元演習ステップでもこの検査を実行する。
+通常16件と、使い捨てDBでの実PostgreSQL試験2件（Node/psql）が成功。未初期化DB、正常な履歴、未適用の追加SQL、SELECT-onlyロール、権限取消、不一致、CLI終了コードを確認。検査前後の台帳・サンプル行を比較し、追加SQLが適用されないことを確認した。CIの隔離DB/復元演習ステップでもこの検査を実行する。
 
 通常suiteはDB試験を環境変数なしではskipする。実行する場合は専用loopback PostgreSQLの`postgres`管理DBを `TEST_RESTORE_DRILL_ADMIN_URL` に指定する。試験用DB/ロールはランダム名で作成し終了時に削除する。公開DBで試験しない。
 
@@ -37,3 +48,7 @@
 ## Issue再整理
 
 残存48件のうち、#121の「0026まで」を対象SHAの全migration（現時点0028）へ修正する。#137は権限付き調査・再処理・本文復元が実装済みのため、旧「実装待ち」表記を削除し、実Stripe/公開配備・取得期限外復旧・通知consumerの判断と保持条件を残す。これらを未完のまま閉じず、再実装を防ぐ。
+
+## 最小権限の接続準備
+
+履歴を読めない場合はアプリの権限を広げず、[履歴確認専用ロール](DATABASE_SCHEMA_READER.md)を別途準備する。全業務テーブルを読める既存のreadonlyロールはこの用途に使わない。

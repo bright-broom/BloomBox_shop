@@ -68,6 +68,7 @@ jobs:
           TEST_RESTORE_DRILL_ADMIN_URL: postgres://bloombox_test:bloombox_test@127.0.0.1:5432/postgres
         run: |
           export TEST_PG_DUMP="$(pg_config --bindir)/pg_dump"
+          export TEST_PSQL="$(pg_config --bindir)/psql"
           export TEST_PG_RESTORE="$(pg_config --bindir)/pg_restore"
           pnpm exec vitest run scripts/database-restore-drill.test.mjs scripts/database-status.test.mjs
       - name: Build production bundle
