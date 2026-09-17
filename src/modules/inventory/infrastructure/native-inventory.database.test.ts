@@ -2,9 +2,9 @@ import { CheckoutPreparationUnavailableError } from "@/modules/checkout/applicat
 import { StripeCheckoutSessionProvider, StripeSdkCheckoutApi, type StripeCheckoutSessionsClient } from "@/modules/checkout/infrastructure/stripe/stripe-checkout-session-provider";
 import type { StripeConfig } from "@/shared/infrastructure/config/stripe-config";
 import { StartCheckout } from "@/modules/checkout/application/start-checkout";
-import Stripe from "stripe";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import Stripe from "stripe";
 import { readFile } from "node:fs/promises";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
