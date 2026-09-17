@@ -13,6 +13,7 @@ const environment = {
 const events = ["checkout.session.completed", "checkout.session.async_payment_succeeded", "checkout.session.async_payment_failed", "checkout.session.expired",
   "payment_intent.succeeded", "payment_intent.payment_failed", "payment_intent.canceled", "refund.created", "refund.updated", "refund.failed", "charge.dispute.created", "charge.dispute.closed"];
 function fixture() {
+  const accounts = () => ({ retrieveCurrent: vi.fn(async () => ({ id: "acct_fixture", business_profile: { terms_of_service_url: "https://test.example.com/terms" } })) });
   const stored = new Map();
   const sessions = {
     create: vi.fn(async (request) => {
@@ -27,9 +28,9 @@ function fixture() {
     expire: vi.fn(async (id) => { stored.get(id).status = "expired"; return stored.get(id); }),
   };
   const clients = {
-    checkout: { checkout: { sessions } }, reconciliation: { events: { list: vi.fn(async () => []) } },
+    checkout: { accounts: accounts(), checkout: { sessions } }, reconciliation: { accounts: accounts(), events: { list: vi.fn(async () => []) } },
     readiness: {
-      accounts: { retrieveCurrent: vi.fn(async () => ({ id: "acct_fixture", business_profile: { terms_of_service_url: "https://test.example.com/terms" } })) },
+      accounts: accounts(),
       shippingRates: { retrieve: vi.fn(async () => ({ active: true, livemode: false, type: "fixed_amount", fixed_amount: { currency: "jpy" }, tax_behavior: "inclusive" })) },
       tax: { settings: { retrieve: vi.fn(async () => ({ livemode: false, status: "active" })) } },
       webhookEndpoints: { list: () => [{ url: "https://test.example.com/api/webhooks/stripe", status: "enabled", livemode: false, api_version: API_VERSION, enabled_events: events }] },
@@ -47,6 +48,7 @@ describe("Stripe shipping connection probe", () => {
       { size: "L", unitAmount: 8000, shippingAmount: 0, expectedTotal: 8000, cleanup: "expired" },
     ]);
     expect(f.sessions.expire).toHaveBeenCalledTimes(2);
+    for (const client of Object.values(f.clients)) expect(client.accounts.retrieveCurrent).toHaveBeenCalledOnce();
     for (const [request, options] of f.sessions.create.mock.calls) {
       expect(request.client_reference_id).toMatch(/^readiness_/);
       expect(request.metadata).toEqual({ readiness_probe: PROBE_MARKER });
@@ -75,6 +77,35 @@ describe("Stripe shipping connection probe", () => {
   it("does not create Sessions when account identity differs", async () => {
     const f = fixture(); f.clients.readiness.accounts.retrieveCurrent.mockResolvedValue({ id: "acct_other" });
     expect((await verifyStripeTestMode(environment, f.factory)).status).toBe("failed"); expect(f.sessions.create).not.toHaveBeenCalled();
+  });
+  it.each(["checkout", "reconciliation"])("rejects a %s key from another account before any probe writes", async (role) => {
+    const f = fixture();
+    f.clients[role].accounts.retrieveCurrent.mockResolvedValue({ id: "acct_another_private_account" });
+    const result = await verifyStripeTestMode(environment, f.factory);
+    expect(result.status).toBe("failed");
+    expect(result.failure.stage).toBe(`account_identity_${role}`);
+    expect(f.clients.readiness.shippingRates.retrieve).not.toHaveBeenCalled();
+    expect(f.sessions.create).not.toHaveBeenCalled();
+    expect(f.sessions.expire).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("acct_another_private_account");
+  });
+  it.each(["checkout", "reconciliation", "readiness"])("refuses an unverifiable %s account without leaking provider errors", async (role) => {
+    const f = fixture();
+    f.clients[role].accounts.retrieveCurrent.mockRejectedValue(new Error("rk_test_private_key private@example.test provider-payload"));
+    const result = await verifyStripeTestMode(environment, f.factory);
+    expect(result.status).toBe("failed");
+    expect(result.failure.stage).toBe(`account_identity_${role}`);
+    expect(f.clients.readiness.shippingRates.retrieve).not.toHaveBeenCalled();
+    expect(f.sessions.create).not.toHaveBeenCalled();
+    expect(f.sessions.expire).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toMatch(/rk_test_private_key|private@example|provider-payload/);
+  });
+  it.each([null, {}, { id: 42 }])("refuses a malformed account response: %j", async (response) => {
+    const f = fixture();
+    f.clients.checkout.accounts.retrieveCurrent.mockResolvedValue(response);
+    const result = await verifyStripeTestMode(environment, f.factory);
+    expect(result).toMatchObject({ status: "failed", failure: { stage: "account_identity_checkout" }, probes: [] });
+    expect(f.sessions.create).not.toHaveBeenCalled();
   });
   it.each(["shipping", "price", "quantity", "currency", "extra_shipping", "live_shipping"])("cleans up and fails when Stripe readback changes %s", async (field) => {
     const f = fixture(); const normal = f.sessions.retrieve.getMockImplementation();
