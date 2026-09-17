@@ -4,7 +4,6 @@ import type { StripeConfig } from "@/shared/infrastructure/config/stripe-config"
 import { StartCheckout } from "@/modules/checkout/application/start-checkout";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import Stripe from "stripe";
 import { readFile } from "node:fs/promises";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
@@ -280,6 +279,7 @@ describeDatabase("native inventory reservations", () => {
   });
 
   it.each(["mismatch", "denied"])("holds unrecorded reservations on account %s and recovers once identity is corrected", async (failure) => {
+    const { default: Stripe } = await import("stripe");
     const product = await stock(1), intent = await create.execute(input(product));
     await repo.claimCommerceProvider(intent.id, "STRIPE");
     const config: StripeConfig = {
