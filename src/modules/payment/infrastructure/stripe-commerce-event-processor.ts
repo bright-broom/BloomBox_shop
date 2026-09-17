@@ -1,3 +1,4 @@
+import { paymentStatusAfterRefund, resolveRefundState, type RefundStatus } from "../domain/refund-state";
 import { restoreLoyaltyQuote } from "@/modules/customer/public";
 import { InventoryUnavailableError, type InventoryReservations } from "@/modules/inventory/public";
 import type { CheckoutBuyerWriter } from "@/modules/customer/public";
@@ -432,7 +433,7 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
 
   private async processRefundEvent(event: VerifiedProviderEvent): Promise<void> {
     const payload = refundPayloadSchema.safeParse(event.payload);
-    if (!payload.success) throw new InvalidStripeCommerceEventError();
+    if (!payload.success || event.externalObjectId !== payload.data.id) throw new InvalidStripeCommerceEventError();
     const refundStatus = mapRefundStatus(payload.data.status, event.eventType);
 
     await this.sql.begin(async (transaction) => {
@@ -457,7 +458,7 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
         FOR UPDATE
       `;
       const existingRefund = existingRefunds[0];
-      let effectiveRefundStatus = refundStatus;
+      let effectiveRefundStatus: RefundStatus = refundStatus;
       if (existingRefund) {
         if (
           existingRefund.payment_id !== payment.id
@@ -466,14 +467,13 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
         ) {
           throw new InvalidStripeCommerceEventError();
         }
-        effectiveRefundStatus = resolveProviderState(
-          existingRefund.status,
+        effectiveRefundStatus = resolveRefundState(
+          z.enum(["REQUESTED", "PROCESSING", "SUCCEEDED", "FAILED", "CANCELLED"]).parse(existingRefund.status),
           new Date(existingRefund.updated_at),
           refundStatus,
           event.occurredAt,
-          isTerminalRefundStatus,
-        ) as typeof refundStatus;
-        if (effectiveRefundStatus !== existingRefund.status) {
+        );
+        if (effectiveRefundStatus !== existingRefund.status || (effectiveRefundStatus === refundStatus && event.occurredAt > new Date(existingRefund.updated_at))) {
           await transaction`
             UPDATE bloombox.refunds
             SET status = ${effectiveRefundStatus},
@@ -506,11 +506,7 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
       `;
       const refunded = toSafeInteger(totals[0].refunded);
       if (refunded > captured) throw new InvalidStripeCommerceEventError();
-      const paymentStatus = totals[0].has_open_dispute
-        ? "DISPUTED"
-        : refunded === 0
-          ? "CAPTURED"
-          : refunded === captured ? "REFUNDED" : "PARTIALLY_REFUNDED";
+      const paymentStatus = paymentStatusAfterRefund(captured, refunded, z.boolean().parse(totals[0].has_open_dispute));
       if (payment.status !== paymentStatus || toSafeInteger(payment.amount_refunded_minor ?? 0) !== refunded) {
         await transaction`
           UPDATE bloombox.payments
@@ -539,6 +535,11 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
           payment.currency,
           event.occurredAt,
         );
+      }
+      if (existingRefund?.status === "SUCCEEDED" && effectiveRefundStatus === "FAILED") {
+        await this.recordRefundLedger(transaction, payment.order_id, payment.id, payload.data.id,
+          payload.data.amount, payment.currency, event.occurredAt, "REFUND_REVERSAL");
+        await insertAudit(transaction, this.createId(), event, "payment.refund_reversed", payment.id);
       }
       await insertAudit(transaction, this.createId(), event, "payment.refund_updated", payment.id);
     });
@@ -671,13 +672,15 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
     amount: number,
     currency: string,
     occurredAt: Date,
+    kind: "REFUND" | "REFUND_REVERSAL" = "REFUND",
   ): Promise<void> {
     const transactionId = this.createId();
+    const revenueAmount = kind === "REFUND" ? amount : -amount;
     const inserted = await transaction`
       INSERT INTO bloombox.financial_transactions (
         id, order_id, payment_id, transaction_type, currency, external_reference, occurred_at
       ) VALUES (
-        ${transactionId}, ${orderId}, ${paymentId}, 'REFUND', ${currency},
+        ${transactionId}, ${orderId}, ${paymentId}, ${kind}, ${currency},
         ${externalReference}, ${occurredAt}
       ) ON CONFLICT DO NOTHING
       RETURNING id
@@ -687,8 +690,8 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
       INSERT INTO bloombox.ledger_entries (
         id, financial_transaction_id, account_code, signed_amount_minor, currency
       ) VALUES
-        (${this.createId()}, ${transactionId}, 'ORDER_REVENUE', ${amount}, ${currency}),
-        (${this.createId()}, ${transactionId}, 'STRIPE_CLEARING', ${-amount}, ${currency})
+        (${this.createId()}, ${transactionId}, 'ORDER_REVENUE', ${revenueAmount}, ${currency}),
+        (${this.createId()}, ${transactionId}, 'STRIPE_CLEARING', ${-revenueAmount}, ${currency})
     `;
   }
 
@@ -726,10 +729,12 @@ async function insertAudit(
 }
 
 function mapRefundStatus(status: string | null, eventType: string) {
-  if (eventType === "refund.failed" || status === "failed") return "FAILED" as const;
+  if (eventType === "refund.failed" && status !== "failed") throw new InvalidStripeCommerceEventError();
+  if (status === "failed") return "FAILED" as const;
   if (status === "succeeded") return "SUCCEEDED" as const;
   if (status === "canceled") return "CANCELLED" as const;
-  return "PROCESSING" as const;
+  if (status === "pending" || status === "requires_action") return "PROCESSING" as const;
+  throw new InvalidStripeCommerceEventError();
 }
 
 function mapDisputeStatus(status: string) {
@@ -738,10 +743,6 @@ function mapDisputeStatus(status: string) {
   if (status === "closed") return "CLOSED" as const;
   if (["under_review", "warning_under_review"].includes(status)) return "UNDER_REVIEW" as const;
   return "NEEDS_RESPONSE" as const;
-}
-
-function isTerminalRefundStatus(status: string): boolean {
-  return ["SUCCEEDED", "FAILED", "CANCELLED"].includes(status);
 }
 
 function isTerminalDisputeStatus(status: string): boolean {
