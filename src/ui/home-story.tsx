@@ -56,7 +56,7 @@ export function HomeJourney() {
   const icons = ["flower", "pen", "gift"] as const;
   const accents = ["leaf", "heart", "sparkle"] as const;
   return <section id="guide" className="how-it-works home-journey section-shell" aria-labelledby="guide-title">
-    <div className="dark-section-heading"><div><p className="eyebrow">{copy.eyebrow}</p><h2 id="guide-title">{copy.title}</h2></div><p>{copy.description}</p></div>
+    <div className="journey-heading"><div><p className="eyebrow">{copy.eyebrow}</p><h2 id="guide-title">{copy.title}</h2></div><p>{copy.description}</p></div>
     <ol className="home-journey-steps">{copy.steps.map((step, index) => <li key={step.title}>
       <div className="home-step-art" aria-hidden="true"><span className="home-step-number">0{index + 1}</span>
         <HomeIcon className="home-step-main" name={icons[index]} size={72} />
