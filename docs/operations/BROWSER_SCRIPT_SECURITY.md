@@ -21,6 +21,7 @@ Next.js 16.3.4同梱のCSP/Proxy/connectionガイドを確認。実験的SRIや�
 - 関連テストに未承認script、nonce偽装、重複CSP、送信先の拡大、キャッシュ許可、Report-Onlyのみの設定を拒否するケースを追加。
 - PlaywrightのChromiumで実際のproduction buildを起動し、購入・ログイン画面、hydration、nonceの毎回更新、不正スクリプト・外部送信の遮断を確認。
 - ローカルの架空データで、ギフト設定→カート→Server Action→注文者入力→確認→ダミー決済完了を確認。実Stripe・実Googleログインの検証とは区別する。
+- 最新main統合後の追加確認：実クリックでイベント属性のコードが動かず、外部iframeも通信しないことをChromiumで確認。購入のクライアント画面遷移から完了まで、ページ例外とCSP実行/読込/接続エラーが0件であることを回帰試験へ追加。ブラウザー4シナリオすべて成功。
 - 通常テスト1,474件成功、DB等287件はローカル未設定によりskip。静的検査・型検査・lint・production build成功。DB変更はない。
 - `parse5@8.0.1`（MIT）：HTMLの文字参照・テンプレート等を正しく検査するため、監視・検証用のdevDependencyとして採用。
 - `@playwright/test@1.62.0`（Apache-2.0）：実ブラウザーでCSPの遮断と正常操作を確認するため採用。npm registryの公開版を固定。リリース直後の1.63.0は採用しない。

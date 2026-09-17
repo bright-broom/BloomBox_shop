@@ -34,24 +34,31 @@ test("purchase and login documents hydrate with unique nonce policies", async ({
   expect(errors).toEqual([]);
 });
 
-test("browser blocks injected inline code, external script and foreign fetch", async ({ page }) => {
-  let externalScriptRequested = false;
-  await page.route("https://unapproved.invalid/**", async (route) => { externalScriptRequested = true; await route.abort(); });
+test("browser blocks injected code, event handlers, external frames and foreign fetch", async ({ page }) => {
+  let externalRequestMade = false;
+  await page.route("https://unapproved.invalid/**", async (route) => { externalRequestMade = true; await route.abort(); });
   await page.route("**/cart", async (route) => {
     const response = await route.fetch();
-    const body = (await response.text()).replace("</head>", '<script>window.__injected=true</script><script src="https://unapproved.invalid/injected.js"></script></head>');
+    const body = (await response.text())
+      .replace("</head>", '<script>window.__injected=true</script><script src="https://unapproved.invalid/injected.js"></script></head>')
+      .replace("</body>", '<button id="injected-handler" onclick="window.__handlerInjected=true">Injected test control</button><iframe src="https://unapproved.invalid/frame"></iframe></body>');
     await route.fulfill({ response, body });
   });
   await page.goto("/cart");
   await expect(page.locator("h1")).toBeVisible();
   expect(await page.evaluate(() => window.__injected)).toBeUndefined();
+  await page.locator("#injected-handler").click();
+  expect(await page.evaluate(() => window.__handlerInjected)).toBeUndefined();
   expect(await page.evaluate(async () => {
     try { await fetch("https://unapproved.invalid/collect"); return "allowed"; } catch { return "blocked"; }
   })).toBe("blocked");
-  expect(externalScriptRequested).toBe(false);
+  expect(externalRequestMade).toBe(false);
 });
 
 test("gift entry, server action and client navigation remain usable", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (/violates.*Content Security Policy|Refused to (execute|load|connect)/i.test(message.text())) errors.push(message.text()); });
   await page.goto("/gift/prod_bloombox_m");
   await page.locator("#recipientName").fill("検証用受取人");
   await page.locator("#giftMessage").fill("セキュリティ検証用の架空データ");
@@ -71,4 +78,5 @@ test("gift entry, server action and client navigation remain usable", async ({ p
   await expect(page).toHaveURL(/\/checkout\/test\/payment$/);
   await page.getByRole("button", { name: "成功シナリオで完了" }).click();
   await expect(page).toHaveURL(/\/checkout\/test\/complete$/);
+  expect(errors).toEqual([]);
 });
