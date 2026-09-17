@@ -23,3 +23,6 @@ provider data must be runtime-validated at its boundary, and provider SDKs must
 remain in infrastructure code. Secrets and customer or recipient PII must not be
 committed or logged. Production deployment additionally requires the protected
 release gate described in `docs/operations/RELEASE.md`.
+
+Browser script enforcement, monitor coverage, verification, and deployment limits
+are documented in [BROWSER_SCRIPT_SECURITY.md](docs/operations/BROWSER_SCRIPT_SECURITY.md).

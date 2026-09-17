@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { Noto_Sans_JP } from "next/font/google";
 import Link from "next/link";
 import { siteContent } from "@/shared/infrastructure/content/site-content";
@@ -43,7 +44,9 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // Nonces are per response; prerendered HTML cannot carry the request's nonce.
+  await connection();
   const advertising = advertisingPublicSettings();
   return (
     <html lang="ja">

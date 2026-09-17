@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
+import { verifyBrowserPolicy } from "./verify-browser-policy.mjs";
 
 export const PUBLIC_PREVIEW_ROUTES = ["/", "/flowers", "/flowers/bloom-box-m", "/flowers/bloom-box-l", "/gift/prod_bloombox_m", "/gift/prod_bloombox_l", "/cart", "/checkout/test", "/checkout/test/review", "/checkout/test/payment", "/checkout/test/complete", "/about", "/guide", "/faq", "/shipping-returns", "/privacy", "/terms", "/commercial-transactions", "/contact", "/robots.txt", "/sitemap.xml", "/manifest.webmanifest"];
 
@@ -73,6 +74,7 @@ export async function verifyPublicPreview(origin, log = console.log) {
   for (const path of PUBLIC_PREVIEW_ROUTES) {
     const page = await get(base, path);
     verifyDocument(path, page.body);
+    if (!/\.(txt|xml|webmanifest)$/.test(path)) verifyBrowserPolicy(page.body, page.headers, path);
     pages.set(path, page); log(`PASS ${path}`);
   }
   const home = pages.get("/");

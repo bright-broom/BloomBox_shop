@@ -1,5 +1,10 @@
 # BLOOM BOX 開発引き継ぎ
 
+## ブラウザースクリプト防御（2026-09-18）
+
+nonce CSP、未承認script/CSP低下の公開監視、実ブラウザー回帰試験を追加。
+[実装・検証・配備順・限界](BROWSER_SCRIPT_SECURITY.md)を参照。main/Environment保護はprivateプラン制約で未完、ActionsのSHA固定はAPI適用済み。公開配備・商用開始とは区別する。
+
 引き継ぎ統合：2026-09-18（JST）、main基準 `c586175e6efa3834a7a6074aadc9d1e868e8c225`（PR #201）。本体のローカル認証・管理画面の記録と、mainのDB復元演習を統合した。下記の実Google・DB検証は実施日の履歴であり、今回再実施したものではない。残課題の正本は [BACKLOG.md](BACKLOG.md)。[9月18日のIssue見直し](ISSUE_REVIEW_2026-09-18.md)に現在の優先順・必要入力・稼働SHAを記録。過去の全件分類は [9月17日の監査](ISSUE_AUDIT_2026-09-17.md)を参照する。
 
 ## 復元演習の追加（2026-09-17、Issue #130）

@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
@@ -8,6 +8,7 @@ export default defineConfig({
     },
   },
   test: {
+    exclude: [...configDefaults.exclude, "browser-tests/**"],
     environment: "node",
     // Auth.js uses Next's bundler-resolved extensionless imports; exercise it through Vite as Next does.
     server: { deps: { inline: ["next-auth"] } },
