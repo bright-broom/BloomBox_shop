@@ -5,14 +5,14 @@ import { describe, expect, it, vi } from "vitest";
 const workflow = (name) => readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), "utf8");
 
 // Run the checked-in GitHub Script with API doubles; no network, tokens, or artifacts.
-async function runStep(file, name, records = []) {
+async function runStep(file, name, records = [], statusComments = []) {
   const step = workflow(file).split("      - name: ").find((part) => part.startsWith(`${name}\n`));
   if (!step?.includes("          script: |\n")) throw new Error(`Missing script step: ${name}`);
   const script = step.split("          script: |\n")[1]
     .split("\n").map((line) => line.replace(/^ {12}/, "")).join("\n");
   const issues = Object.fromEntries(["listForRepo", "listComments", "create", "update", "createComment", "updateComment"]
     .map((method) => [method, vi.fn()]));
-  const github = { paginate: vi.fn().mockResolvedValue(records), rest: { issues } };
+  const github = { paginate: vi.fn((method) => Promise.resolve(method === issues.listComments && file !== "ci-failure-triage" ? statusComments : records)), rest: { issues } };
   await runInNewContext(`(async () => {\n${script}\n})()`, {
     github,
     context: {
@@ -57,6 +57,35 @@ for (const incident of incidents) {
       const api = await runStep(incident.file, incident.open, [...unrelated(), { number: 99, user: ownBot, body: incident.marker }]);
       expect(api.create).not.toHaveBeenCalled();
       expect(api.update).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ issue_number: 99, state: "open" }));
+    });
+    it("preserves operator evidence in an existing incident body", async () => {
+      const body = `${incident.marker}\nInitial failure\n## 調査記録\n担当・対象SHA・復旧方針`;
+      const api = await runStep(incident.file, incident.open, [{ number: 99, user: ownBot, body }]);
+      expect(api.update.mock.calls[0][0]).not.toHaveProperty("body");
+      expect(api.createComment).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+        issue_number: 99, body: expect.stringContaining(`${incident.marker}<!-- latest-status -->`),
+      }));
+      expect(api.createComment.mock.calls[0][0].body).not.toContain("private-payload");
+    });
+    it("refreshes one dedicated bot comment without changing foreign or operator comments", async () => {
+      const marker = `${incident.marker}<!-- latest-status -->`;
+      const comments = [
+        ...foreignAuthors.map((user, id) => ({ id, user, body: marker })),
+        { id: 70, user: ownBot, body: "Recovery or unrelated comment" },
+        { id: 71, user: ownBot, body: marker + "\nOld run" },
+      ];
+      const records = [{ number: 99, user: ownBot, body: incident.marker }];
+      const first = await runStep(incident.file, incident.open, records, comments);
+      expect(first.update).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ issue_number: 99, state: "open" }));
+      expect(first.update.mock.calls[0][0]).not.toHaveProperty("body");
+      expect(first.createComment).not.toHaveBeenCalled();
+      expect(first.updateComment).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ comment_id: 71 }));
+      const updated = first.updateComment.mock.calls[0][0].body;
+      expect(updated).toContain("/actions/runs/123");
+      expect(updated).not.toContain("private-payload");
+      const second = await runStep(incident.file, incident.open, records, [{ id: 71, user: ownBot, body: updated }]);
+      expect(second.createComment).not.toHaveBeenCalled();
+      expect(second.updateComment.mock.calls[0][0].body).toBe(updated);
     });
     it("does not close or comment on unrelated issues on recovery", async () => {
       const api = await runStep(incident.file, incident.close, unrelated());
