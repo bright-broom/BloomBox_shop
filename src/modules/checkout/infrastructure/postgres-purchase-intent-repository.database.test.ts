@@ -65,7 +65,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
     const intentId = purchaseIntentId(randomUUID());
     const intent = PurchaseIntent.create({
       id: intentId,
-      displayId: `BBI-20260821-${intentId.slice(0, 4).toUpperCase()}`,
+      displayId: `BBI-20260821-${intentId.toUpperCase()}`,
       item: {
         productId: catalogProductReference("prod_haru_01"),
         externalProductReference: commerceProductReference("gid://shopify/ProductVariant/101"),
@@ -167,7 +167,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
     const paymentIntentId = `pi_${intentId.replaceAll("-", "")}`;
     const intent = PurchaseIntent.create({
       id: intentId,
-      displayId: `BBI-20260821-${intentId.slice(0, 4).toUpperCase()}`,
+      displayId: `BBI-20260821-${intentId.toUpperCase()}`,
       item: {
         productId: catalogProductReference("prod_haru_01"),
         externalProductReference: commerceProductReference("gid://shopify/ProductVariant/101"),
@@ -558,7 +558,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
     const createdAt = new Date("2026-06-01T00:00:00.000Z");
     const intent = PurchaseIntent.create({
       id: intentId,
-      displayId: `BBI-20260601-${intentId.slice(0, 4).toUpperCase()}`,
+      displayId: `BBI-20260601-${intentId.toUpperCase()}`,
       item: {
         productId: catalogProductReference("prod_retention_01"),
         externalProductReference: commerceProductReference("gid://shopify/ProductVariant/999"),
