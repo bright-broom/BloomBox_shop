@@ -84,7 +84,10 @@ jobs:
               state: "all",
               per_page: 100,
             });
-            const existing = issues.find((issue) => !issue.pull_request && issue.body?.includes(marker));
+            const existing = issues.find((issue) =>
+              !issue.pull_request && issue.user?.type === "Bot"
+              && issue.user?.login === "github-actions[bot]" && issue.body?.includes(marker),
+            );
 
             if (existing) {
               await github.rest.issues.update({
@@ -115,7 +118,10 @@ jobs:
               state: "open",
               per_page: 100,
             });
-            const existing = issues.find((issue) => !issue.pull_request && issue.body?.includes(marker));
+            const existing = issues.find((issue) =>
+              !issue.pull_request && issue.user?.type === "Bot"
+              && issue.user?.login === "github-actions[bot]" && issue.body?.includes(marker),
+            );
 
             if (existing) {
               await github.rest.issues.createComment({
