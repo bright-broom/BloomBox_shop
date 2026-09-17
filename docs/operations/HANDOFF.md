@@ -77,6 +77,10 @@
 
 セルフサービスは2026-09-17に公開URLへ反映済み。SHA `259356e`、DB 0027、暗号鍵・専用サポート接続、管理者1名の本人紐付けを確認。通常1,200件・隔離DB235件に加えて実Google／お気に入り保存を確認。[公開検証・復旧・残件](CUSTOMER_SELF_SERVICE_RELEASE_2026-09-17.md)。
 
+## 公開リポジトリの情報管理（2026-09-17）
+
+#114 の [Actions・情報管理監査](PUBLIC_REPOSITORY_AUDIT_2026-09-17.md)に、fork / workflow_run の権限、Secret 保護の実設定、Artifact メタデータ、公開される情報、bot 記録の操作範囲を記録。ログ・履歴全体の非漏えい証明ではなく、保持期限・担当者・復旧演習は残る。
+
 ## 移行文書・監視の現在地（2026-09-17）
 
 正本の公開先は `bloom-box-shop-ybb9`。GitHub変数 `PRODUCTION_BASE_URL` も同originを再確認。[RELEASE.md](RELEASE.md) の配備先・SHA照合と [公開確認記録](PUBLIC_PREVIEW_VERIFICATION_2026-09-17.md) を参照。旧 `bloom-box-shop` のローカルVercel紐付けで配備しない。Shopify名の運用文書は既存取引・旧アダプター向けの契約記録として保持し、現行自作Commerceの導入手順と区別する。

@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import postgres from "postgres";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AesGcmDataProtector } from "@/shared/infrastructure/security/aes-gcm-data-protector";
 import { withNativeFulfillmentOperator } from "@/shared/infrastructure/security/operator-auth/native-fulfillment-transaction";
 import type { DatabaseTransaction } from "@/shared/infrastructure/database/postgres-client";
@@ -42,6 +42,12 @@ suite("native fulfillment transactional operations and least privilege", () => {
     await sql.unsafe(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'test_native_fulfillment') THEN CREATE ROLE test_native_fulfillment LOGIN PASSWORD 'test_only'; END IF; END $$`);
     await sql.unsafe("GRANT bloombox_native_fulfillment TO test_native_fulfillment");
     await sql`INSERT INTO bloombox.native_fulfillment_operators (operator_id, enabled, valid_until) VALUES (${actor.operatorId}, true, clock_timestamp() + interval '1 hour')`;
+  });
+  beforeEach(async () => {
+    // A concurrent READY/HOLD test may leave an ON_HOLD order. Keep every test's
+    // order graph isolated so pagination is independent of test order and race winners.
+    // The guarded localhost test database is disposable; operator grants remain intact.
+    await sql`TRUNCATE bloombox.orders CASCADE`;
   });
   afterAll(async () => { await staff.end({ timeout: 5 }); await sql.end({ timeout: 5 }); });
 
