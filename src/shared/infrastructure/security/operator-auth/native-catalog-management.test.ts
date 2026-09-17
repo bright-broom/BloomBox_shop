@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
-import { changeManagedCatalog, readManagedCatalog } from "./native-catalog-management";
+import { changeManagedCatalog, readManagedCatalog, readManagedCatalogHistory } from "./native-catalog-management";
 const mocks=vi.hoisted(()=>({auth:vi.fn(),database:vi.fn(),transaction:vi.fn(),save:vi.fn(),change:vi.fn()}));
 vi.mock("./operator-auth",()=>({getOperatorAuth:mocks.auth}));
 vi.mock("../../database/database-connections",()=>({getCatalogManagerDatabaseClient:mocks.database}));
@@ -32,4 +32,14 @@ describe("native management trust boundary",()=>{
     if(kind==="fraction")f.set("delta","1.5");if(kind==="blank")f.set("delta","");if(kind==="file")f.set("reason",new Blob(["RECEIVED"]));if(kind==="extra")f.set("authorized","true");
     await expect(changeManagedCatalog(f,origin)).rejects.toMatchObject({code:"INVALID"});expect(mocks.change).not.toHaveBeenCalled();
   });
+  it("authorizes history searches even without a product and rejects customer or unbound sessions", async () => {
+    await expect(readManagedCatalogHistory({kind:"catalog"})).resolves.toBeNull();
+    expect(mocks.transaction).toHaveBeenCalledOnce();
+    mocks.database.mockClear(); mocks.auth.mockReturnValue(null);
+    await expect(readManagedCatalogHistory({kind:"catalog",productId:randomUUID()})).rejects.toMatchObject({code:"DENIED"});
+    const s=service(); s.config.bindings=[]; mocks.auth.mockReturnValue(s);
+    await expect(readManagedCatalogHistory({kind:"stock"})).rejects.toMatchObject({code:"DENIED"});
+    expect(mocks.database).not.toHaveBeenCalled();
+  });
+
 });

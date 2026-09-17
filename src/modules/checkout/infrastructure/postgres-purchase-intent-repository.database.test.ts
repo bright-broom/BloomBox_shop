@@ -56,8 +56,8 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       ORDER BY version
     `;
 
-    expect(rows).toHaveLength(27);
-    expect(rows.map((row) => row.version)).toEqual(["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025", "0026", "0027"]);
+    expect(rows).toHaveLength(28);
+    expect(rows.map((row) => row.version)).toEqual(["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025", "0026", "0027", "0028"]);
     expect(rows.every((row) => /^[0-9a-f]{64}$/.test(row.checksum))).toBe(true);
   });
 
@@ -65,7 +65,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
     const intentId = purchaseIntentId(randomUUID());
     const intent = PurchaseIntent.create({
       id: intentId,
-      displayId: `BBI-20260821-${intentId.slice(0, 4).toUpperCase()}`,
+      displayId: `BBI-20260821-${intentId.toUpperCase()}`,
       item: {
         productId: catalogProductReference("prod_haru_01"),
         externalProductReference: commerceProductReference("gid://shopify/ProductVariant/101"),
@@ -167,7 +167,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
     const paymentIntentId = `pi_${intentId.replaceAll("-", "")}`;
     const intent = PurchaseIntent.create({
       id: intentId,
-      displayId: `BBI-20260821-${intentId.slice(0, 4).toUpperCase()}`,
+      displayId: `BBI-20260821-${intentId.toUpperCase()}`,
       item: {
         productId: catalogProductReference("prod_haru_01"),
         externalProductReference: commerceProductReference("gid://shopify/ProductVariant/101"),
@@ -558,7 +558,7 @@ describeDatabase("PostgreSQL commerce foundation", () => {
     const createdAt = new Date("2026-06-01T00:00:00.000Z");
     const intent = PurchaseIntent.create({
       id: intentId,
-      displayId: `BBI-20260601-${intentId.slice(0, 4).toUpperCase()}`,
+      displayId: `BBI-20260601-${intentId.toUpperCase()}`,
       item: {
         productId: catalogProductReference("prod_retention_01"),
         externalProductReference: commerceProductReference("gid://shopify/ProductVariant/999"),

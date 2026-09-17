@@ -10,7 +10,7 @@ describe("separate local login destinations", () => {
     expect(loginDestination("/operations/catalog", "customer")).toBe("/account");
     expect(loginDestination("/account", "operator")).toBe("/operations");
     expect(loginDestination(`/operations/customers/${id}`, "operator")).toBe(`/operations/customers/${id}`);
-    for (const path of ["/operations/orders", "/operations/reports", "/operations/settings"]) {
+    for (const path of ["/operations/orders", "/operations/reports", "/operations/settings", "/operations/catalog/history"]) {
       expect(loginDestination(path,"operator")).toBe(path);
       expect(loginDestination(path,"customer")).toBe("/account");
     }
@@ -20,8 +20,18 @@ describe("separate local login destinations", () => {
     }
     expect(loginDestination('/account/export','customer')).toBe('/account');
     expect(loginDestination('/operations/requests','operator')).toBe('/operations/requests');
+    expect(loginHref("operator", "/operations/catalog/history")).toBe("/operations/login?next=%2Foperations%2Fcatalog%2Fhistory");
+    expect(loginDestination("/operations/catalog/history?next=https://evil.example", "operator")).toBe("/operations");
     expect(loginDestination("/operations/unknown", "operator")).toBe("/operations");
     expect(loginHref("operator", "/operations/catalog")).toBe("/operations/login?next=%2Foperations%2Fcatalog");
+  });
+  it("returns operators only to validated native fulfillment routes", () => {
+    for (const path of ["/operations/native-fulfillments", `/operations/native-fulfillments/${id}`]) {
+      expect(loginDestination(path, "operator")).toBe(path);
+      expect(loginDestination(path, "customer")).toBe("/account");
+    }
+    for (const path of ["/operations/native-fulfillments/invalid", `/operations/native-fulfillments/${id}?next=https://evil.example`, "/operations/native-fulfillments/%2e%2e"])
+      expect(loginDestination(path, "operator")).toBe("/operations");
   });
   it.each(["customer", "operator"] as const)("validates callback origin and logout destination for %s", (area) => {
     const origin = "https://shop.example", home = area === "customer" ? "/account" : "/operations";
