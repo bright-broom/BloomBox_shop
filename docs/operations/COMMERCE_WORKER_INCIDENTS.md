@@ -20,6 +20,7 @@ Issueやチャットには、表示ID・購入準備ID・イベントIDだけを
 - アプリの構造化ログで、`event=unexpected_error`、`operation=reconcile_stripe_events` の `errorType` と `errorId` を確認します。Stripe障害、DB接続、Stripeの件数上限（`StripeReconciliationLimitError`、`StripeCheckoutLookupLimitError`）などが原因です。
 - 原因が解消すれば、次の実行で自動的に回復し、Issueは閉じます。DBを手で変更する必要はありません。
 - 件数上限の変更や不具合の修正は、PRで行います。
+- `StripeCheckoutLookupAccountError`：未記録決済の照合前にCheckoutキー自身のアカウントを確認できませんでした。`STRIPE_ACCOUNT_ID` とキーの所属、`GET /v1/account` の読取権限、Stripeへの接続を確認します。未確認の一覧から在庫を解放せず、設定を修正して次のWorkerで再試行します。全権限キーへの切替や在庫の手動解放で回避しません。キー・API応答・個人情報を公開Issueへ貼らないでください。
 
 ## B. 失敗した通知（failed Inbox events）
 

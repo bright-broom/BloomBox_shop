@@ -21,7 +21,7 @@ import { CancelPurchaseIntent, type CheckoutSessionCanceller } from "@/modules/c
 import { PostgresPurchaseIntentRepository } from "@/modules/checkout/infrastructure/postgres-purchase-intent-repository";
 import { PostgresCheckoutBuyerWriter } from "@/modules/customer/infrastructure/postgres-checkout-buyer-writer";
 import { StripeCommerceEventProcessor } from "@/modules/payment/infrastructure/stripe-commerce-event-processor";
-import { StripeUnrecordedCheckoutRecovery, type StripeCheckoutSessionFinder } from "@/modules/payment/infrastructure/stripe-unrecorded-checkout-recovery";
+import { StripeUnrecordedCheckoutRecovery, StripeSdkCheckoutSessionFinder, StripeCheckoutLookupAccountError, sdkCheckoutSessionList, type StripeCheckoutSessionFinder } from "@/modules/payment/infrastructure/stripe-unrecorded-checkout-recovery";
 import { PostgresCommerceWorkerAttention } from "@/modules/payment/infrastructure/postgres-commerce-worker-attention";
 import { PostgresDataRetentionJob } from "@/shared/infrastructure/database/data-retention-job";
 import { AesGcmDataProtector } from "@/shared/infrastructure/security/aes-gcm-data-protector";
@@ -369,6 +369,49 @@ describeDatabase("native inventory reservations", () => {
     expect(await sql`SELECT id FROM bloombox.audit_logs WHERE resource_id = ${intent.id} AND action = 'checkout.expired.unrecorded_session'`).toHaveLength(1);
     await create.execute(input(id));
     expect(await balance(id)).toEqual({ on_hand: 1, reserved: 1 });
+  });
+
+  it.each(["mismatch", "denied"])("holds unrecorded reservations on account %s and recovers once identity is corrected", async (failure) => {
+    const { default: Stripe } = await import("stripe");
+    const product = await stock(1), intent = await create.execute(input(product));
+    await repo.claimCommerceProvider(intent.id, "STRIPE");
+    const config: StripeConfig = {
+      mode: "test", checkoutSecretKey: "rk_test_fixture", reconciliationSecretKey: "rk_test_events",
+      webhookSecret: "whsec_fixture", accountId: "acct_expected", shippingRateId: "shr_fixture",
+      taxBehavior: "inclusive", automaticTaxEnabled: true, termsAcceptance: "required",
+      allowedCheckoutHostnames: ["checkout.stripe.com"], publicOrigin: "https://shop.example.com", apiVersion: "2026-07-29.dahlia",
+    };
+    let corrected = false;
+    const paths: string[] = [];
+    const stripe = new Stripe(config.checkoutSecretKey, { maxNetworkRetries: 0, telemetry: false,
+      httpClient: Stripe.createFetchHttpClient(async (input) => {
+        const path = new URL(String(input)).pathname; paths.push(path);
+        if (path === "/v1/account") {
+          if (!corrected && failure === "denied") return new Response(JSON.stringify({ error: { message: "denied" } }), { status: 403 });
+          return new Response(JSON.stringify({ id: corrected ? config.accountId : "acct_other" }));
+        }
+        return new Response(JSON.stringify({ data: [], has_more: false }));
+      }) });
+    const finder = new StripeSdkCheckoutSessionFinder(config, sdkCheckoutSessionList(config, stripe));
+    const recovery = new StripeUnrecordedCheckoutRecovery(sql, finder, (tx) => new PostgresInventoryReservations(tx),
+      () => new Date(intent.expiresAt.getTime() + 20 * 60 * 1000));
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await expect(recovery.execute()).rejects.toBeInstanceOf(StripeCheckoutLookupAccountError);
+      expect(await balance(product)).toEqual({ on_hand: 1, reserved: 1 });
+      expect((await repo.findById(intent.id))?.status).toBe("READY_FOR_CHECKOUT");
+      expect(await sql`SELECT id FROM bloombox.inventory_movements WHERE purchase_intent_id = ${intent.id} AND kind = 'RELEASED'`).toHaveLength(0);
+      expect(await sql`SELECT id FROM bloombox.audit_logs WHERE resource_id = ${intent.id} AND action = 'checkout.expired.provider_lookup'`).toHaveLength(0);
+      expect(await sql`SELECT id FROM bloombox.outbox_events WHERE aggregate_id = ${intent.id} AND event_type = 'checkout.purchase_intent.expired'`).toHaveLength(0);
+    }
+    expect(paths).toEqual(["/v1/account", "/v1/account"]);
+    corrected = true;
+    await recovery.execute();
+    await recovery.execute();
+    expect(await balance(product)).toEqual({ on_hand: 1, reserved: 0 });
+    expect((await repo.findById(intent.id))?.status).toBe("EXPIRED");
+    expect(await sql`SELECT id FROM bloombox.inventory_movements WHERE purchase_intent_id = ${intent.id} AND kind = 'RELEASED'`).toHaveLength(1);
+    expect(await sql`SELECT id FROM bloombox.audit_logs WHERE resource_id = ${intent.id} AND action = 'checkout.expired.provider_lookup'`).toHaveLength(1);
+    expect(await sql`SELECT id FROM bloombox.outbox_events WHERE aggregate_id = ${intent.id} AND event_type = 'checkout.purchase_intent.expired'`).toHaveLength(1);
   });
 
   it("settles an expired unrecorded Stripe checkout from a provider lookup and never releases one that could still be paid", async () => {

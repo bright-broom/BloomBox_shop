@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
+import Stripe from "stripe";
 import type { StripeConfig } from "@/shared/infrastructure/config/stripe-config";
 import {
   decideUnrecordedCheckout,
   MAX_CHECKOUT_SESSIONS_PER_LOOKUP,
   StripeCheckoutLookupLimitError,
   StripeCheckoutLookupResponseError,
+  StripeCheckoutLookupAccountError,
   StripeSdkCheckoutSessionFinder,
+  sdkCheckoutSessionList,
   type StripeCheckoutSessionList,
 } from "./stripe-unrecorded-checkout-recovery";
 
@@ -76,6 +79,72 @@ describe("StripeSdkCheckoutSessionFinder", () => {
     const finder = new StripeSdkCheckoutSessionFinder(stripeConfig(), listOf(many));
     await expect(finder.findByPurchaseReference(purchaseIntentId, new Date(0), new Date(1_000)))
       .rejects.toBeInstanceOf(StripeCheckoutLookupLimitError);
+  });
+});
+
+describe("unrecorded checkout SDK account boundary", () => {
+  const from = new Date("2026-09-13T00:00:00Z"), to = new Date("2026-09-14T00:00:00Z");
+  function finder(fetcher: typeof fetch) {
+    const config = stripeConfig();
+    const stripe = new Stripe(config.checkoutSecretKey, { maxNetworkRetries: 0, telemetry: false,
+      httpClient: Stripe.createFetchHttpClient(fetcher) });
+    return new StripeSdkCheckoutSessionFinder(config, sdkCheckoutSessionList(config, stripe));
+  }
+  it("rejects a different account before an empty Session list can release inventory", async () => {
+    const paths: string[] = [];
+    const lookup = finder(async (input) => {
+      const path = new URL(String(input)).pathname; paths.push(path);
+      return new Response(JSON.stringify(path === "/v1/account" ? { id: "acct_other" } : { data: [], has_more: false }));
+    });
+    await expect(lookup.findByPurchaseReference(purchaseIntentId, from, to)).rejects.toBeInstanceOf(StripeCheckoutLookupAccountError);
+    expect(paths).toEqual(["/v1/account"]);
+  });
+  it.each(["denied", "missing", "unavailable"])("holds lookup on %s account identity without leaking the response", async (failure) => {
+    const requests: string[] = [];
+    const lookup = finder(async (input) => {
+      requests.push(new URL(String(input)).pathname);
+      if (failure === "unavailable") throw new Error("private provider response");
+      return failure === "denied"
+        ? new Response(JSON.stringify({ error: { message: "private provider response", type: "invalid_request_error" } }), { status: 403 })
+        : new Response(JSON.stringify({ object: "account" }));
+    });
+    await expect(lookup.findByPurchaseReference(purchaseIntentId, from, to))
+      .rejects.toThrow("Stripe checkout lookup account could not be verified");
+    expect(requests).toEqual(["/v1/account"]);
+  });
+  it("checks the current account before paginating and rechecks it on the next lookup", async () => {
+    const paths: string[] = [];
+    let accountId = "acct_example";
+    const lookup = finder(async (input, init) => {
+      const url = new URL(String(input)); paths.push(url.pathname);
+      expect(init?.method).toBe("GET");
+      const headers = new Headers(init?.headers);
+      expect(headers.get("stripe-version")).toBe(stripeConfig().apiVersion);
+      expect(headers.has("stripe-account")).toBe(false);
+      if (url.pathname === "/v1/account") return new Response(JSON.stringify({ id: accountId }));
+      expect(url.pathname).toBe("/v1/checkout/sessions");
+      expect(url.searchParams.get("created[gte]")).toBe(String(from.getTime() / 1000));
+      expect(url.searchParams.get("created[lte]")).toBe(String(to.getTime() / 1000 + 1));
+      const second = url.searchParams.has("starting_after");
+      if (second) expect(url.searchParams.get("starting_after")).toBe("cs_test_other");
+      return new Response(JSON.stringify({ object: "list", url: "/v1/checkout/sessions", has_more: !second,
+        data: [{ id: second ? "cs_test_match" : "cs_test_other", client_reference_id: second ? purchaseIntentId : otherPurchaseIntentId,
+          status: "expired", payment_status: "unpaid", livemode: false }] }));
+    });
+    await expect(lookup.findByPurchaseReference(purchaseIntentId, from, to))
+      .resolves.toEqual([{ id: "cs_test_match", status: "expired", paymentStatus: "unpaid" }]);
+    accountId = "acct_other";
+    await expect(lookup.findByPurchaseReference(purchaseIntentId, from, to)).rejects.toBeInstanceOf(StripeCheckoutLookupAccountError);
+    expect(paths).toEqual(["/v1/account", "/v1/checkout/sessions", "/v1/checkout/sessions", "/v1/account"]);
+  });
+  it("allows an empty result only after verifying the configured account", async () => {
+    const paths: string[] = [];
+    const lookup = finder(async (input) => {
+      const path = new URL(String(input)).pathname; paths.push(path);
+      return new Response(JSON.stringify(path === "/v1/account" ? { id: "acct_example" } : { data: [], has_more: false }));
+    });
+    await expect(lookup.findByPurchaseReference(purchaseIntentId, from, to)).resolves.toEqual([]);
+    expect(paths).toEqual(["/v1/account", "/v1/checkout/sessions"]);
   });
 });
 
