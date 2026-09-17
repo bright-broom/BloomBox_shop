@@ -65,9 +65,18 @@ describe("CreatePurchaseIntent", () => {
     expect(intent.item.subtotal.amount).toBe(13200);
     expect(intent.item.externalProductReference).toBe("prod_haru_01");
     expect(intent.status).toBe("READY_FOR_CHECKOUT");
-    expect(intent.displayId).toBe("BBI-20260819-1234");
+    expect(intent.displayId).toBe("BBI-20260819-12345678-ABCD-4000-8000-123456789012");
     expect(intent.expiresAt.toISOString()).toBe("2026-08-20T00:00:00.000Z");
     expect(intent.piiRetentionExpiresAt.toISOString()).toBe("2026-09-18T00:00:00.000Z");
+  });
+
+  it("retains the full UUID so same-prefix requests on the same date stay distinct", async () => {
+    const useCase = createUseCase();
+    const first = await useCase.execute(validInput());
+    const second = await useCase.execute(validInput({ requestId: "12345678-abcd-4000-8000-123456789013" }));
+    expect(first.displayId).not.toBe(second.displayId);
+    expect(second.displayId).toBe("BBI-20260819-12345678-ABCD-4000-8000-123456789013");
+    await expect(useCase.execute(validInput())).resolves.toBe(first);
   });
 
   it("enforces fulfillment policy outside the presentation layer", async () => {

@@ -1,5 +1,7 @@
 # Shopify注文の確定保存
 
+> 移行範囲（2026-09-17）：この文書は旧Shopifyアダプターと既存取引の契約・検証記録です。現行の新規商品・顧客・注文・在庫は [ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md) の自作PostgreSQL、顧客はGoogle直接認証、次の決済接続はStripeです。以下を新規導入の指示や現在の公開接続証拠にせず、既存取引の接続先・資格情報・データは無断で変更／削除しません。[現行の入口](HANDOFF.md)を参照。
+
 2026-09-11時点。`PostgresShopifyOrderAcceptor`は、承認済みの販売条件と検証済みのShopify情報から、Order所有の注文を一度だけ保存する内部Adapterです。初期設定は`approval: PENDING`。`ReconcileShopifyPayment`から任意注入の`ShopifyOrderAcceptanceGateway`を通じて接続しました。公開経路・Inbox workerには未接続で、本番決済Gateも無効のままです。
 
 ## 受け入れ条件

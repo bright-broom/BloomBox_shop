@@ -65,7 +65,7 @@ export { type PermissionManagementPage, type PermissionManagementState } from ".
 // Native (Stripe) order fulfillment operations. ADR 0015.
 export {
   NATIVE_CARRIER_CODES, NATIVE_FULFILLMENT_ACTIONS, NATIVE_FULFILLMENT_CANCEL_REASONS, NATIVE_FULFILLMENT_ERROR_CODES,
-  NATIVE_FULFILLMENT_HOLD_REASONS, NativeFulfillmentError, TRACKING_NUMBER_MAX_LENGTH, TRACKING_NUMBER_MIN_LENGTH,
+  NATIVE_FULFILLMENT_HOLD_REASONS, NativeFulfillmentError, TRACKING_NUMBER_INPUT_MAX_LENGTH, TRACKING_NUMBER_MAX_LENGTH, TRACKING_NUMBER_MIN_LENGTH,
   type NativeCarrierCode, type NativeFulfillmentAction, type NativeFulfillmentCancelReason, type NativeFulfillmentCommand,
   type NativeFulfillmentDecision, type NativeFulfillmentErrorCode, type NativeFulfillmentFacts, type NativeFulfillmentHoldReason,
   type NativeShipmentEffect,
@@ -78,3 +78,6 @@ export {
   type NativeFulfillmentRecordedChange, type NativeFulfillmentStore, type NativeFulfillmentSummary, type NativeShipment,
 } from "./application/manage-native-fulfillment";
 export { ApplyNativeFulfillmentCommand } from "./application/apply-native-fulfillment-command";
+export { nativeFulfillmentCommandSchema, nativeFulfillmentListSchema } from "./infrastructure/native-fulfillment-schema";
+
+export type NativeFulfillmentFormState = Readonly<{ status: "IDLE" | "SAVED" | import("./domain/native-fulfillment").NativeFulfillmentErrorCode }>;

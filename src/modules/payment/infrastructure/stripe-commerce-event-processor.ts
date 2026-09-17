@@ -793,7 +793,8 @@ function orderDisplayId(occurredAt: Date, id: string): string {
     month: "2-digit",
     day: "2-digit",
   }).format(occurredAt).replaceAll("/", "");
-  return `BBO-${date}-${id.slice(0, 4).toUpperCase()}`;
+  // Preserve UUID uniqueness; a four-hex suffix collides between unrelated purchases.
+  return `BBO-${date}-${id.toUpperCase()}`;
 }
 
 function parseJson<T>(value: string, schema: z.ZodType<T>): T {

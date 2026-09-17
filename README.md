@@ -6,6 +6,8 @@ Next.jsの画面と、PostgreSQLを中心とした自作の顧客・商品・注
 
 > **現在は販売準備中です。** 新規の本番注文はコードと公開判定で停止しています。以下では、実装済みの処理・部分的な接続確認・これから完成させる運用を区別します。最新の状態は [残課題台帳](docs/operations/BACKLOG.md) が正本です。
 
+全Issueの依存・実装／判断／設定／検証の区分は [2026-09-17監査](docs/operations/ISSUE_AUDIT_2026-09-17.md) に記録しています。監査後の状態は [GitHub Issue一覧](https://github.com/bright-broom/BloomBox_shop/issues) と照合してください。公開先は [bloom-box-shop-ybb9.vercel.app](https://bloom-box-shop-ybb9.vercel.app/) です。マージと公開反映は別です。
+
 開発に参加するAI・人は、まず [AGENTS.md](AGENTS.md) → [HANDOFF.md](docs/operations/HANDOFF.md) → [BACKLOG.md](docs/operations/BACKLOG.md) を確認してください。
 
 [贈る体験](#贈る体験) · [現在地](#現在地) · [システム全体](#システム全体) · [コードの構造](#コードの構造) · [購入の流れ](#購入の流れ) · [在庫と復旧](#在庫と復旧) · [開発を始める](#開発を始める) · [本番公開まで](#本番公開まで)

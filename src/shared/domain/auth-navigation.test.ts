@@ -25,6 +25,14 @@ describe("separate local login destinations", () => {
     expect(loginDestination("/operations/unknown", "operator")).toBe("/operations");
     expect(loginHref("operator", "/operations/catalog")).toBe("/operations/login?next=%2Foperations%2Fcatalog");
   });
+  it("returns operators only to validated native fulfillment routes", () => {
+    for (const path of ["/operations/native-fulfillments", `/operations/native-fulfillments/${id}`]) {
+      expect(loginDestination(path, "operator")).toBe(path);
+      expect(loginDestination(path, "customer")).toBe("/account");
+    }
+    for (const path of ["/operations/native-fulfillments/invalid", `/operations/native-fulfillments/${id}?next=https://evil.example`, "/operations/native-fulfillments/%2e%2e"])
+      expect(loginDestination(path, "operator")).toBe("/operations");
+  });
   it.each(["customer", "operator"] as const)("validates callback origin and logout destination for %s", (area) => {
     const origin = "https://shop.example", home = area === "customer" ? "/account" : "/operations";
     for (const url of ["https://evil.example", "//evil.example", "https://shop.example.evil.example/account", "javascript:alert(1)"])

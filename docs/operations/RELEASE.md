@@ -1,5 +1,11 @@
 # Release and Deployment
 
+## Confirmed public target (2026-09-17)
+
+The public preview origin is **https://bloom-box-shop-ybb9.vercel.app**, Vercel project `bloom-box-shop-ybb9` (`prj_uguMJ5XHO9Vx6qvij8mELEKAtHyp`). The repository variable `PRODUCTION_BASE_URL` was re-read and matches this origin. `/api/health` returned `259356edf51def7030729822df32e07ff82a3b54`; this is separate from the documentation baseline `7472c5f` on main. Recheck both before any deployment. A local `.vercel/project.json` pointing at old `bloom-box-shop` is not the public target.
+
+Vercel's environment label `production` currently hosts the application's **preview runtime with sales paused**. That label, successful CI, merged code, and a healthy preview do not mean commercial activation. The dedicated public DB was recorded through migration 0027 during [customer self-service deployment](CUSTOMER_SELF_SERVICE_RELEASE_2026-09-17.md); this is not evidence of every future sales credential, backup or payment connection.
+
 ## Current status
 
 The selected target is native PostgreSQL commerce with direct Google customers ([ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md)). The Google/customer-account slice replaces Shopify login. The production catalog reader uses PostgreSQL; real catalog/stock setup and live buyer/payment/fulfillment evidence remain incomplete. Native stock reservation, commitment and safe release are implemented; see [NATIVE_INVENTORY.md](NATIVE_INVENTORY.md). Customer-to-purchase binding is implemented, with real-provider verification still pending. New production checkout is paused in code. The release gate requires native-adapter evidence and remains blocked.
@@ -25,7 +31,7 @@ Root `vercel.json` sets `git.deploymentEnabled` to `false`. Pushes and PR update
 Use the existing Vercel dashboard for manual previews; no additional CI credential or deployment workflow is required:
 
 1. Finish the local checks and push the focused PR. Wait for the latest commit's quality/tests, dependency audit, security scan, and applicable governance checks to succeed. Do not interpret an absent Vercel check as proof of a successful deployment.
-2. Record the PR's full head commit SHA. In the `bloom-box-shop` Vercel project, open **Deployments → Create Deployment** and enter that SHA. Select the PR branch configuration and **Preview**, never Production. Stop if the target environment or source cannot be confirmed. Review unfamiliar or forked code before exposing any preview credentials to its build.
+2. Record the PR's full head commit SHA. In the verified `bloom-box-shop-ybb9` Vercel project, open **Deployments → Create Deployment** and enter that SHA. Select the PR branch configuration and **Preview**, never Production. Stop if the target environment or source cannot be confirmed. Review unfamiliar or forked code before exposing any preview credentials to its build.
 3. Create one deployment. If the request times out, inspect Deployments for that SHA before retrying. If Vercel reports the daily quota, stop and wait for the allowance to recover; a manual deployment uses the same allowance. Do not create empty commits or repeatedly redeploy to clear a failed status.
 4. Confirm the deployment is **Ready**, its environment is Preview, and its source SHA still matches the PR head. Check the affected flow on its preview URL. Record the SHA, URL, and result in the PR's verification evidence. If the PR changes, previous preview evidence no longer verifies the new head; deploy again when the next review is ready.
 
@@ -44,12 +50,14 @@ Provider references: [Git deployment control](https://vercel.com/docs/project-co
 3. Required owners approve and merge to `main` after all required checks pass.
 4. The release owner starts `Production Release` from the `main` branch, enters the full commit SHA that passed the gates, and explicitly confirms deployment.
 5. The workflow checks out `main`, rejects any SHA mismatch, runs `pnpm check:release`, and stops before deployment if any production blocker remains.
-6. The protected `production` environment requests human approval and applies checksummed forward-only database migrations with a dedicated owner credential.
+6. The workflow targets the `production` GitHub environment. Before commercial deployment, the release owner must verify its actual protection and required reviewer settings under #6; an environment name alone does not enforce approval. Once configured and approved, the job applies checksummed forward-only database migrations with a dedicated owner credential.
 7. The workflow calls the configured deployment hook and polls `/api/health` until the healthy revision exactly matches the SHA that passed the release gates.
 
 The hosting provider must keep immutable deployment history so the frontend can roll back without changing accepted orders.
 
-`Production Smoke` runs after successful `main` CI, once per hour, and on demand. It verifies the release-shaped health response and the public home, catalog, product, gift, cart, and Test Mode checkout routes. A failure opens or refreshes one GitHub incident issue; a later successful run comments on and closes that issue automatically.
+`Production Smoke` runs after successful `main` CI, once per hour, and on demand. It checks out trusted monitor code from main and runs the read-only `scripts/verify-public-preview.mjs` against the configured HTTPS origin. It verifies the deployed release-shaped health response, HTTP 200 and page structure, required preview/card-safety disclosures, security headers, rendered M-only search results and an accessible empty search. It ignores references inside hydration scripts and does not depend on the editorial label “検索結果”. Receipt completion has a specific loading-state SSR contract because no browser purchase session exists in this probe.
+
+The workflow remains a **public preview** monitor. Do not make it accept commerce by deleting its non-selling disclosures; replace its approved operating contract during a future commercial release. It does not log in, submit forms, create orders, send ads, or prove customer/Stripe/worker E2E. Its logged deployed SHA is not required to equal the latest main SHA because deployment is manual; the release workflow separately requires an exact revision match. A failure opens or refreshes one incident, and a later full success closes it. [Current evidence and limitations](PUBLIC_PREVIEW_VERIFICATION_2026-09-17.md).
 
 ## Production exit criteria
 
@@ -75,6 +83,6 @@ After rollback, verify the public origin, a read-only catalog request, persisted
 
 ## Required repository and platform setup
 
-The repository automates code-verifiable conditions. The `production` Environment has a deployment branch policy. The repository is now public, but the 2026-09-11 API check found no main protection/rulesets or required Production reviewer; governance issue #6 remains open until these controls are configured and verified. The repository owner must also configure `PRODUCTION_DEPLOY_HOOK_URL`, `PRODUCTION_BASE_URL`, `DATABASE_MIGRATION_URL`, hosting rollback retention, and provider-side access controls. The migration URL is a protected production secret and uses a dedicated owner credential; the runtime application never receives it. The hosting build must expose its Git revision through `BLOOMBOX_RELEASE_SHA`; Vercel's `VERCEL_GIT_COMMIT_SHA` is recognized automatically.
+The repository automates code-verifiable conditions. Required main checks, reviewer enforcement, and the actual release environment protection are tracked in [Issue #6](https://github.com/bright-broom/BloomBox_shop/issues/6); read its current evidence rather than treating an old unprotected/protected snapshot as present fact. The repository owner must verify `PRODUCTION_DEPLOY_HOOK_URL`, `DATABASE_MIGRATION_URL`, hosting rollback retention, and provider-side access controls. `PRODUCTION_BASE_URL` was confirmed above; a repository variable does not prove the hook or all environment overrides match it. The migration URL is a protected production secret and uses a dedicated owner credential; the runtime application never receives it. The hosting build must expose its Git revision through `BLOOMBOX_RELEASE_SHA`; Vercel's `VERCEL_GIT_COMMIT_SHA` is recognized automatically.
 
 See [the remaining-work inventory](BACKLOG.md) for implementation gaps, pending account configuration, and release evidence, separated from optional product extensions.

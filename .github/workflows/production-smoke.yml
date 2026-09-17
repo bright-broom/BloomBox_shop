@@ -28,46 +28,17 @@ jobs:
     env:
       PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
     steps:
+      - name: Check out trusted monitor code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
       - name: Verify health and public routes
-        run: |
-          trap 'printf "::error::Smoke check failed: %s\n" "$BASH_COMMAND"' ERR
-          test -n "$PRODUCTION_BASE_URL"
-          base_url="${PRODUCTION_BASE_URL%/}"
-          health=$(curl --fail --silent --show-error --retry 2 --max-time 15 "$base_url/api/health")
-          jq --exit-status \
-            '.status == "ok" and (.release | test("^[0-9a-f]{40}$"))' \
-            <<< "$health" > /dev/null
-
-          for path in / /flowers /flowers/bloom-box-m /flowers/bloom-box-l /gift/prod_bloombox_m /gift/prod_bloombox_l /cart /checkout/test /checkout/test/review /checkout/test/payment /checkout/test/complete /about /guide /faq /shipping-returns /privacy /terms /commercial-transactions /contact /robots.txt /sitemap.xml /manifest.webmanifest; do
-            printf 'Checking route: %s\n' "$path"
-            curl --fail --silent --show-error --retry 2 --max-time 15 \
-              "$base_url$path" > /dev/null
-          done
-
-          home=$(curl --fail --silent --show-error --retry 2 --max-time 15 "$base_url/")
-          grep --fixed-strings --quiet "プレビュー版・注文と決済は発生しません" <<< "$home"
-
-          cart=$(curl --fail --silent --show-error --retry 2 --max-time 15 "$base_url/cart")
-          grep --fixed-strings --quiet 'data-checkout-page="cart"' <<< "$cart"
-
-          test_checkout=$(curl --fail --silent --show-error --retry 2 --max-time 15 \
-            "$base_url/checkout/test/payment")
-          grep --fixed-strings --quiet 'data-checkout-page="test-payment"' <<< "$test_checkout"
-          grep --fixed-strings --quiet "実カード情報を入力せず" <<< "$test_checkout"
-
-          search=$(curl --fail --silent --show-error --retry 2 --max-time 15 \
-            "$base_url/flowers?q=BLOOM%20BOX%20M")
-          grep --fixed-strings --quiet "検索結果" <<< "$search"
-          grep --fixed-strings --quiet "BLOOM BOX M" <<< "$search"
-
-          legal=$(curl --fail --silent --show-error --retry 2 --max-time 15 \
-            "$base_url/commercial-transactions")
-          grep --fixed-strings --quiet "現在は Preview 版のため販売を行っていません" <<< "$legal"
-
-          headers=$(curl --fail --silent --show-error --retry 2 --max-time 15 \
-            --dump-header - --output /dev/null "$base_url/")
-          grep --ignore-case --fixed-strings --quiet "x-content-type-options: nosniff" <<< "$headers"
-          grep --ignore-case --fixed-strings --quiet "x-frame-options: DENY" <<< "$headers"
+        run: node scripts/verify-public-preview.mjs
 
       - name: Open or refresh production incident
         if: failure()

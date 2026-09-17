@@ -82,6 +82,29 @@ describeDatabase("native inventory reservations", () => {
     };
   }
 
+  it("creates same-prefix requests and paid orders without display ID collisions, retaining legacy IDs on replay", async () => {
+    const product = await stock(2);
+    const firstRequest = input(product, 1, "abcd1234-0000-4000-8000-000000000001");
+    const secondRequest = input(product, 1, "abcd1234-0000-4000-8000-000000000002");
+    const first = await create.execute(firstRequest), second = await create.execute(secondRequest);
+    expect(first.displayId).not.toBe(second.displayId);
+    // Persisted legacy references must remain stable when an existing request is resumed.
+    await sql`UPDATE bloombox.purchase_intents SET display_id='BBI-20260913-ABCD' WHERE id=${first.id}`;
+    expect((await create.execute(firstRequest)).displayId).toBe("BBI-20260913-ABCD");
+    let sequence = 0;
+    const samePrefixId = () => `cdef1234-0000-4000-8000-${(++sequence).toString(16).padStart(12, "0")}`;
+    const fixedProcessor = new StripeCommerceEventProcessor(sql, protector, "inclusive", (tx) => new PostgresCheckoutBuyerWriter(tx), samePrefixId, (tx) => new PostgresInventoryReservations(tx));
+    for (const intent of [first, second]) {
+      const paid = await event(intent);
+      await fixedProcessor.process(paid); await fixedProcessor.process(paid);
+    }
+    const orders = await sql`SELECT id,display_id FROM bloombox.orders WHERE purchase_intent_id IN (${first.id},${second.id}) ORDER BY id`;
+    expect(orders).toHaveLength(2);
+    expect(new Set(orders.map((row) => row.display_id)).size).toBe(2);
+    for (const order of orders) expect(order.display_id).toBe(`BBO-20260913-${order.id.toUpperCase()}`);
+    expect(await balance(product)).toEqual({ on_hand: 0, reserved: 0 });
+  });
+
   it("never offers missing or zero stock and rejects a quantity larger than available stock without partial writes", async () => {
     for (const initial of [null, 0]) {
       const id = await stock(initial);

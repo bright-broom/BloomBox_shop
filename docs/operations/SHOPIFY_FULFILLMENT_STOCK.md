@@ -1,5 +1,7 @@
 # 割当先拠点の在庫確認
 
+> 移行範囲（2026-09-17）：この文書は旧Shopifyアダプターと既存取引の契約・検証記録です。現行の新規商品・顧客・注文・在庫は [ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md) の自作PostgreSQL、顧客はGoogle直接認証、次の決済接続はStripeです。以下を新規導入の指示や現在の公開接続証拠にせず、既存取引の接続先・資格情報・データは無断で変更／削除しません。[現行の入口](HANDOFF.md)を参照。
+
 2026-09-12時点。内部の発送受付へ任意の`ShopifyFulfillmentStockReader`を注入し、確定注文に割り当てられた拠点の在庫を確認します。`ShopifyAdminOrderReader.readFulfillmentStock`が実装です。Shopifyの在庫・割当は変更しません。公開経路・Inbox・本番Gate・自動出荷は無効のままです。
 
 ## 読取と権限

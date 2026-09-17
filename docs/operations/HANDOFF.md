@@ -1,6 +1,6 @@
 # BLOOM BOX 開発引き継ぎ
 
-最終確認：2026-09-14（JST）。公開プレビューのコード基準：main `decdb45fb05a24fc3066e1b5fab8c13924b74022`。各機能の検証範囲は個別記録を参照。この文書はチャット履歴や特定AIのメモリを必要としない入口です。残課題の状態は [BACKLOG.md](BACKLOG.md) に集約します。
+最終確認：2026-09-17（JST）。この追記のmain基準：`7472c5f`（#188）。公開プレビューは `/api/health` を同日再取得し `259356edf51def7030729822df32e07ff82a3b54` を確認。mainと公開SHAを同一視しない。この文書はチャット履歴や特定AIのメモリを必要としない入口です。残課題の正本は [BACKLOG.md](BACKLOG.md)、全57件の監査スナップショットと依存・必要入力は [Issue監査](ISSUE_AUDIT_2026-09-17.md)。各PR・設定は着手時に再確認します。
 
 ## 最初に確認すること
 
@@ -40,7 +40,7 @@
 
 3025番へ既存の実Google OAuthと顧客DBを接続し、実Google2顧客で本人の画面・相互非表示を確認済み。[接続・再開手順](CUSTOMER_GOOGLE_3025_VERIFICATION.md)を参照。コードだけ別の作業ツリーへ移しても秘密値は移らないため、認証設定と固定ポートを合わせて確認する。
 
-公開先 [bloom-box-shop-ybb9.vercel.app](https://bloom-box-shop-ybb9.vercel.app/account) にも接続済み。[公開接続の記録](CUSTOMER_GOOGLE_VERCEL_VERIFICATION.md)を参照。Googleの登録テストユーザー2名で、ログイン→本人のランク・購入履歴・プロフィールを確認。専用Neon DBには架空注文を移していない。Vercelのtarget名はproductionだが、アプリはpreview・販売停止を維持。Google一般公開と運営者の公開接続は未完。元の作業ツリーにある別project `bloom-box-shop` のVercelリンクを使わず、公開URL・project ID・稼働SHAを必ず照合する。mainへのpushだけでは自動デプロイされない。
+公開先 [bloom-box-shop-ybb9.vercel.app](https://bloom-box-shop-ybb9.vercel.app/account) にも接続済み。[公開接続の記録](CUSTOMER_GOOGLE_VERCEL_VERIFICATION.md)を参照。Googleの登録テストユーザー2名で、ログイン→本人のランク・購入履歴・プロフィールを確認。専用Neon DBには架空注文を移していない。Vercelのtarget名はproductionだが、アプリはpreview・販売停止を維持。この段落は顧客接続時点の記録です。運営者1名の公開接続は後続の [2026-09-17検証](CUSTOMER_SELF_SERVICE_RELEASE_2026-09-17.md) を参照。Google一般公開は別途確認。元の作業ツリーにある別project `bloom-box-shop` のVercelリンクを使わず、公開URL・project ID・稼働SHAを必ず照合する。mainへのpushだけでは自動デプロイされない。
 
 ## 本番販売は停止中
 
@@ -80,3 +80,9 @@
 ## 公開リポジトリの情報管理（2026-09-17）
 
 #114 の [Actions・情報管理監査](PUBLIC_REPOSITORY_AUDIT_2026-09-17.md)に、fork / workflow_run の権限、Secret 保護の実設定、Artifact メタデータ、公開される情報、bot 記録の操作範囲を記録。ログ・履歴全体の非漏えい証明ではなく、保持期限・担当者・復旧演習は残る。
+
+## 移行文書・監視の現在地（2026-09-17）
+
+正本の公開先は `bloom-box-shop-ybb9`。GitHub変数 `PRODUCTION_BASE_URL` も同originを再確認。[RELEASE.md](RELEASE.md) の配備先・SHA照合と [公開確認記録](PUBLIC_PREVIEW_VERIFICATION_2026-09-17.md) を参照。旧 `bloom-box-shop` のローカルVercel紐付けで配備しない。Shopify名の運用文書は既存取引・旧アダプター向けの契約記録として保持し、現行自作Commerceの導入手順と区別する。
+
+0027までの公開適用はセルフサービス公開時の記録がある。広告同意・確定購入の送信基盤（0026）は実装済みだが、媒体の実アカウント接続・送信・予算承認は別。監視の成功は販売準備完了や新SHAの配備を意味しない。

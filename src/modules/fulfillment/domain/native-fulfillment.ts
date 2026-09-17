@@ -18,6 +18,7 @@ export type NativeFulfillmentCancelReason = (typeof NATIVE_FULFILLMENT_CANCEL_RE
 /** A normalized tracking number has no separators and uses uppercase ASCII letters and digits only. */
 export const TRACKING_NUMBER_MIN_LENGTH = 8;
 export const TRACKING_NUMBER_MAX_LENGTH = 32;
+export const TRACKING_NUMBER_INPUT_MAX_LENGTH = 96;
 
 type NativeFulfillmentCommandBase = Readonly<{ fulfillmentId: string; requestId: string; expectedVersion: number }>;
 export type NativeFulfillmentCommand = NativeFulfillmentCommandBase & (
