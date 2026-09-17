@@ -62,7 +62,7 @@
   "guest": "顧客履歴の紐付けなし",
   "unknown": "未確認",
   "shippingTitle": "発送・返金の運用",
-  "shippingNote": "この一覧は状態の確認用です。発送登録機能は準備中です。返金は権限を持つ担当者がStripeで実行し、通知による反映を確認します。ここから発送・返金は実行されません。",
+  "shippingNote": "発送登録は発送メニューから行います。専用の担当者権限が必要です。返金は権限を持つ担当者がStripeで実行し、通知による反映を確認します。",
   "settingsLead": "設定の有無と実際の利用権限を分けて表示します。秘密情報は表示しません。",
   "identity": "担当者アカウント",
   "verified": "Google認証済み",
@@ -110,6 +110,11 @@
       "href": "/operations/orders",
       "key": "orders",
       "icon": "orders"
+    },
+    {
+      "href": "/operations/native-fulfillments",
+      "key": "fulfillment",
+      "icon": "catalog"
     },
     {
       "href": "/operations/customers",
