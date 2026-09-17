@@ -2,6 +2,7 @@ import { InvalidPostalCodeError } from "@/modules/fulfillment/public";
 import { postalCodeLookupRequestSchema } from "@/modules/fulfillment/presentation/postal-code-api-schema";
 import { application } from "@/shared/infrastructure/composition-root";
 import { reportUnexpectedError } from "@/shared/infrastructure/observability/report-unexpected-error";
+import { readBoundedRequestBody, RequestBodyError } from "@/shared/infrastructure/http/bounded-request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -13,22 +14,18 @@ export async function POST(request: Request): Promise<Response> {
   if (fetchSite === "cross-site") {
     return errorResponse("invalid_postal_code", "このリクエストは受け付けられません。", 403);
   }
-  const declaredLength = Number(request.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BYTES) {
-    return errorResponse("invalid_postal_code", "郵便番号を正しく入力してください。", 413);
-  }
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
     return errorResponse("invalid_postal_code", "郵便番号を正しく入力してください。", 415);
   }
 
   let payload: unknown;
   try {
-    const body = await request.text();
-    if (new TextEncoder().encode(body).byteLength > MAX_REQUEST_BYTES) {
-      return errorResponse("invalid_postal_code", "郵便番号を正しく入力してください。", 413);
+    const bytes = await readBoundedRequestBody(request, { maxBytes: MAX_REQUEST_BYTES, timeoutMs: 2_000 });
+    payload = JSON.parse(new TextDecoder().decode(bytes));
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return errorResponse("invalid_postal_code", "郵便番号を正しく入力してください。", error.status);
     }
-    payload = JSON.parse(body);
-  } catch {
     return errorResponse("invalid_postal_code", "郵便番号を正しく入力してください。", 400);
   }
   const parsed = postalCodeLookupRequestSchema.safeParse(payload);

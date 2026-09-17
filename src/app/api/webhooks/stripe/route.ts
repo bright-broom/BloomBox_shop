@@ -1,6 +1,7 @@
 import { InvalidProviderWebhookError } from "@/modules/payment/public";
 import { getStripeWebhookReceiver } from "@/shared/infrastructure/composition-root";
 import { reportUnexpectedError } from "@/shared/infrastructure/observability/report-unexpected-error";
+import { readBoundedRequestBody, RequestBodyError } from "@/shared/infrastructure/http/bounded-request-body";
 
 export const runtime = "nodejs";
 const MAX_WEBHOOK_BODY_BYTES = 1_000_000;
@@ -9,19 +10,13 @@ export async function POST(request: Request): Promise<Response> {
   const signature = request.headers.get("stripe-signature");
   if (!signature) return Response.json({ received: false }, { status: 400 });
 
-  const declaredLength = Number(request.headers.get("content-length") ?? 0);
-  if (declaredLength > MAX_WEBHOOK_BODY_BYTES) {
-    return Response.json({ received: false }, { status: 413 });
-  }
-  const rawBody = await request.text();
-  if (Buffer.byteLength(rawBody, "utf8") > MAX_WEBHOOK_BODY_BYTES) {
-    return Response.json({ received: false }, { status: 413 });
-  }
-
   try {
+    const bytes = await readBoundedRequestBody(request, { maxBytes: MAX_WEBHOOK_BODY_BYTES, timeoutMs: 2_000 });
+    const rawBody = Buffer.from(bytes).toString("utf8");
     const result = await getStripeWebhookReceiver().execute(rawBody, signature);
     return Response.json({ received: true, duplicate: result === "DUPLICATE" });
   } catch (error) {
+    if (error instanceof RequestBodyError) return Response.json({ received: false }, { status: error.status });
     if (error instanceof InvalidProviderWebhookError) {
       return Response.json({ received: false }, { status: 400 });
     }

@@ -43,7 +43,19 @@ describe("database configuration", () => {
       url: "postgres://localhost:5432/bloombox",
       ssl: false,
       maxConnections: 3,
+      connectionTimeouts: null,
     });
+  });
+
+  it.each([
+    { DATABASE_STATEMENT_TIMEOUT_MS: "0" },
+    { DATABASE_LOCK_TIMEOUT_MS: "0" },
+    { DATABASE_STATEMENT_TIMEOUT_MS: "999999" },
+    { DATABASE_LOCK_TIMEOUT_MS: "10000" },
+    { DATABASE_MAX_CONNECTIONS: "21" },
+  ])("rejects disabled, excessive or ineffective limits: %j", (limits) => {
+    expect(() => loadDatabaseConfig({ DATABASE_URL: "postgres://localhost/app", ...limits }))
+      .toThrow(InvalidDatabaseConfigurationError);
   });
 
   it("does not expose invalid database input in its error", () => {
