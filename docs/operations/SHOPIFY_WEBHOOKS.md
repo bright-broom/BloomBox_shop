@@ -1,5 +1,7 @@
 # Shopify通知の受信と保管
 
+> 移行範囲（2026-09-17）：この文書は旧Shopifyアダプターと既存取引の契約・検証記録です。現行の新規商品・顧客・注文・在庫は [ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md) の自作PostgreSQL、顧客はGoogle直接認証、次の決済接続はStripeです。以下を新規導入の指示や現在の公開接続証拠にせず、既存取引の接続先・資格情報・データは無断で変更／削除しません。[現行の入口](HANDOFF.md)を参照。
+
 2026-09-11時点。ADR 0003の通知受付部分を実装。Admin APIによる店舗・参照ID・正式データの読み取りも内部処理として実装しました（[仕様](SHOPIFY_ORDER_READS.md)）。購入試行との関連付けも内部ワークフローに実装しました（[仕様](SHOPIFY_ORDER_LINKS.md)）。決済状態の検証・保存も内部処理に実装しました（[仕様](SHOPIFY_PAYMENT_EVIDENCE.md)）。正式な注文受け入れ・状態表示と未着通知の再取得は未実装です。本番公開判定は変更していません。
 
 ## 受付範囲と設定
