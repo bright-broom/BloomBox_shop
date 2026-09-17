@@ -4,6 +4,12 @@ import type { StripeConfig } from "@/shared/infrastructure/config/stripe-config"
 import { StartCheckout } from "@/modules/checkout/application/start-checkout";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import Stripe from "stripe";
+import { CheckoutPausedError } from "@/modules/checkout/application/checkout-paused-error";
+import { ReceiveProviderWebhook, InvalidProviderWebhookError } from "@/modules/payment/application/receive-provider-webhook";
+import { ProcessProviderInbox } from "@/modules/payment/application/process-provider-inbox";
+import { PostgresWebhookInbox } from "@/modules/payment/infrastructure/postgres-webhook-inbox";
+import { StripeWebhookVerifier } from "@/modules/payment/infrastructure/stripe-webhook-verifier";
 import { readFile } from "node:fs/promises";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
@@ -81,6 +87,93 @@ describeDatabase("native inventory reservations", () => {
         totalDetails: { amount_discount: 0, amount_shipping: 0, amount_tax: 0 }, customerId: null, customerDetails: null, collectedInformation: null },
     };
   }
+
+  it.each(["paid", "expired"] as const)("settles delayed signed %s events while intake is paused, then resumes without duplicate inventory effects", async (outcome) => {
+    let accepting = true;
+    const acceptsNewCheckout = () => accepting;
+    const prepare = new CreatePurchaseIntent(products, repo, now, acceptsNewCheckout);
+    const product = await stock(2);
+    const intent = await prepare.execute(input(product));
+    const checkoutId = `cs_test_${intent.id}`;
+    if (outcome === "paid") await event(intent);
+    else await repo.claimCommerceProvider(intent.id, "STRIPE"); // Creation result was lost; keep the reservation.
+    accepting = false;
+
+    const rejected = input(product);
+    await expect(prepare.execute(rejected)).rejects.toBeInstanceOf(CheckoutPausedError);
+    const provider = {
+      provider: "STRIPE" as const,
+      validateCreate: vi.fn(),
+      create: vi.fn(async () => { throw new Error("Paused checkout must not call Stripe"); }),
+      retrieve: vi.fn(async () => { throw new Error("Paused checkout must not call Stripe"); }),
+    };
+    await expect(new StartCheckout(repo, provider, now, acceptsNewCheckout).execute(intent.id))
+      .rejects.toBeInstanceOf(CheckoutPausedError);
+    expect(provider.create).not.toHaveBeenCalled();
+    expect(provider.retrieve).not.toHaveBeenCalled();
+    expect(await repo.findById(purchaseIntentId(rejected.requestId))).toBeNull();
+    expect(await balance(product)).toEqual({ on_hand: 2, reserved: 1 });
+
+    // A delayed event has an old created time but a fresh delivery signature, as a provider retry does.
+    const receivedAt = new Date(now().getTime() + 48 * 60 * 60 * 1000);
+    const config: StripeConfig = {
+      mode: "test", checkoutSecretKey: "rk_test_fixture", reconciliationSecretKey: "rk_test_fixture",
+      webhookSecret: "whsec_pause_fixture", accountId: `acct_${randomUUID()}`,
+      shippingRateId: "shr_fixture", taxBehavior: "inclusive", automaticTaxEnabled: true,
+      termsAcceptance: "required", allowedCheckoutHostnames: ["checkout.stripe.com"],
+      publicOrigin: "https://shop.example.com", apiVersion: "2026-07-29.dahlia",
+    };
+    const queue = new PostgresWebhookInbox(sql, protector, undefined, () => receivedAt,
+      { provider: "STRIPE", accountId: config.accountId });
+    const receiver = new ReceiveProviderWebhook(new StripeWebhookVerifier(config), queue);
+    const worker = new ProcessProviderInbox(queue, processor, () => receivedAt);
+    const body = (eventId: string) => JSON.stringify({
+      id: eventId, account: config.accountId, api_version: config.apiVersion,
+      type: outcome === "paid" ? "checkout.session.completed" : "checkout.session.expired",
+      created: Math.floor(now().getTime() / 1000), livemode: false,
+      data: { object: {
+        id: checkoutId, client_reference_id: intent.id,
+        payment_intent: outcome === "paid" ? `pi_${intent.id}` : null,
+        payment_status: outcome === "paid" ? "paid" : "unpaid",
+        status: outcome === "paid" ? "complete" : "expired",
+        amount_total: 4000, amount_subtotal: 4000, currency: "jpy",
+        total_details: { amount_discount: 0, amount_shipping: 0, amount_tax: 0 },
+        customer: null, customer_details: null, collected_information: null, metadata: {},
+      } },
+    });
+    const raw = body(`evt_${randomUUID()}`);
+    const signature = (payload: string) => Stripe.webhooks.generateTestHeaderString({ payload, secret: config.webhookSecret });
+    await expect(receiver.execute(raw + " ", signature(raw))).rejects.toBeInstanceOf(InvalidProviderWebhookError);
+    expect(await sql`SELECT id FROM bloombox.webhook_inbox WHERE provider_account_id = ${config.accountId}`).toHaveLength(0);
+    await retention.execute(receivedAt);
+    expect(await balance(product)).toEqual({ on_hand: 2, reserved: 1 });
+    const deliveries = await Promise.all(Array.from({ length: 3 }, () => receiver.execute(raw, signature(raw))));
+    expect(deliveries.filter((result) => result === "INSERTED")).toHaveLength(1);
+    expect(deliveries.filter((result) => result === "DUPLICATE")).toHaveLength(2);
+    expect(await worker.execute()).toEqual({ claimed: 1, processed: 1, retryScheduled: 0, failed: 0 });
+    expect(await receiver.execute(raw, signature(raw))).toBe("DUPLICATE");
+    // A distinct event ID for the same Session must also leave commerce effects idempotent.
+    const repeated = body(`evt_${randomUUID()}`);
+    expect(await receiver.execute(repeated, signature(repeated))).toBe("INSERTED");
+    expect(await worker.execute()).toEqual({ claimed: 1, processed: 1, retryScheduled: 0, failed: 0 });
+    expect(await worker.execute()).toEqual({ claimed: 0, processed: 0, retryScheduled: 0, failed: 0 });
+    expect(await sql`SELECT status FROM bloombox.webhook_inbox WHERE provider_account_id = ${config.accountId}`)
+      .toEqual([{ status: "PROCESSED" }, { status: "PROCESSED" }]);
+    expect((await repo.findById(intent.id))?.status).toBe(outcome === "paid" ? "CONVERTED" : "EXPIRED");
+    expect(await sql`SELECT id FROM bloombox.orders WHERE purchase_intent_id = ${intent.id}`).toHaveLength(outcome === "paid" ? 1 : 0);
+    expect(await sql`SELECT p.id FROM bloombox.payments p JOIN bloombox.orders o ON o.id = p.order_id
+      WHERE o.purchase_intent_id = ${intent.id}`).toHaveLength(outcome === "paid" ? 1 : 0);
+    expect(await sql`SELECT f.id FROM bloombox.fulfillments f JOIN bloombox.orders o ON o.id = f.order_id
+      WHERE o.purchase_intent_id = ${intent.id}`).toHaveLength(outcome === "paid" ? 1 : 0);
+    expect(await sql`SELECT id FROM bloombox.inventory_movements WHERE purchase_intent_id = ${intent.id}`).toHaveLength(2);
+    expect(await balance(product)).toEqual({ on_hand: outcome === "paid" ? 1 : 2, reserved: 0 });
+
+    accepting = true;
+    await prepare.execute(rejected);
+    await prepare.execute(rejected);
+    expect(await balance(product)).toEqual({ on_hand: outcome === "paid" ? 1 : 2, reserved: 1 });
+    expect(await sql`SELECT id FROM bloombox.inventory_movements WHERE purchase_intent_id = ${rejected.requestId}`).toHaveLength(1);
+  });
 
   it("creates same-prefix requests and paid orders without display ID collisions, retaining legacy IDs on replay", async () => {
     const product = await stock(2);

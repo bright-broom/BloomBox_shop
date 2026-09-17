@@ -169,6 +169,8 @@ Use Stripe test payment methods only in a Stripe Sandbox/Test Mode. Never test w
 
 ## Emergency controls
 
+**Current production boundary:** ADR 0009's code-level sales pause remains in force. Setting `BLOOMBOX_CHECKOUT_INTAKE_ENABLED=true` alone does not reopen production checkout. The reopening steps below apply only to an environment already approved and implemented for checkout; they do not authorize removing the sales gate. See the [isolated pause drill and remaining deployment checks](CHECKOUT_PAUSE_VERIFICATION_2026-09-18.md).
+
 - Stop new purchase intake by setting `BLOOMBOX_CHECKOUT_INTAKE_ENABLED=false` and deploying this setting to every application instance. Keep `BLOOMBOX_CHECKOUT_PROVIDER=stripe`, the production runtime, provider credentials, and reconciliation schedule unchanged. Never change the provider of an in-flight PurchaseIntent.
 - The intake flag defaults to `true` for backward compatibility and accepts only the strings `true` or `false`. Invalid values reject purchase intake but do not disable settlement services. Purchase-intent creation and Checkout initiation check the flag on each invocation; Checkout checks again before creating an external Session. Paused submissions return a customer-facing message without a draft or Checkout URL, preserving the cart for retry.
 - This is a deployment-scoped control, not a distributed instantaneous cancellation. Requests already sent to Stripe and previously issued Checkout URLs may still complete. Persist their returned Session references and continue receiving verified events. If existing Sessions must be expired, handle that separately through the provider under an approved incident procedure; do not abandon accepted payment facts.
