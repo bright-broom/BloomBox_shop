@@ -1,5 +1,7 @@
 # Shopify注文確定後の決済反映・購入状態更新
 
+> 移行範囲（2026-09-17）：この文書は旧Shopifyアダプターと既存取引の契約・検証記録です。現行の新規商品・顧客・注文・在庫は [ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md) の自作PostgreSQL、顧客はGoogle直接認証、次の決済接続はStripeです。以下を新規導入の指示や現在の公開接続証拠にせず、既存取引の接続先・資格情報・データは無断で変更／削除しません。[現行の入口](HANDOFF.md)を参照。
+
 2026-09-11時点。内部の`ReconcileShopifyPayment`へ任意注入の完了処理を追加しました。新規注文はこれまでの販売条件・入金・金額・配送検証とOrder保存を通り、その後にPaymentの反映、CheckoutのCONVERTED遷移を実行します。公開経路・Inbox worker・本番決済Gateは無効のままです。
 
 ## 確定済み注文の再開

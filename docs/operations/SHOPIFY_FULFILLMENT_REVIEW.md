@@ -1,5 +1,7 @@
 # 担当者の発送前確認
 
+> 移行範囲（2026-09-17）：この文書は旧Shopifyアダプターと既存取引の契約・検証記録です。現行の新規商品・顧客・注文・在庫は [ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md) の自作PostgreSQL、顧客はGoogle直接認証、次の決済接続はStripeです。以下を新規導入の指示や現在の公開接続証拠にせず、既存取引の接続先・資格情報・データは無断で変更／削除しません。[現行の入口](HANDOFF.md)を参照。
+
 2026-09-12時点。[承認記録](SHOPIFY_FULFILLMENT_APPROVAL.md)に続き、権限付きの内部参照処理と確認画面を実装しました。Google ログインと実注文の参照ルートを追加しました。接続設定と実担当者権限は未登録です。[承認フォーム](OPERATOR_APPROVAL_FORM.md)は実装済みですが、事業方針 PENDING のため操作は拒否します。出荷指示は未接続です。
 
 ## 画面

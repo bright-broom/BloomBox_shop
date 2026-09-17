@@ -1,3 +1,5 @@
+import { PostgresCatalogHistory } from "@/modules/catalog/infrastructure/postgres-catalog-history";
+import { PostgresStockHistory } from "@/modules/inventory/infrastructure/postgres-stock-history";
 import { CatalogManagementError } from "@/modules/catalog/public";
 import { PostgresCatalogManager, catalogSaveSchema } from "@/modules/catalog/infrastructure/postgres-catalog-manager";
 import { PostgresStockManager, stockChangeSchema } from "@/modules/inventory/infrastructure/postgres-stock-manager";
@@ -42,4 +44,14 @@ export async function changeManagedCatalog(form: FormData, origin: string | null
     available: values.available === "true", occasions: lines(values.occasions), flowers: lines(values.flowers) });
   if (!parsed.success) throw new CatalogManagementError("INVALID");
   return withCatalogManager(sql, actor, (tx) => new PostgresCatalogManager(tx).save(parsed.data, actor));
+}
+
+export async function readManagedCatalogHistory(input: { productId?: string; kind: "catalog" | "stock"; before?: number }) {
+  const { actor, sql } = await context();
+  return withCatalogManager(sql, actor, async (tx) => {
+    // Even the empty search screen requires a current native catalog grant.
+    if (!input.productId) return null;
+    if (input.kind === "stock") return { kind: "stock" as const, ...await new PostgresStockHistory(tx).read(input.productId, input.before) };
+    return { kind: "catalog" as const, ...await new PostgresCatalogHistory(tx).read(input.productId, input.before) };
+  });
 }
