@@ -12,7 +12,7 @@
 | 購入・注文番号の衝突修正 | #195 / #194 | 同日4桁の切り詰めを廃止。固定UUIDで旧処理の失敗と新処理の成功を確認。保存済み番号は変更しない |
 | 自作注文の準備・保留・取消・発送・追跡・配達 | #196 / [発送管理](NATIVE_FULFILLMENT.md) | migration 0028、専用DB接続、本人と期限付き権限、実管理者から顧客画面までの確認 |
 | 読取専用の売上・返金・手数料・入金照合 | #192 / [財務照合](FINANCE_RECONCILIATION.md) | Stripe読取キー・専用DB読取権限・実取引と銀行明細照合・担当/保持の確定 |
-| Actionsのbot操作範囲・main実行条件の補強 | #197 / 公開リポジトリ監査文書 | 過去ログ・履歴の点検、担当者/保持期限、復旧演習 |
+| Actionsのbot操作範囲・main実行条件の補強 | #197 / [公開リポジトリ監査](PUBLIC_REPOSITORY_AUDIT_2026-09-17.md) | 過去ログ・履歴の点検、担当者/保持期限、復旧演習 |
 
 PRの現在の状態と必須CIはGitHubで確認する。実装PRはそれぞれ固有のリスク・検証・復旧手順を持つ。発送の統合試験では通常1,320件・隔離DB251件成功、320/1280pxの表示・入力保持を確認。財務・Actionsを加えた後の全体結果は最終CIを正本とする。
 
@@ -41,5 +41,7 @@ Secret scanning・push protectionを有効化し、独立したAPI GETでenabled
 - 存在を確認：顧客Google、運営者Google、担当者紐付け、アプリDB、顧客サポートDB、暗号鍵、runtime/受付設定。
 - このProduction一覧に存在しない：Stripe関連、`DATABASE_NATIVE_FULFILLMENT_URL`、`DATABASE_CATALOG_MANAGER_URL`、財務専用の接続設定。
 - 設定名の存在は疎通・権限・本人ログインの証拠ではない。Development/PreviewやGitHubの別Environmentに同じ設定が存在しないとまでは断定しない。
+
+GitHub Environment名もAPIで再取得し、Preview / Production / Production – bloom-box-shop-ybb9を確認。`stripe-test` Environmentはまだ存在しない。秘密値は取得していない。
 
 次は事業条件の未確定項目を埋めつつ、隔離されたStripe test・DB権限で注文から発送までの実接続を検証する。鍵をチャットやIssueに貼らせず秘密管理先へ登録する。本番migration前のバックアップ/復元、実担当者・権限、対象SHAを確認してから公開手順へ進む。
