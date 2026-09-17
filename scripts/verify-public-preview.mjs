@@ -65,6 +65,12 @@ async function get(base, path) {
   }
   throw new Error("Unreachable retry state");
 }
+async function getVerifiedPage(base, path) {
+  const page = await get(base, path);
+  verifyDocument(path, page.body);
+  if (!/\.(txt|xml|webmanifest)$/.test(path)) verifyBrowserPolicy(page.body, page.headers, path);
+  return page;
+}
 export async function verifyPublicPreview(origin, log = console.log) {
   const base = previewOrigin(origin);
   const health = await get(base, "/api/health");
@@ -72,15 +78,13 @@ export async function verifyPublicPreview(origin, log = console.log) {
   log(`Read-only target: ${base}; deployed release: ${release}`);
   const pages = new Map();
   for (const path of PUBLIC_PREVIEW_ROUTES) {
-    const page = await get(base, path);
-    verifyDocument(path, page.body);
-    if (!/\.(txt|xml|webmanifest)$/.test(path)) verifyBrowserPolicy(page.body, page.headers, path);
+    const page = await getVerifiedPage(base, path);
     pages.set(path, page); log(`PASS ${path}`);
   }
   const home = pages.get("/");
   verifyPreviewSafety(home.body, pages.get("/cart").body, pages.get("/checkout/test/payment").body, pages.get("/commercial-transactions").body, home.headers);
-  const matching = await get(base, "/flowers?q=BLOOM%20BOX%20M");
-  const empty = await get(base, "/flowers?q=__bloombox_smoke_no_match_29482__");
+  const matching = await getVerifiedPage(base, "/flowers?q=BLOOM%20BOX%20M");
+  const empty = await getVerifiedPage(base, "/flowers?q=__bloombox_smoke_no_match_29482__");
   verifyCatalogSearch(matching.body, empty.body);
   log(`PASS catalog filtering and preview safety; release ${release}`);
   return release;
