@@ -109,12 +109,14 @@ export const operationsConsoleContent = z
             href: z.enum([
               "/operations",
               "/operations/orders",
+              "/operations/native-fulfillments",
               "/operations/customers",
               "/operations/catalog",
               "/operations/reports",
               "/operations/settings",
             ]),
             key: z.enum([
+              "fulfillment",
               "overview",
               "orders",
               "customers",
@@ -133,7 +135,7 @@ export const operationsConsoleContent = z
           })
           .strict(),
       )
-      .length(6),
+      .length(7),
   })
   .strict()
   .parse(source);
