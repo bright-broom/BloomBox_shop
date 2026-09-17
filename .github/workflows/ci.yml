@@ -69,7 +69,7 @@ jobs:
         run: |
           export TEST_PG_DUMP="$(pg_config --bindir)/pg_dump"
           export TEST_PG_RESTORE="$(pg_config --bindir)/pg_restore"
-          pnpm exec vitest run scripts/database-restore-drill.test.mjs
+          pnpm exec vitest run scripts/database-restore-drill.test.mjs scripts/database-status.test.mjs
       - name: Build production bundle
         run: pnpm build
       - name: Install browser for script-boundary regression
