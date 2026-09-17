@@ -1,0 +1,47 @@
+# Issue対応・公開接続の引き継ぎ（2026-09-17）
+
+[監査開始時の全57件](ISSUE_AUDIT_2026-09-17.md)と[現在のGitHub Issue](https://github.com/bright-broom/BloomBox_shop/issues)を区別する。この記録は実装・設定・検証の更新であり、商用販売開始の承認ではない。
+
+## 実装した範囲
+
+| 対応 | PR / 証跡 | 公開前に残るもの |
+| --- | --- | --- |
+| 自社商品画像の許可リスト・管理画面・配信 | #189 / [画像契約](PRODUCT_IMAGES.md) | 正式な実写素材・権利・商品への登録。パッケージ案を実物写真として使わない |
+| 商品・在庫の変更履歴検索と差分 | #190 / [商品管理](NATIVE_CATALOG_MANAGEMENT.md) | 正式な管理担当者・公開接続の確認は #119/#132 |
+| 全Issue監査、旧Shopify文書の歴史注記、公開監視修正、商用フッター検証 | #193 / [公開確認](PUBLIC_PREVIEW_VERIFICATION_2026-09-17.md) | 公開サイトへ新SHAが配備されたことは別途確認 |
+| 購入・注文番号の衝突修正 | #195 / #194 | 同日4桁の切り詰めを廃止。固定UUIDで旧処理の失敗と新処理の成功を確認。保存済み番号は変更しない |
+| 自作注文の準備・保留・取消・発送・追跡・配達 | #196 / [発送管理](NATIVE_FULFILLMENT.md) | migration 0028、専用DB接続、本人と期限付き権限、実管理者から顧客画面までの確認 |
+| 読取専用の売上・返金・手数料・入金照合 | #192 / [財務照合](FINANCE_RECONCILIATION.md) | Stripe読取キー・専用DB読取権限・実取引と銀行明細照合・担当/保持の確定 |
+| Actionsのbot操作範囲・main実行条件の補強 | #197 / [公開リポジトリ監査](PUBLIC_REPOSITORY_AUDIT_2026-09-17.md) | 過去ログ・履歴の点検、担当者/保持期限、復旧演習 |
+
+PRの現在の状態と必須CIはGitHubで確認する。実装PRはそれぞれ固有のリスク・検証・復旧手順を持つ。発送の統合試験では通常1,320件・隔離DB251件成功、320/1280pxの表示・入力保持を確認。財務・Actionsを加えた後の全体結果は最終CIを正本とする。
+
+## 完了整理と残件
+
+当初範囲の完了を確認して #148（住所帳など）、#143（履歴画面）、#145（移行文書）、#186（商用フッター）、追加した #194（番号衝突）をClosedへ整理した。新しい顧客要望や実接続・事業条件を含むIssueは、コードができただけで閉じない。
+
+監査開始57件に #194を追加し、上記5件を完了にした時点でOpenは53件。件数は変わるため、現在値はGitHubを読む。各残件の必要入力と次アクションは監査表および #113 に記録済み。
+
+価格・送料の確認済み前提はMの商品4,000円＋送料1,000円、Lの商品8,000円＋送料0円、税込・全国配送・1回1箱。これらの再決定を要求しない。箱寸法・花材/本数・実物品質/原価、配送締切/休業日/地域別日数、返品条件、正式事業者情報、料率/保持条件の確定は別途必要。
+
+## GitHubの実設定
+
+`bright-broom` はユーザー指定の公開承認者・コードレビュー担当者。mainの必須4チェック、最新mainへの追従、会話解決、管理者への適用、force push/削除禁止を設定し、APIで読み返した。GitHub Productionはmain限定・同ユーザーの承認を要求する。
+
+GitHubはPR作成者の自己承認を認めないため、独立したCODEOWNER承認は未強制。これを完了扱いせず、期限付きの制約と代替統制を [GOVERNANCE.md](GOVERNANCE.md) / #6 に記録した。GitHub Environmentを経由しないVercel配備まで、この設定だけで保護されるとはみなさない。
+
+Secret scanning・push protectionを有効化し、独立したAPI GETでenabledを確認。検知結果の中身・全履歴を検査したという意味ではない。秘密値や生の検知結果を公開Issueへ書かない。
+
+## 公開接続の再確認
+
+正本は `bloom-box-shop-ybb9`（project ID `prj_uguMJ5XHO9Vx6qvij8mELEKAtHyp`）。GitHubの監視変数を `https://bloom-box-shop-ybb9.vercel.app` に訂正した。healthの確認済み稼働SHAは `259356edf51def7030729822df32e07ff82a3b54`。mainへマージした新しいコードと同一ではない。自動配備は無効であり、mainへのpushを公開完了と報告しない。
+
+2026-09-17、正しいprojectに隔離ディレクトリからリンクし、VercelのProduction環境変数の**名前だけ**を一覧確認した。値の取得・変更・配備は実施していない。
+
+- 存在を確認：顧客Google、運営者Google、担当者紐付け、アプリDB、顧客サポートDB、暗号鍵、runtime/受付設定。
+- このProduction一覧に存在しない：Stripe関連、`DATABASE_NATIVE_FULFILLMENT_URL`、`DATABASE_CATALOG_MANAGER_URL`、財務専用の接続設定。
+- 設定名の存在は疎通・権限・本人ログインの証拠ではない。Development/PreviewやGitHubの別Environmentに同じ設定が存在しないとまでは断定しない。
+
+GitHub Environment名もAPIで再取得し、Preview / Production / Production – bloom-box-shop-ybb9を確認。`stripe-test` Environmentはまだ存在しない。秘密値は取得していない。
+
+次は事業条件の未確定項目を埋めつつ、隔離されたStripe test・DB権限で注文から発送までの実接続を検証する。鍵をチャットやIssueに貼らせず秘密管理先へ登録する。本番migration前のバックアップ/復元、実担当者・権限、対象SHAを確認してから公開手順へ進む。

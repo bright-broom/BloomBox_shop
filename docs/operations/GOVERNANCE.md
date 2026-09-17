@@ -61,12 +61,16 @@ Repository files cannot enforce account-level rulesets. The repository owner mus
 
 An exception states the exact control, reason, owner, expiry date, compensating control, and removal issue. Permanent verbal exceptions are invalid. Urgent production recovery may use the narrowest available bypass, followed by a PR and incident record.
 
-### Pending controls after public visibility change
+### 2026-09-17: owner and enforced controls
 
-GitHub rejected protection settings under the former private-repository plan on 2026-08-20. The repository is now public. A read-only API check on 2026-09-11 found no main branch protection or rulesets and no required Production Environment reviewer. Public visibility has not applied these controls automatically. Configure and verify the controls above to complete [issue #6](https://github.com/bright-broom/BloomBox_shop/issues/6). Until then:
+The user designated GitHub user `bright-broom` as both release owner and code reviewer. The account identity (user ID 170618233), repository admin access, and applied API settings were verified on 2026-09-17.
 
-- the Production Environment accepts deployments only from `main`;
-- the release operator must enter the full verified commit SHA and explicitly confirm deployment;
-- CI, Semgrep, PR Governance, and Vercel Preview evidence are reviewed before merge;
-- Production Commerce remains blocked by `pnpm check:production`;
-- the repository owner reviews this exception by 2026-09-30.
+- `main`: PR workflow, all four required checks above, up-to-date branch, resolved conversations, administrator enforcement, and no force pushes/deletions are configured.
+- GitHub `Production`: required reviewer `bright-broom`; only `main` is allowed. Self-review of environment deployments is permitted so the sole release owner can approve a release they initiated.
+- `PRODUCTION_BASE_URL`: corrected to `https://bloom-box-shop-ybb9.vercel.app`. Health identified release `259356edf51def7030729822df32e07ff82a3b54`; the URL setting alone does not deploy later commits.
+
+**Remaining control / issue #6:** GitHub does not let a PR author approve their own PR. `CODEOWNERS` names `@bright-broom`, but required approving reviews is currently zero and required code-owner review is off. This is a temporary single-owner limitation, not completion of independent review. The owner must nominate another reviewer or explicitly adopt a revised long-term governance policy by 2026-09-30. Until then, focused PRs, all required checks, documented risk/rollback, and an explicit owner release approval are the compensating controls. The automation must not claim it provided a human approval.
+
+Reference: [GitHub required-review behavior](https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/approving-a-pull-request-with-required-reviews).
+
+The GitHub environment approval protects jobs that use that environment. It does not independently prevent deployments from the Vercel console, CLI, or unrelated integrations. Hosting permissions and private secret inventory still require separate verification; no production release was initiated as part of this settings update.
