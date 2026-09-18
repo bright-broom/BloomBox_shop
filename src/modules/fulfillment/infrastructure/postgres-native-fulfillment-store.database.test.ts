@@ -73,7 +73,7 @@ suite("native fulfillment transactional operations and least privilege", () => {
   }
 
   it("prepares, ships, corrects tracking and records delivery exactly once with audits", async () => {
-    const { id, paymentId } = await seed();
+    const { id, orderId, paymentId } = await seed();
     await apply(command(id, 1, "START_PREPARATION"));
     await apply(command(id, 2, "MARK_READY"));
     const sent = ship(id);
@@ -94,6 +94,11 @@ suite("native fulfillment transactional operations and least privilege", () => {
       (SELECT count(*) FROM bloombox.fulfillment_status_transitions WHERE fulfillment_id = ${id})::int AS transitions,
       (SELECT count(*) FROM bloombox.native_fulfillment_accesses WHERE fulfillment_id = ${id})::int AS accesses`;
     expect(counts).toMatchObject({ shipments: 1, transitions: 4, accesses: 1 });
+    // One shipping notice per shipment: the replayed SHIP and the tracking correction queue nothing more.
+    const notices = await sql`SELECT aggregate_id, payload FROM bloombox.outbox_events WHERE event_type = 'fulfillment.shipped' AND aggregate_id = ${id}`;
+    expect(notices).toHaveLength(1);
+    expect(notices[0].payload).toMatchObject({ orderId, fulfillmentId: id, carrier: "YAMATO", trackingNumber: "123456789012" });
+    expect(JSON.stringify(notices[0].payload)).not.toMatch(/private@example|受取人検証|購入者非公開/);
   });
 
   it("rejects stale versions, changed retry commands and cross-fulfillment request reuse", async () => {
@@ -183,7 +188,8 @@ suite("native fulfillment transactional operations and least privilege", () => {
       "SELECT * FROM bloombox.customer_contacts", "SELECT * FROM bloombox.customer_accounts", "SELECT * FROM bloombox.webhook_inbox",
       "SELECT * FROM bloombox.ledger_entries", "SELECT buyer_id FROM bloombox.orders", "SELECT gift_message_ciphertext FROM bloombox.order_gift_snapshots",
       "SELECT recipient_ciphertext FROM bloombox.order_gift_snapshots", "UPDATE bloombox.payments SET status = 'REFUNDED'", "UPDATE bloombox.orders SET status = 'CANCELLED'",
-      "UPDATE bloombox.native_fulfillment_operators SET enabled = true"];
+      "UPDATE bloombox.native_fulfillment_operators SET enabled = true", "SELECT * FROM bloombox.outbox_events",
+      "UPDATE bloombox.outbox_events SET status = 'PUBLISHED'", "DELETE FROM bloombox.outbox_events"];
     for (const statement of forbidden) await expect(staff.unsafe(statement)).rejects.toMatchObject({ code: "42501" });
     const { id } = await seed(); await apply(command(id, 1, "START_PREPARATION")); await work((store) => store.read(id, actor));
     await expect(sql`DELETE FROM bloombox.native_fulfillment_changes WHERE fulfillment_id = ${id}`).rejects.toMatchObject({ code: "23514" });
@@ -216,6 +222,7 @@ suite("native fulfillment transactional operations and least privilege", () => {
     try { await expect(apply(ship(id, 1))).rejects.toMatchObject({ code: "UNAVAILABLE" }); }
     finally { await sql.unsafe("GRANT INSERT ON bloombox.native_fulfillment_changes TO bloombox_native_fulfillment"); }
     expect((await work((store) => store.read(id, actor)))).toMatchObject({ version: 1, status: "READY", shipment: null });
+    expect(await sql`SELECT id FROM bloombox.outbox_events WHERE aggregate_id = ${id}`).toHaveLength(0);
   });
 
   it("fails closed when destination access cannot be recorded", async () => {

@@ -6,6 +6,7 @@ import {
   getStripeUnrecordedCheckoutRecovery,
 } from "@/shared/infrastructure/composition-root";
 import { reportUnexpectedError } from "@/shared/infrastructure/observability/report-unexpected-error";
+import { deliverBuyerNotifications } from "@/shared/infrastructure/notification-runtime";
 import { isAuthorizedCommerceWorkerRequest } from "@/shared/infrastructure/security/worker-authorization";
 
 export const runtime = "nodejs";
@@ -24,13 +25,15 @@ export async function POST(request: Request): Promise<Response> {
     // After events are drained, settle expired Stripe checkouts whose session was never recorded by a provider lookup.
     const unrecordedCheckouts = await getStripeUnrecordedCheckoutRecovery().execute();
     const inbox = mergeInboxResults(inboxBeforeReconciliation, inboxAfterReconciliation);
+    // Orders confirmed above are notified in the same run; delivery failures are retried, never fatal here.
+    const notifications = await deliverBuyerNotifications();
     // Count unresolved dead letters and checkouts awaiting review on every run, so the incident stays open until
     // they are resolved rather than closing after the next quiet run. Only counts are returned.
     const attention = await getCommerceWorkerAttention().execute();
     if (attention.requiresAttention) {
       return Response.json({ ok: false, attention }, { status: 500 });
     }
-    return Response.json({ ok: true, inbox, reconciliation, retention, unrecordedCheckouts, attention });
+    return Response.json({ ok: true, inbox, reconciliation, retention, unrecordedCheckouts, notifications, attention });
   } catch (error) {
     reportUnexpectedError(error, { operation: "reconcile_stripe_events" });
     return Response.json({ ok: false }, { status: 500 });

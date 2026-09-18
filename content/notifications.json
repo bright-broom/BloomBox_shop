@@ -1,0 +1,44 @@
+{
+  "orderConfirmed": {
+    "subject": "【BLOOM BOX】ご注文を承りました（受付番号 {displayId}）",
+    "body": [
+      "BLOOM BOXをご利用いただき、ありがとうございます。",
+      "お支払いを確認し、ご注文を承りました。",
+      "",
+      "受付番号：{displayId}",
+      "お花：{productName} × {quantity}",
+      "お届け予定日：{deliveryDate}",
+      "お支払い合計：{total}（税込・送料込み）",
+      "",
+      "発送の準備が整いしだい、配送会社とお問い合わせ番号をあらためてお知らせします。",
+      "BLOOM BOXの会員の方は、マイページでもご注文の状況をご確認いただけます。",
+      "{accountUrl}"
+    ]
+  },
+  "orderShipped": {
+    "subject": "【BLOOM BOX】ギフトを発送しました（受付番号 {displayId}）",
+    "body": [
+      "ご注文のギフトを発送しました。",
+      "",
+      "受付番号：{displayId}",
+      "お花：{productName} × {quantity}",
+      "配送会社：{carrier}",
+      "お問い合わせ番号：{trackingNumber}",
+      "",
+      "配送状況は、配送会社のウェブサイトでお問い合わせ番号を入力してご確認ください。",
+      "お届けまで、もうしばらくお待ちください。"
+    ]
+  },
+  "carriers": {
+    "YAMATO": "ヤマト運輸",
+    "SAGAWA": "佐川急便",
+    "JAPAN_POST": "日本郵便"
+  },
+  "signature": [
+    "ご不明な点は、受付番号を添えて次の窓口からお問い合わせください。",
+    "{contactUrl}",
+    "",
+    "このメールは送信専用です。お届け先の方へは送信していません。",
+    "BLOOM BOX"
+  ]
+}
