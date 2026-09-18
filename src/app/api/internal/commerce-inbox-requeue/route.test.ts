@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { execute, reportUnexpectedError } = vi.hoisted(() => ({
   execute: vi.fn(),
@@ -26,6 +26,8 @@ function post(body: unknown, authorization = "Bearer a-secure-worker-secret-with
 }
 
 describe("commerce inbox requeue route", () => {
+  afterEach(() => vi.useRealTimers());
+
   beforeEach(() => {
     execute.mockReset();
     reportUnexpectedError.mockClear();
@@ -63,5 +65,61 @@ describe("commerce inbox requeue route", () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ ok: false });
     expect(reportUnexpectedError).toHaveBeenCalledOnce();
+  });
+});
+
+function streamingPost(stream: ReadableStream<Uint8Array>, authorization = "Bearer a-secure-worker-secret-with-32-chars") {
+  return new Request(new URL("requeue", import.meta.url), {
+    method: "POST", headers: { authorization }, body: stream, duplex: "half",
+  } as RequestInit & { duplex: "half" });
+}
+
+describe("requeue transport limits", () => {
+  beforeEach(() => { execute.mockReset(); reportUnexpectedError.mockClear(); });
+  afterEach(() => vi.useRealTimers());
+  it.each([undefined, "1", "16385", "invalid"])("rejects oversized or invalid input regardless of declared length %s", async (length) => {
+    const request = post(JSON.stringify(validBody).padEnd(16_385, " "));
+    if (length !== undefined) request.headers.set("content-length", length);
+    const response = await POST(request);
+    expect(response.status).toBe(400);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(execute).not.toHaveBeenCalled();
+    expect(reportUnexpectedError).not.toHaveBeenCalled();
+  });
+  it("rejects a stalled stream and releases the reader even when cancellation stalls", async () => {
+    vi.useFakeTimers();
+    const cancel = vi.fn(() => new Promise<void>(() => {}));
+    const stream = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(new Uint8Array([123])); }, cancel });
+    const response = POST(streamingPost(stream));
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect((await response).status).toBe(400);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(stream.locked).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(execute).not.toHaveBeenCalled();
+    expect(reportUnexpectedError).not.toHaveBeenCalled();
+  });
+  it("authenticates before acquiring a reader", async () => {
+    const request = streamingPost(new ReadableStream<Uint8Array>(), "Bearer wrong");
+    const reader = vi.spyOn(request.body!, "getReader");
+    const response = await POST(request);
+    expect(response.status).toBe(401);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(reader).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it("rejects invalid UTF-8", async () => {
+    const stream = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(new Uint8Array([255])); c.close(); } });
+    expect((await POST(streamingPost(stream))).status).toBe(400);
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it("accepts all 20 maximum-length IDs at the byte boundary", async () => {
+    const body = { externalEventIds: Array.from({ length: 20 }, (_, i) => "evt_" + String(i).padStart(255, "a")), incidentIssue: 1_000_000_000, requestedBy: "a".repeat(39) };
+    execute.mockResolvedValue({ results: [] });
+    const encoded = JSON.stringify(body).padEnd(16_384, " ");
+    const response = await POST(post(encoded));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(execute).toHaveBeenCalledExactlyOnceWith(body);
   });
 });
