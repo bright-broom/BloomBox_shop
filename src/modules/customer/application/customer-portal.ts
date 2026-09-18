@@ -2,6 +2,7 @@ import type {
   AccountChange,
   AccountPreferences,
 } from "../domain/customer-portal";
+import type { MembershipAgreementRecord } from "../domain/membership-agreement";
 export type AccountActor = Readonly<{
   customerId: string;
   version: number;
@@ -44,6 +45,10 @@ export interface CustomerPortalRepository {
       message: string;
     },
   ): Promise<void>;
+  /** The latest membership agreement record, or null when the member never agreed. */
+  membershipAgreement(actor: AccountActor): Promise<MembershipAgreementRecord | null>;
+  /** Records agreement to this version; repeating it for the recorded version changes nothing. */
+  agreeToMembership(actor: AccountActor, version: string): Promise<void>;
   revokeSessions(actor: AccountActor): Promise<void>;
   close(actor: AccountActor): Promise<void>;
 }

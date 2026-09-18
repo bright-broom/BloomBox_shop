@@ -194,6 +194,7 @@ main[tabindex="-1"]:focus { outline: none; }
 .home-faq .faq-item summary { font-size: var(--text-body); }
 .home-faq > div > .text-link { margin-top: var(--space-5); }
 .home-membership { padding-bottom: var(--space-8); }
+.home-membership-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
 .home-membership-note { padding: var(--space-5); border-radius: var(--radius-card); background: var(--paper); }
 .home-membership-note > .home-icon { color: var(--accent); }
 .home-membership-note h3 { margin-block: var(--space-3); font-size: var(--text-label); }
@@ -875,6 +876,12 @@ main[tabindex="-1"]:focus { outline: none; }
 .login-preview { margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--line); }
 .login-preview h3 { font-size: var(--text-body); }
 .login-preview p { font-size: var(--text-small); }
+.login-card .account-check { display: flex; align-items: flex-start; gap: var(--space-3); margin-bottom: var(--space-5); color: var(--ink); }
+.login-card .account-check input { width: 1.25rem; height: 1.25rem; margin-top: 0.15rem; flex: none; }
+.registration-steps { padding-left: var(--space-5); margin-bottom: var(--space-5); }
+.registration-steps li, .agreement-documents li { color: var(--ink-soft); }
+.agreement-documents { display: flex; flex-wrap: wrap; gap: var(--space-5); list-style: none; padding: 0; }
+.agreement-documents a { text-decoration: underline; }
 .login-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-5); margin-top: var(--space-5); }
 .operations-destinations { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); margin-block: var(--space-6); }
 .operations-destinations a { border: 1px solid var(--line); border-radius: var(--radius-card); padding: var(--space-5); }

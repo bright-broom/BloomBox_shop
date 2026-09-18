@@ -54,7 +54,7 @@ export const homeContentSchema = z.object({
     })).min(1).max(4),
   }),
   faq: heading.extend({ sectionIds: z.array(id).min(3).max(5), action: text, contact: text }),
-  membership: heading.extend({ description: text, benefitTitle: text, benefitNote: text, action: text }),
+  membership: heading.extend({ description: text, benefitTitle: text, benefitNote: text, action: text, register: text }),
   reviews: heading.extend({ items: z.array(z.object({
     id, status: approval, quote: text, displayName: text,
     verifiedPurchase: z.boolean(), publicationConsent: z.boolean(),

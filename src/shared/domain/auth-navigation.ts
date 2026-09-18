@@ -6,11 +6,16 @@ const uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 export function loginDestination(value: unknown, area: LoginArea): string {
   const home = area === "customer" ? ACCOUNT_HOME : OPERATOR_HOME;
   if (typeof value !== "string") return home;
-  if (area === "customer") return [home, "/account/profile", "/account/addresses", "/account/favorites", "/account/settings", "/account/support"].includes(value) || new RegExp(`^/account/orders/${uuid}$`, "i").test(value) ? value : home;
+  if (area === "customer") return [home, "/account/welcome", "/account/profile", "/account/addresses", "/account/favorites", "/account/settings", "/account/support"].includes(value) || new RegExp(`^/account/orders/${uuid}$`, "i").test(value) ? value : home;
   return [home, "/operations/requests", "/operations/orders", "/operations/reports", "/operations/settings", "/operations/catalog", "/operations/catalog/history", "/operations/customers", "/operations/permissions", "/operations/fulfillments", "/operations/native-fulfillments"].includes(value)
     || new RegExp(`^/operations/native-fulfillments/${uuid}$`, "i").test(value)
     || new RegExp(`^/operations/customers/${uuid}$`, "i").test(value)
     || new RegExp(`^/operations/fulfillments/[a-z0-9][a-z0-9-]*\\.myshopify\\.com/${uuid}$`, "i").test(value) ? value : home;
+}
+/** The registration completion page, returning to an allowed account page afterwards. */
+export function membershipWelcomeHref(destination?: unknown): string {
+  const next = loginDestination(destination, "customer");
+  return `${ACCOUNT_HOME}/welcome${next === ACCOUNT_HOME || next === `${ACCOUNT_HOME}/welcome` ? "" : `?next=${encodeURIComponent(next)}`}`;
 }
 export function loginHref(area: LoginArea, destination?: unknown): string {
   const home = area === "customer" ? ACCOUNT_HOME : OPERATOR_HOME;
