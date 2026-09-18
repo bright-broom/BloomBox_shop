@@ -6,7 +6,7 @@ Next.jsの画面と、PostgreSQLを中心とした自作の顧客・商品・注
 
 > **現在は販売準備中です。** 新規の本番注文はコードと公開判定で停止しています。以下では、実装済みの処理・部分的な接続確認・これから完成させる運用を区別します。最新の状態は [残課題台帳](docs/operations/BACKLOG.md) が正本です。
 
-全Issueの依存・実装／判断／設定／検証の区分は [2026-09-17監査](docs/operations/ISSUE_AUDIT_2026-09-17.md) に記録しています。監査後の状態は [GitHub Issue一覧](https://github.com/bright-broom/BloomBox_shop/issues) と照合してください。公開先は [bloom-box-shop-ybb9.vercel.app](https://bloom-box-shop-ybb9.vercel.app/) です。マージと公開反映は別です。
+2026-09-18の整理・統合は [Issue見直し](docs/operations/ISSUE_REVIEW_2026-09-18.md) と [統合記録](docs/operations/ISSUE_CLEANUP_2026-09-18.md) を参照してください。全Issueの依存・実装／判断／設定／検証の区分は [2026-09-17監査](docs/operations/ISSUE_AUDIT_2026-09-17.md) に記録しています。監査後の状態は [GitHub Issue一覧](https://github.com/bright-broom/BloomBox_shop/issues) と照合してください。公開先は [bloom-box-shop-ybb9.vercel.app](https://bloom-box-shop-ybb9.vercel.app/) です。マージと公開反映は別です。
 
 開発に参加するAI・人は、まず [AGENTS.md](AGENTS.md) → [HANDOFF.md](docs/operations/HANDOFF.md) → [BACKLOG.md](docs/operations/BACKLOG.md) を確認してください。
 
@@ -60,13 +60,18 @@ flowchart TB
 
 | 領域 | 確認できていること | まだ確認していないこと |
 | --- | --- | --- |
-| 顧客Google認証 | 実Googleの2顧客でログインし、架空注文の本人表示・相互非表示を確認 | 実Stripe購入からの紐付け、本番HTTPS |
-| 顧客管理 | 専用権限で一覧・ID/注文番号検索・購入履歴・参照記録を実装、隔離DBで検証 | 氏名/連絡先・対応メモ、実Google/本番接続・運用承認。[導入手順](docs/operations/CUSTOMER_MANAGEMENT.md) |
+| 顧客Google認証 | ローカルの架空注文で本人表示・相互非表示、公開HTTPSでも実Google2顧客のログインを確認 | Google一般公開、実Stripe購入からの紐付け・E2E |
+| 顧客・運営管理 | 専用権限による一覧・注文検索・集計・参照監査、公開の管理者1名と専用サポートDB接続を確認 | 担当者・監査保持期限・各業務の公開操作検証。[公開接続記録](docs/operations/CUSTOMER_SELF_SERVICE_RELEASE_2026-09-17.md) |
+| 顧客セルフサービス | プロフィール・住所帳・お気に入り・問い合わせ・退会・データ出力を実装し公開反映。実Googleとお気に入り保存を確認 | 全操作の公開環境検証、情報保持・サポート運用の確定。[導入と検証範囲](docs/operations/CUSTOMER_SELF_SERVICE.md) |
 | 商品・在庫管理 | 実Google＋隔離DBで登録・編集・補充・訂正・競合・権限失効を確認 | 正式な商品画像・実在庫・本番設定 |
 | 注文・送料・在庫 | 購入者紐付け、購入時の価格・送料固定、予約・確定・安全な解放を内部実装・DB検証 | 実Stripeの最終金額、通信断後の実運用、発送・返品 |
-| 画面 | M/L、カート編集、入力復旧、スマホの横ずれ抑制、メニュー・フォーカス等を確認 | 実機Safari、商用状態の読み上げ・購入E2E |
+| 発送・追跡 | 自作注文の準備・保留・発送・追跡訂正・配達完了、専用権限と監査を実装・隔離DB検証 | 専用DB/担当者の公開設定、実引渡し、通知送達。[導入手順](docs/operations/NATIVE_FULFILLMENT.md) |
+| 画面 | M/L、カート編集、入力復旧、期間付きお知らせ、スマホの横ずれ抑制・フォーカス等を確認 | 正式素材、実機Safari、商用状態の読み上げ・購入E2E |
+| 安全性・復旧 | nonce CSP・公開監視・ブラウザー回帰試験、DB復元演習、migration履歴の読取専用検査を実装 | 公開先への反映、DB確認専用接続の発行、実環境の復旧・当番運用 |
 | 会員ランク・自動割引 | 本人の全購入実績・現在ランク・進捗、購入時割引の保存、Stripe金額照合を実装 | 料率は0/2/3/5%の先行案。採算・条件確定と実決済検証。[設計・検証](docs/operations/CUSTOMER_LOYALTY.md) |
 | 紹介特典 | Test Modeで紹介・値引き・配達後付与・返金時取消を試せる | 本番の顧客・永続台帳・割引・正式イベントとの接続 |
+
+この表の実接続確認は2026-09-17〜18の記録に基づく履歴です。現在の公開SHA・設定を再確認した結果ではありません。
 
 通常のPreview購入で実決済は発生しません。ただし、Google認証や商品管理を隔離DBへつなぐ検証ではデータを保存します。**Preview表示、CI成功、架空の「支払済み」は、実決済・本番公開の証拠ではありません。**
 
@@ -82,7 +87,7 @@ flowchart TB
     OperatorGoogle["Google<br/>運営者専用クライアント"] <-->|"運営者認証"| Ops
     subgraph BloomBox["BLOOM BOX / Modular Monolith"]
         Shop["顧客の画面<br/>ストア・マイページ"] --> App["アプリケーション処理<br/>検証・所有権・状態遷移"]
-        Ops["運営者の画面<br/>商品・在庫管理"] --> App
+        Ops["運営者の画面<br/>注文・顧客・商品・発送管理"] --> App
         App --> DB[("PostgreSQL<br/>顧客・商品・在庫・注文・履歴")]
         App -.-> Shipping["自作の発送・追跡・通知<br/>接続・運用が残る"]
     end
@@ -126,7 +131,7 @@ DomainはReact・Next.js・DB・外部SDKを読み込みません。他モジュ
 | `inventory` | 販売用在庫、予約、確定、解放、数量変更履歴 |
 | `payment` | 署名検証、通知受付、支払・返金・紛争、再照合 |
 | `order` | 注文、明細、購入時スナップショット、本人向け参照 |
-| `fulfillment` | 配送日・住所と発送系の処理。旧Shopify経路の移行が残る |
+| `fulfillment` | 自作注文の準備・保留・発送・追跡・配達完了。旧Shopify経路は別管理 |
 | `referral` | Test Mode専用の紹介・特典ルール |
 
 注文・支払・発送は別の状態です。購入者と受取人も別の主体として扱います。AI・分析・推薦を購入の必須処理へ入れず、その障害で注文を止めません。
@@ -218,7 +223,7 @@ stateDiagram-v2
 | 支払後に期限切れ通知が届く | 確定済みの在庫を戻さない |
 | 返金・返品 | 返金だけで再販売可能と決めない。返品・発送の運用と照合する |
 
-発送時に在庫をもう一度減らしません。内部の安全な取消処理を顧客向け操作へつなぐことや、実Stripeでの期限後復旧は残課題です。数量の定義と適用手順は [NATIVE_INVENTORY.md](docs/operations/NATIVE_INVENTORY.md) にあります。
+発送時に在庫をもう一度減らしません。未決済購入の取消はカートの削除・内容変更へ接続済みです。実Stripeでの失効通知・在庫解放・期限後復旧の確認は残課題です。数量の定義と適用手順は [NATIVE_INVENTORY.md](docs/operations/NATIVE_INVENTORY.md) にあります。
 
 ## 開発を始める
 
@@ -264,7 +269,7 @@ pnpm dev --port 3012
 
 通常の起動はPreviewです。Google認証・商品管理DB・外部決済の接続には、それぞれの運用資料に沿った別設定が必要です。ローカル表示だけで本番設定が完了したとは扱いません。
 
-現在のGoogle認証付きローカル環境は3041番です。[復旧記録・再開手順](docs/operations/LOCAL_GOOGLE_3041.md)を参照してください。認証を試す際はGoogleの登録先と同じ固定ポートを使用します。
+2026-09-17に確認したGoogle認証付きローカル環境は3041番です。起動状態と作業ディレクトリを確認してから利用します。[復旧記録・再開手順](docs/operations/LOCAL_GOOGLE_3041.md)を参照してください。認証を試す際はGoogleの登録先と同じ固定ポートを使用します。
 
 ### 検証コマンド
 
@@ -272,10 +277,14 @@ pnpm dev --port 3012
 | --- | --- |
 | `pnpm check:ci` | 静的方針、型、Lint、通常テスト、本番用ビルド |
 | `pnpm test:database` | 専用の `TEST_DATABASE_URL` に対するDB試験。隔離したテストDBで実行 |
+| `pnpm db:status` | 専用接続のmigration履歴を読取専用で照合。未適用・不一致・権限不足は非ゼロ終了。DBの初期化・更新はしない |
+| `pnpm test:browser-security` | ブラウザーでCSP・script制限・hydrationを検証。Playwrightブラウザーの準備が必要 |
 | `pnpm check:production` | 案内・公開承認・本番構成の判定。現在は承認不足で失敗する状態が正しい |
 | `pnpm check:release` | 本番候補向けの全体検査・本番依存監査・公開判定 |
 
 DB専用試験は環境未設定なら通常テストでスキップされるため、通常テスト成功と区別します。GitHub CIには専用PostgreSQLでの試験があります。変更の深さに応じた確認範囲は [DEVELOPMENT.md](docs/engineering/DEVELOPMENT.md) を参照してください。
+
+DB確認には秘密管理から `DATABASE_STATUS_URL` を渡します。アプリ用接続を自動流用せず、台帳3列だけを読める専用接続を用意してください。[配備前確認](docs/operations/DATABASE_PREFLIGHT.md)・[最小権限ロールの準備](docs/operations/DATABASE_SCHEMA_READER.md)にTLS・接続方式・所有者の作業をまとめています。履歴一致は販売開始の承認を意味しません。
 
 ### 変更する場所
 
@@ -318,7 +327,7 @@ flowchart TB
 | [GOVERNANCE.md](docs/operations/GOVERNANCE.md) | レビュー・権限・環境の保護 |
 | [RELEASE.md](docs/operations/RELEASE.md) | 本番候補の検査・承認・配備・復旧 |
 
-確認済みの状態は2026-09-14の引き継ぎに基づきます。最新の完了・未完了は台帳と対象コード、実際の設定・検証記録を参照してください。
+README更新：2026-09-18。実装はmain `10c606a` を基準に確認。公開状態は [公開準備の実確認](docs/operations/PUBLIC_READINESS_2026-09-18.md) の実施時点の記録です。最新の完了・未完了は台帳と対象コード、実際の設定・検証記録を参照してください。
 
 ## 広告との連携
 
@@ -336,7 +345,7 @@ flowchart LR
 
 設定・定期処理・保持期限・未接続項目は [広告連携の運用](docs/operations/ADVERTISING.md)、設計判断は [ADR 0014](docs/architecture/adr/0014-advertising-conversions.md) を参照してください。
 
-### 運営管理画面
+## 運営管理画面
 
 [管理画面の機能・権限・接続手順](docs/operations/OPERATIONS_CONSOLE.md)。`/operations` のGoogle認証から、注文・顧客・商品/在庫・レポート・設定へ進めます。業務データの参照には担当者の登録と専用権限が必要です。表示見本はpreview環境の `/preview/operations`（架空データ）です。
 
