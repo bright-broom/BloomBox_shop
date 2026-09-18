@@ -1,8 +1,11 @@
 import { headers } from "next/headers";
 import {
   AccountPortalError,
+  membershipAgreementState,
   type AccountChange,
+  type MembershipAgreementState,
 } from "@/modules/customer/public";
+import { storefrontContent } from "./content/storefront-content";
 import { PostgresCustomerPortal } from "@/modules/customer/infrastructure/postgres-customer-portal";
 import {
   changeSchema,
@@ -51,6 +54,35 @@ export async function loadCustomerPortal() {
     console.error("customer_portal_read_failed");
     return { status: "unavailable" as const };
   }
+}
+export type MembershipAgreementLoad =
+  | Readonly<{ status: "signed-out" | "unavailable" }>
+  | Readonly<{ status: "ready"; agreement: MembershipAgreementState }>;
+/** Whether the signed-in member agreed to the current terms and privacy policy. */
+export async function loadMembershipAgreement(): Promise<MembershipAgreementLoad> {
+  try {
+    const { actor, repository } = await customerPortalContext();
+    return {
+      status: "ready",
+      agreement: membershipAgreementState(
+        await repository.membershipAgreement(actor),
+        storefrontContent.agreementVersion,
+      ),
+    };
+  } catch (error) {
+    if (error instanceof AccountPortalError && error.code === "expired")
+      return { status: "signed-out" };
+    console.error("customer_membership_agreement_read_failed");
+    return { status: "unavailable" };
+  }
+}
+/** Records agreement only to the version shown on the submitted form, and only when it is still current. */
+export async function recordMembershipAgreement(form: FormData) {
+  const { actor, repository } = await customerPortalContext(true);
+  if (form.get("agree") !== "on") throw new AccountPortalError("invalid");
+  if (form.get("version") !== storefrontContent.agreementVersion)
+    throw new AccountPortalError("conflict");
+  await repository.agreeToMembership(actor, storefrontContent.agreementVersion);
 }
 export async function changeCustomerPortal(form: FormData) {
   const { actor, repository } = await customerPortalContext(true);

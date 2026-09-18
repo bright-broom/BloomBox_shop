@@ -66,10 +66,11 @@
   "membership": {
     "eyebrow": "YOUR BLOOMBOX",
     "title": "贈った時間を、マイページに。",
-    "description": "ご注文の履歴も、お気に入りも、ひとつの場所に。Googleアカウントでログインできます。",
+    "description": "ご注文の履歴も、お気に入りも、ひとつの場所に。Googleアカウントで、パスワードを作らずに会員登録できます。",
     "benefitTitle": "購入実績に応じた会員特典",
     "benefitNote": "ランク別の自動割引を準備しています。割引率・適用条件は正式なご案内をお待ちください。",
-    "action": "マイページへ"
+    "action": "マイページへ",
+    "register": "新規会員登録"
   },
   "reviews": {
     "eyebrow": "GIFT STORIES",

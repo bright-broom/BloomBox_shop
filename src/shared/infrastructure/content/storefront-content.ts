@@ -32,10 +32,15 @@ const storefrontPageSchema = z.object({
   sections: z.array(storefrontSectionSchema).min(1).max(16),
 });
 
-const storefrontContentSchema = z.object({
+export const storefrontContentSchema = z.object({
   publicationStatus: z.enum(["draft", "approved"]),
+  /** Version members agree to at registration. Change it whenever the terms or privacy text changes materially. */
+  agreementVersion: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/),
   pages: z.array(storefrontPageSchema).length(8),
 }).superRefine((value, context) => {
+  if (value.publicationStatus === "approved" && value.agreementVersion.endsWith("-draft")) {
+    context.addIssue({ code: "custom", message: "Approved terms need a non-draft agreement version" });
+  }
   const slugs = new Set(value.pages.map((page) => page.slug));
   if (slugs.size !== value.pages.length) {
     context.addIssue({ code: "custom", message: "Storefront page slugs must be unique" });

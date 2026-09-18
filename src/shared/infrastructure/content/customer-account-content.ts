@@ -2,6 +2,10 @@ import { z } from "zod";
 import source from "../../../../content/customer-account.json";
 const text = z.string().trim().min(1).max(600);
 export const customerAccountContent = z.object({
+  registration: z.object({ title: text, eyebrow: text, lead: text, benefits: z.array(text).min(1), stepsLabel: text, steps: z.array(text).min(1),
+    dataNote: text, action: text, memberPrompt: text, loginLink: text, registerPrompt: text, registerLink: text }).strict(),
+  welcome: z.object({ title: text, updatedTitle: text, lead: text, updatedLead: text, terms: text, privacy: text, newTab: text, agree: text,
+    submit: text, updatedSubmit: text, decline: text, declineNote: text, draftNote: text, required: text, conflict: text, error: text, completed: text }).strict(),
   entry: z.object({ title: text, lead: text, benefits: z.array(text).min(1), home: text, operator: text, otherEntry: text }).strict(),
   loyalty: z.object({ navigation: text, title: text, eyebrow: text, lead: text, currentRank: text, discount: text, spend: text, untilNext: text, topRank: text, timing: text, rankList: text, from: text, off: text, conditions: text, rules: z.array(text).min(1), pilot: text, unavailable: text, cartDiscount: text, cartEstimate: text, cartUnavailable: text }).strict(),
   detail: z.object({ open: text, title: text, lead: text, items: text, quantity: text, unitPrice: text, lineTotal: text, subtotal: text, tax: text, shipping: text, discount: text, back: text, unavailableTitle: text, unavailableNote: text, error: text, previewTitle: text, sampleProduct: text, sampleLargeProduct: text }).strict(),
