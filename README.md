@@ -345,6 +345,10 @@ flowchart LR
 
 設定・定期処理・保持期限・未接続項目は [広告連携の運用](docs/operations/ADVERTISING.md)、設計判断は [ADR 0014](docs/architecture/adr/0014-advertising-conversions.md) を参照してください。
 
+## アクセス解析（GA4）
+
+同意した訪問者だけ、Google アナリティクス 4 でページ内の区画ごとの到達、商品→カート→購入のファネル、購入の新規/リピートを計測します。ギフト入力・受取人・ログイン・マイページ・運営画面は計測しません。`BLOOMBOX_GA4_MEASUREMENT_ID` 未設定で無効です。GA4プロパティの推奨設定と確認手順は [アクセス解析](docs/operations/ANALYTICS.md)、設計判断は [ADR 0018](docs/architecture/adr/0018-consented-web-analytics.md)。
+
 ## 運営管理画面
 
 [管理画面の機能・権限・接続手順](docs/operations/OPERATIONS_CONSOLE.md)。`/operations` のGoogle認証から、注文・顧客・商品/在庫・レポート・設定へ進めます。業務データの参照には担当者の登録と専用権限が必要です。表示見本はpreview環境の `/preview/operations`（架空データ）です。

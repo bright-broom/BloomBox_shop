@@ -27,6 +27,7 @@ const rowSchema = z.object({
   currency: z.literal("JPY").nullable(),
   carrier_code: z.string().nullable(),
   tracking_reference: z.string().nullable(),
+  customer_purchase: z.enum(["FIRST", "REPEAT", "GUEST"]).nullable(),
 });
 
 export class InvalidOrderStatusProjectionError extends Error {
@@ -56,11 +57,27 @@ export class PostgresOrderStatusQuery implements OrderStatusQuery {
         orders.total_minor,
         orders.currency,
         shipment.carrier_code,
-        shipment.tracking_reference
+        shipment.tracking_reference,
+        -- Aggregate analytics only (ADR 0018): whether an earlier confirmed order belongs to the same signed-in customer.
+        CASE
+          WHEN orders.id IS NULL THEN NULL
+          WHEN buyer.customer_id IS NULL THEN 'GUEST'
+          WHEN EXISTS (
+            SELECT 1
+            FROM bloombox.buyers AS earlier_buyer
+            JOIN bloombox.orders AS earlier ON earlier.buyer_id = earlier_buyer.id
+            WHERE earlier_buyer.customer_id = buyer.customer_id
+              AND earlier.commerce_provider = 'STRIPE'
+              AND earlier.status IN ('CONFIRMED', 'CLOSED')
+              AND (earlier.created_at, earlier.id) < (orders.created_at, orders.id)
+          ) THEN 'REPEAT'
+          ELSE 'FIRST'
+        END AS customer_purchase
       FROM bloombox.purchase_intents AS intent
       JOIN bloombox.purchase_intent_items AS item
         ON item.purchase_intent_id = intent.id AND item.position = 0
       LEFT JOIN bloombox.orders AS orders ON orders.purchase_intent_id = intent.id
+      LEFT JOIN bloombox.buyers AS buyer ON buyer.id = orders.buyer_id
       LEFT JOIN LATERAL (
         SELECT status
         FROM bloombox.payments
@@ -107,6 +124,7 @@ export class PostgresOrderStatusQuery implements OrderStatusQuery {
       total: total === undefined ? undefined : money(total),
       carrierCode: row.carrier_code ?? undefined,
       trackingReference: row.tracking_reference ?? undefined,
+      customerPurchase: row.customer_purchase ?? undefined,
     };
   }
 }

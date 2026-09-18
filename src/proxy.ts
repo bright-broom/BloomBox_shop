@@ -1,10 +1,12 @@
 import { randomBytes } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { browserPolicy } from "./shared/infrastructure/security/browser-policy";
+import { analyticsSettingsOrDisabled } from "./shared/infrastructure/config/analytics-config";
 
 export function proxy(request: NextRequest) {
   const nonce = randomBytes(24).toString("base64");
-  const policy = browserPolicy(nonce, request.nextUrl.pathname, process.env.NODE_ENV === "development");
+  const policy = browserPolicy(nonce, request.nextUrl.pathname, process.env.NODE_ENV === "development",
+    analyticsSettingsOrDisabled().enabled);
   const headers = new Headers(request.headers);
   headers.set("x-nonce", nonce);
   headers.set("Content-Security-Policy", policy);

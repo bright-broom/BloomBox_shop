@@ -26,6 +26,17 @@ describe("browser script boundary", () => {
       expect(browserPolicy("a".repeat(32), path, false)).not.toContain("accounts.google.com");
     }
   });
+  it("opens analytics endpoints only when GA4 is configured, and never for staff screens", () => {
+    const off = browserPolicy("a".repeat(32), "/", false);
+    expect(off).toContain("connect-src 'self';");
+    expect(off).toContain("img-src 'self' data: blob:;");
+    const on = browserPolicy("a".repeat(32), "/flowers", false, true);
+    expect(on).toContain("connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com;");
+    expect(on).toContain("img-src 'self' data: blob: https://*.google-analytics.com https://*.googletagmanager.com;");
+    expect(on).toContain(`script-src 'nonce-${"a".repeat(32)}' 'strict-dynamic';`);
+    for (const path of ["/operations", "/operations/orders"]) expect(browserPolicy("a".repeat(32), path, false, true)).not.toContain("google-analytics");
+    expect(browserPolicy("a".repeat(32), "/operations-evil", false, true)).toContain("google-analytics");
+  });
   it("allows eval only in the development server, never a preview production build", () => {
     expect(browserPolicy("a".repeat(32), "/", false)).not.toContain("unsafe-eval");
     expect(browserPolicy("a".repeat(32), "/", true)).toContain("unsafe-eval");

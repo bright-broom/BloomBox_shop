@@ -11,7 +11,7 @@ export function HomeShortcuts() {
     { icon: "pen", href: "#guide", label: copy.shortcuts.message },
     { icon: "calendar", href: "#delivery", label: copy.shortcuts.delivery },
   ] as const;
-  return <nav className="home-shortcuts section-shell" aria-label={copy.shortcuts.label}>
+  return <nav data-analytics-section="shortcuts" className="home-shortcuts section-shell" aria-label={copy.shortcuts.label}>
     {links.map((item, index) => <Link key={item.href} href={item.href}>
       <span className="home-shortcut-number" aria-hidden="true">0{index + 1}</span>
       <HomeIcon name={item.icon} /><span>{item.label}</span><HomeIcon name="down" size={18} />
@@ -41,7 +41,7 @@ export function HomeOccasions({ products }: { products: readonly Product[] }) {
   const copy = homeContent.visual.occasions;
   const items = copy.items.filter((item) => products.some((product) => product.available && product.occasion.includes(item.label)));
   if (!items.length) return null;
-  return <section className="home-occasions section-shell" aria-labelledby="home-occasions-title">
+  return <section data-analytics-section="occasions" className="home-occasions section-shell" aria-labelledby="home-occasions-title">
     <div className="home-occasion-heading"><p className="eyebrow">{copy.eyebrow}</p><h2 id="home-occasions-title">{copy.title}</h2></div>
     <div className="home-occasion-grid">{items.map((item) => <Link className="home-occasion" key={item.label} href={`/flowers?occasion=${encodeURIComponent(item.label)}`}>
       <span className="home-icon-tile"><HomeIcon name={occasionIcons[item.label] ?? "flower"} size={32} /></span>
@@ -55,7 +55,7 @@ export function HomeJourney() {
   const copy = siteContent.home.guide;
   const icons = ["flower", "pen", "gift"] as const;
   const accents = ["leaf", "heart", "sparkle"] as const;
-  return <section id="guide" className="how-it-works home-journey section-shell" aria-labelledby="guide-title">
+  return <section data-analytics-section="journey" id="guide" className="how-it-works home-journey section-shell" aria-labelledby="guide-title">
     <div className="journey-heading"><div><p className="eyebrow">{copy.eyebrow}</p><h2 id="guide-title">{copy.title}</h2></div><p>{copy.description}</p></div>
     <ol className="home-journey-steps">{copy.steps.map((step, index) => <li key={step.title}>
       <div className="home-step-art" aria-hidden="true"><span className="home-step-number">0{index + 1}</span>
