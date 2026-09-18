@@ -354,4 +354,5 @@ flowchart LR
 [管理画面の機能・権限・接続手順](docs/operations/OPERATIONS_CONSOLE.md)。`/operations` のGoogle認証から、注文・顧客・商品/在庫・レポート・設定へ進めます。業務データの参照には担当者の登録と専用権限が必要です。表示見本はpreview環境の `/preview/operations`（架空データ）です。
 
 - [マイページのセルフサービス](docs/operations/CUSTOMER_SELF_SERVICE.md)：プロフィール・住所帳・問い合わせ・アカウント管理と導入手順。
+- [取引通知](docs/operations/NOTIFICATIONS.md)：購入者への注文確認・発送のお知らせメール、配信事業者と送信ドメインの設定手順。
 - [新規会員登録](docs/operations/MEMBER_REGISTRATION.md)：Googleでの登録と、利用規約・プライバシーポリシーへの版つき同意の記録。

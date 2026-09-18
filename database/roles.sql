@@ -212,3 +212,5 @@ GRANT UPDATE (carrier_code, tracking_reference, shipped_at, delivered_at, update
 GRANT INSERT ON bloombox.fulfillment_status_transitions, bloombox.native_fulfillment_accesses
   TO bloombox_native_fulfillment;
 GRANT SELECT, INSERT ON bloombox.native_fulfillment_changes TO bloombox_native_fulfillment;
+-- Shipping notices are queued with the shipment in the same transaction; the role cannot read or change other events.
+GRANT INSERT ON bloombox.outbox_events TO bloombox_native_fulfillment;

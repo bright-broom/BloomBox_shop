@@ -129,12 +129,18 @@ export class PostgresNativeFulfillmentStore implements NativeFulfillmentStore {
     const [updated] = await this.tx`
       UPDATE bloombox.fulfillments SET status = ${change.toStatus}, version = version + 1, updated_at = clock_timestamp()
       WHERE id = ${command.fulfillmentId}::uuid AND version = ${command.expectedVersion} AND status = ${change.fromStatus}
-      RETURNING version
+      RETURNING version, order_id
     `;
     if (!updated) throw new NativeFulfillmentError("CONFLICT");
     if (shipment.kind === "CREATE") {
+      const shipmentId = randomUUID();
       await this.tx`INSERT INTO bloombox.shipments (id, fulfillment_id, carrier_code, tracking_reference, shipped_at, created_at, updated_at)
-        VALUES (${randomUUID()}, ${command.fulfillmentId}::uuid, ${shipment.carrier}, ${shipment.trackingNumber}, clock_timestamp(), clock_timestamp(), clock_timestamp())`;
+        VALUES (${shipmentId}, ${command.fulfillmentId}::uuid, ${shipment.carrier}, ${shipment.trackingNumber}, clock_timestamp(), clock_timestamp(), clock_timestamp())`;
+      // Atomic with the shipment, so the buyer's shipping notice is sent once per shipment (ADR 0019).
+      await this.tx`INSERT INTO bloombox.outbox_events (id, aggregate_type, aggregate_id, event_type, event_version, payload, occurred_at, available_at)
+        VALUES (${randomUUID()}, 'Fulfillment', ${command.fulfillmentId}::uuid, 'fulfillment.shipped', 1,
+          ${this.tx.json({ orderId: z.uuid().parse(updated.order_id), fulfillmentId: command.fulfillmentId, shipmentId,
+            carrier: shipment.carrier, trackingNumber: shipment.trackingNumber })}, clock_timestamp(), clock_timestamp())`;
     } else if (shipment.kind === "CORRECT") {
       const changed = await this.tx`UPDATE bloombox.shipments SET carrier_code = ${shipment.carrier}, tracking_reference = ${shipment.trackingNumber}, updated_at = clock_timestamp()
         WHERE fulfillment_id = ${command.fulfillmentId}::uuid RETURNING id`;

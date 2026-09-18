@@ -20,6 +20,7 @@ vi.mock("@/shared/infrastructure/config/worker-config", () => ({
   loadCommerceWorkerSecret: () => "a-secure-worker-secret-with-32-chars",
 }));
 vi.mock("@/shared/infrastructure/observability/report-unexpected-error", () => ({ reportUnexpectedError }));
+vi.mock("@/shared/infrastructure/notification-runtime", () => ({ deliverBuyerNotifications: async () => ({ disabled: true }) }));
 
 import { POST } from "./route";
 
@@ -79,6 +80,7 @@ describe("commerce reconciliation route", () => {
         purchaseIntentPiiPurged: 1,
       },
       unrecordedCheckouts: { checked: 2, released: 2, heldForReview: 0 },
+      notifications: { disabled: true },
       attention: healthy,
     });
   });
