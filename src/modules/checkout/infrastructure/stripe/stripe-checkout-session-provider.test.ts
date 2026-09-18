@@ -14,6 +14,7 @@ import {
   StripeCheckoutSessionProvider,
   StripeCheckoutResponseError,
   StripeSdkCheckoutApi,
+  finalConfirmationMessage,
   type StripeCheckoutApi,
   type StripeCheckoutExpiryClient,
   type StripeCheckoutSessionsClient,
@@ -93,7 +94,7 @@ describe("StripeSdkCheckoutApi", () => {
     await expect(api.create({
       purchaseIntentId: createIntent().id, productId: "native_12345678-abcd-4000-8000-123456789012",
       externalProductReference: "native_test", productName: "試験商品", unitAmount: 4000, currency: "JPY",
-      expiresAt: createIntent().expiresAt, idempotencyKey: "same-request", ...quote,
+      expiresAt: createIntent().expiresAt, deliveryDate: "2026-10-01", idempotencyKey: "same-request", ...quote,
     })).rejects.toBeInstanceOf(CheckoutPreparationUnavailableError);
     expect(create).not.toHaveBeenCalled();
   });
@@ -121,6 +122,7 @@ describe("StripeSdkCheckoutApi", () => {
       unitAmount: 6600,
       currency: "JPY",
       expiresAt: new Date("2026-08-21T23:00:00.000Z"),
+      deliveryDate: "2026-10-01",
       idempotencyKey: "purchase-intent:123:checkout:v1",
     });
 
@@ -148,6 +150,24 @@ describe("StripeSdkCheckoutApi", () => {
     const serialized = JSON.stringify(create.mock.calls[0]);
     expect(serialized).not.toContain("recipient");
     expect(serialized).not.toContain("giftMessage");
+  });
+
+  it("shows the delivery date and purchase terms beside Stripe's pay button, and refuses text Stripe would truncate", async () => {
+    const terms = { payment: "ご注文の確定時にお支払いが確定します。", cancellation: "4日前まで全額返金", returns: "自己都合は不可" };
+    expect(finalConfirmationMessage(terms, "2026-10-01")).toBe(
+      "お届け予定日：2026年10月1日(木)\nお支払い：ご注文の確定時にお支払いが確定します。\nキャンセル：4日前まで全額返金\n返品・交換：自己都合は不可");
+    const create = vi.fn<StripeCheckoutSessionsClient["create"]>().mockResolvedValue({
+      id: "cs_test_123", client_reference_id: "12345678-abcd-4000-8000-123456789012",
+      url: "https://checkout.stripe.com/c/pay/cs_test_123", expires_at: 1_787_353_200, livemode: false,
+    });
+    const request = { purchaseIntentId: "12345678-abcd-4000-8000-123456789012", productId: "prod_haru_01",
+      externalProductReference: "ref", productName: "春のひかり", quantity: 1, unitAmount: 4000, currency: "JPY" as const,
+      expiresAt: new Date("2026-08-21T23:00:00.000Z"), deliveryDate: "2026-10-01", idempotencyKey: "key" };
+    await new StripeSdkCheckoutApi(stripeConfig(), { create, retrieve: vi.fn() }, terms).create(request);
+    expect(create.mock.calls[0][0].custom_text).toEqual({ submit: { message: finalConfirmationMessage(terms, "2026-10-01") } });
+    const tooLong = new StripeSdkCheckoutApi(stripeConfig(), { create, retrieve: vi.fn() }, { ...terms, returns: "長".repeat(1_200) });
+    expect(() => tooLong.validateCreate(request)).toThrow(CheckoutPreparationUnavailableError);
+    expect(() => finalConfirmationMessage(terms, "10/01")).toThrow(CheckoutPreparationUnavailableError);
   });
 
   it("rejects a mismatched mode or unapproved Checkout redirect hostname", async () => {
@@ -181,6 +201,7 @@ describe("StripeSdkCheckoutApi", () => {
       unitAmount: 6600,
       currency: "JPY",
       expiresAt: new Date("2026-08-21T23:00:00.000Z"),
+      deliveryDate: "2026-10-01",
       idempotencyKey: "stable-key",
     })).rejects.toBeInstanceOf(StripeCheckoutResponseError);
     await expect(new StripeSdkCheckoutApi(stripeConfig(), invalidRedirect).retrieve("cs_test_123"))

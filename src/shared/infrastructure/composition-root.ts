@@ -1,4 +1,5 @@
 import { PostgresCommerceBacklog } from "@/modules/payment/infrastructure/postgres-commerce-backlog";
+import { purchaseTerms } from "./content/purchase-terms";
 import { PostgresPurgedInboxRecovery } from "@/modules/payment/infrastructure/postgres-purged-inbox-recovery";
 import { StripeInboxRecoverySource } from "@/modules/payment/infrastructure/stripe-inbox-recovery-source";
 import { PostgresCustomerPurchasePerformance } from "@/modules/order/infrastructure/postgres-customer-purchase-performance";
@@ -119,7 +120,7 @@ function createStartCheckout(intents: PurchaseIntentRepository): StartCheckout |
 
   const config = loadStripeConfig();
   const provider = new StripeCheckoutSessionProvider(
-    new StripeSdkCheckoutApi(config),
+    new StripeSdkCheckoutApi(config, undefined, purchaseTerms),
     config.apiVersion,
   );
   return new StartCheckout(intents, provider, undefined, acceptsNewCheckout, readCurrentPurchaseCustomer);
