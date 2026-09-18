@@ -9,6 +9,7 @@ export {
   InvalidOrderTrackingReferenceError,
   ORDER_STATUS_POLL_INTERVAL_MS,
   ORDER_STATUS_POLL_LIMIT,
+  type CustomerPurchase,
   type OrderProgress,
   type OrderStatusQuery,
   type PublicOrderStatus,

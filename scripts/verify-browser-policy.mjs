@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { parse } from "parse5";
 
+const ANALYTICS_CONNECT = ["https://*.google-analytics.com", "https://*.analytics.google.com", "https://*.googletagmanager.com"];
+const ANALYTICS_IMAGE = ["https://*.google-analytics.com", "https://*.googletagmanager.com"];
+
 /** Read-only inspection: parse as HTML instead of executing untrusted page scripts. */
 export function verifyBrowserPolicy(html, headers, pathname = "/") {
   const policy = headers.get("content-security-policy");
@@ -16,11 +19,14 @@ export function verifyBrowserPolicy(html, headers, pathname = "/") {
   assert(nonceSource && script.length === 2 && script.includes("'strict-dynamic'"), "Script policy is weakened");
   const nonce = nonceSource.slice(7, -1);
   assert(!directives.has("script-src-elem"), "Unexpected script policy override");
+  // Consented GA4 (ADR 0018) may add exactly these hosts, together, outside staff screens; nothing else.
+  const analytics = JSON.stringify(directives.get("connect-src")) === JSON.stringify(["'self'", ...ANALYTICS_CONNECT])
+    && !/^\/operations(\/|$)/.test(pathname);
   for (const [name, expected] of Object.entries({
-    "default-src": ["'self'"], "connect-src": ["'self'"], "script-src-attr": ["'none'"],
+    "default-src": ["'self'"], "connect-src": analytics ? ["'self'", ...ANALYTICS_CONNECT] : ["'self'"], "script-src-attr": ["'none'"],
     "object-src": ["'none'"], "base-uri": ["'none'"], "frame-src": ["'none'"],
     "frame-ancestors": ["'none'"], "worker-src": ["'none'"],
-    "img-src": ["'self'", "data:", "blob:"], "font-src": ["'self'"],
+    "img-src": ["'self'", "data:", "blob:", ...(analytics ? ANALYTICS_IMAGE : [])], "font-src": ["'self'"],
     "style-src": ["'self'", "'unsafe-inline'"],
     "form-action": /^\/(account|operations)(\/|$)|^\/api\/(customer-auth|operator-auth)(\/|$)/.test(pathname)
       ? ["'self'", "https://accounts.google.com"] : ["'self'"],

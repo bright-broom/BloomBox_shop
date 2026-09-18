@@ -13,6 +13,7 @@ import {
   serializeStructuredData,
 } from "@/shared/infrastructure/seo/structured-data";
 import { ProductCard } from "@/ui/product-card";
+import { AnalyticsEvent, AnalyticsLink } from "@/ui/analytics/analytics-event";
 import { cache } from "react";
 
 type ProductPageProps = { params: Promise<{ slug: string }> };
@@ -53,7 +54,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
       >
         {serializeStructuredData(jsonLd)}
       </script> : null}
-      <div className="detail-page">
+      <AnalyticsEvent name="view_item" params={{ currency: "JPY", value: product.price.amount, items: [{ item_id: product.id, item_name: product.name, price: product.price.amount }] }} />
+      <div className="detail-page" data-analytics-section="product-detail">
         <div className={`detail-image${product.previewOffer ? " is-package" : ""}`}>
         <Image
           src={product.imageUrl}
@@ -85,9 +87,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
         </p> : null}
         {product.available ? (
           <>
-            <Link className="primary-button" href={`/gift/${product.id}`}>
+            {/* The gift form itself is not measured, so the step into it is reported here. */}
+            <AnalyticsLink className="primary-button" href={`/gift/${product.id}`} event="gift_start" params={{ item_id: product.id, item_name: product.name }}>
               この花を贈る <span aria-hidden="true">→</span>
-            </Link>
+            </AnalyticsLink>
             {!product.previewOffer ? <ul className="purchase-notes" aria-label="お届けについて">
               <li>最短3日後からお届け</li>
               <li>メッセージカード無料</li>
@@ -103,7 +106,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         )}
         <Link className="text-link" href={`/account/favorites?add=${encodeURIComponent(product.id)}`}>{portalCopy.addFavorite}</Link>
           {product.previewOffer ? <SizeComparison products={[product, ...relatedProducts]} selectedId={product.id} /> : null}
-        <dl className="detail-list">
+        <dl className="detail-list" data-analytics-section="product-facts">
           <div><dt>花材</dt><dd>{product.flowers.join("、")}</dd></div>
           <div><dt>つくり手</dt><dd>{product.grower}</dd></div>
           <div><dt>おすすめ</dt><dd>{product.occasion.join(" / ")}</dd></div>
@@ -111,7 +114,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         </div>
       </div>
       {relatedProducts.length > 0 ? (
-        <section className="related-products section-shell" aria-labelledby="related-heading">
+        <section className="related-products section-shell" data-analytics-section="related-products" aria-labelledby="related-heading">
           <div className="section-heading">
             <div>
               <p className="eyebrow">YOU MAY ALSO LIKE</p>

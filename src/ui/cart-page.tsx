@@ -16,6 +16,7 @@ import { isAvailableDeliveryDate } from "@/modules/fulfillment/public";
 import { formatMoney, money, multiplyMoney } from "@/shared/domain/money";
 import Link from "next/link";
 import { CheckoutStorageUnavailable } from "@/ui/checkout-storage-unavailable";
+import { trackAnalyticsEvent } from "@/shared/infrastructure/analytics/ga4-browser";
 import { useRouter } from "next/navigation";
 import { useActionState, useState } from "react";
 import { CHECKOUT_SESSION_UNAVAILABLE, useCheckoutSessionRevision } from "@/ui/use-checkout-session-revision";
@@ -51,7 +52,10 @@ export function CartPage({
   const [state, formAction, pending] = useActionState(async (previous: Parameters<typeof createPurchaseIntentAction>[0], formData: FormData) => {
     try {
       const result = await createPurchaseIntentAction(previous, formData);
-      if (result.checkout) window.location.assign(result.checkout.url);
+      if (result.checkout) {
+        trackAnalyticsEvent("begin_checkout", { currency: "JPY" });
+        window.location.assign(result.checkout.url);
+      }
       if (result.draft) {
         storePreparedPreviewDraft(window.sessionStorage, result.draft.requestId, { version: 1, ...result.draft });
         recordPreviewMetric({ name: "begin_checkout", requestId: result.draft.requestId });

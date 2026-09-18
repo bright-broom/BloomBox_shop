@@ -13,6 +13,10 @@ import { giftExperienceContent } from "@/shared/infrastructure/content/gift-expe
 import { customerAccountContent } from "@/shared/infrastructure/content/customer-account-content";
 import { AdvertisingConsent } from "@/ui/advertising-consent";
 import { advertisingPublicSettings } from "@/shared/infrastructure/advertising-runtime";
+import { analyticsSettingsOrDisabled } from "@/shared/infrastructure/config/analytics-config";
+import { reportUnexpectedError } from "@/shared/infrastructure/observability/report-unexpected-error";
+import { AnalyticsLoader } from "@/ui/analytics/analytics-loader";
+import { AnalyticsConsentPanel } from "@/ui/analytics/analytics-consent";
 import "./globals.css";
 
 const sans = Noto_Sans_JP({
@@ -48,6 +52,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   // Nonces are per response; prerendered HTML cannot carry the request's nonce.
   await connection();
   const advertising = advertisingPublicSettings();
+  const analytics = analyticsSettingsOrDisabled(process.env, (error) => reportUnexpectedError(error, { operation: "analytics_configuration" }));
   return (
     <html lang="ja">
       <body className={sans.variable}>
@@ -122,6 +127,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           </div>
         </footer>
         {advertising.enabled ? <AdvertisingConsent preview={advertising.preview} /> : null}
+        {analytics.enabled ? <>
+          <AnalyticsLoader measurementId={analytics.measurementId} scriptUrl={analytics.scriptUrl} />
+          <AnalyticsConsentPanel />
+        </> : null}
       </body>
     </html>
   );

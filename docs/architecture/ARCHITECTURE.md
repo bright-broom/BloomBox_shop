@@ -141,3 +141,4 @@ Before a material change, answer:
 - [ADR 0016: 自作注文の取消・返金・返品・再配送の初期運用](adr/0016-native-refunds-and-cancellations.md) — 返金はStripe管理画面で行いWebhookで反映、発送前取消の手順、在庫を自動で戻さない、返送・再発送は初期対象外。取消・返品条件は未承認。
 
 - [ADR 0017: 顧客セルフサービス](adr/0017-customer-self-service.md) — 暗号化した登録情報、問い合わせ、同意、失効・退会。
+- [ADR 0018: 同意に基づくGA4アクセス解析](adr/0018-consented-web-analytics.md) — 同意後だけの読み込み、計測しない画面、区画の到達、新規/リピート区分。

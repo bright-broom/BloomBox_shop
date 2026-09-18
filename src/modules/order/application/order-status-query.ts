@@ -16,6 +16,8 @@ export type OrderProgress =
   | "REFUNDED"
   | "ATTENTION";
 
+export type CustomerPurchase = "FIRST" | "REPEAT" | "GUEST";
+
 export type OrderStatusRecord = Readonly<{
   purchaseIntentId: string;
   purchaseIntentStatus: string;
@@ -31,6 +33,8 @@ export type OrderStatusRecord = Readonly<{
   total?: Money;
   carrierCode?: string;
   trackingReference?: string;
+  /** Whether the signed-in buyer had an earlier confirmed order; GUEST when the order is not bound to an account. */
+  customerPurchase?: CustomerPurchase;
 }>;
 
 export type PublicOrderStatus = Readonly<{
@@ -47,6 +51,8 @@ export type PublicOrderStatus = Readonly<{
   total?: Money;
   carrierCode?: string;
   trackingReference?: string;
+  /** Whether the signed-in buyer had an earlier confirmed order; GUEST when the order is not bound to an account. */
+  customerPurchase?: CustomerPurchase;
 }>;
 
 export interface OrderStatusQuery {
@@ -81,6 +87,7 @@ export class GetOrderStatus {
       total: record.total,
       carrierCode: record.carrierCode,
       trackingReference: record.trackingReference,
+      customerPurchase: record.customerPurchase,
     };
   }
 }

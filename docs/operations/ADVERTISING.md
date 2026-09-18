@@ -24,7 +24,7 @@ flowchart LR
 - Meta広告: Conversions APIのPurchase。fbclidからfbcを生成。メール/電話の高度なマッチングや顧客リスト送信は行わない。
 - その他: HMAC-SHA256署名付きWebhook。受信側は署名・時刻（5分程度）を検証し、eventIdを永続的に重複排除する。レスポンス契約はJSON `{"accepted":true}`。任意の広告媒体には専用アダプターの追加が必要。
 - 30日同意、拒否、撤回、初回広告クリックの暗号化保存、送信待ち記録、重複対策、排他的worker、再試行、保存期限掃除。
-- 購入イベントのみ。PageView/ViewContent/AddToCart、リターゲティング、GA4、商品フィード、広告予算・キャンペーン作成、返金訂正、広告ダッシュボードは対象外。
+- 購入イベントのみ。PageView/ViewContent/AddToCart、リターゲティング、商品フィード、広告予算・キャンペーン作成、返金訂正、広告ダッシュボードは対象外。閲覧の分析は広告とは別に、同意に基づくGA4で行う（[アクセス解析](ANALYTICS.md)、ADR 0018）。
 
 ## 設定
 

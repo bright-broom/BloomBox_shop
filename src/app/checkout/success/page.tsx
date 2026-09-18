@@ -8,6 +8,8 @@ import {
 } from "@/modules/order/public";
 import { OrderStatusRefresh } from "@/ui/order-status-refresh";
 import { CompletedCheckoutCartCleanup } from "@/ui/completed-checkout-cart-cleanup";
+import { AnalyticsPurchase } from "@/ui/analytics/analytics-event";
+import { ANALYTICS_CUSTOMER_TYPES } from "@/shared/domain/analytics-policy";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -19,6 +21,9 @@ export const metadata: Metadata = {
 type CheckoutReturnPageProps = {
   searchParams: Promise<{ session_id?: string | string[] }>;
 };
+
+/** A purchase is reported only after the verified payment webhook confirmed the order. */
+const PAID_PROGRESS: ReadonlySet<OrderProgress> = new Set(["CONFIRMED", "FULFILLING", "SHIPPED", "DELIVERED"]);
 
 const progressCopy: Record<OrderProgress, Readonly<{ eyebrow: string; title: string; body: string }>> = {
   PROCESSING: {
@@ -88,7 +93,15 @@ export default async function CheckoutReturnPage({ searchParams }: CheckoutRetur
   const copy = progressCopy[progress];
 
   return (
-    <section className="confirmation-page section-shell">
+    <section className="confirmation-page section-shell" data-analytics-section="order-confirmation">
+      {order?.total && order.customerPurchase && PAID_PROGRESS.has(progress) ? <AnalyticsPurchase order={{
+        transactionId: order.displayId,
+        totalYen: order.total.amount,
+        productId: order.productId,
+        productName: order.productName,
+        quantity: order.quantity,
+        customerType: ANALYTICS_CUSTOMER_TYPES[order.customerPurchase],
+      }} /> : null}
       <div className="confirmation-mark" aria-hidden="true">
         {[
           "ATTENTION", "CANCELLED", "PAYMENT_FAILED", "CHECKOUT_EXPIRED",

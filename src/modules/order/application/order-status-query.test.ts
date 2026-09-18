@@ -36,6 +36,11 @@ describe("GetOrderStatus", () => {
     });
   });
 
+  it("passes the first or repeat purchase classification through for aggregate analytics", async () => {
+    const useCase = new GetOrderStatus(query({ orderDisplayId: "BB-1", orderStatus: "CONFIRMED", paymentStatus: "CAPTURED", customerPurchase: "REPEAT" }));
+    await expect(useCase.execute("cs_test_12345678")).resolves.toMatchObject({ progress: "CONFIRMED", customerPurchase: "REPEAT" });
+  });
+
   it("keeps checkout processing while the verified webhook is pending", async () => {
     const useCase = new GetOrderStatus(query());
 

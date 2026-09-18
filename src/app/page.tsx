@@ -22,7 +22,7 @@ export default async function HomePage() {
   return (
     <>
       <HomeAnnouncements now={now} />
-      <section className="hero" aria-labelledby="hero-title">
+      <section data-analytics-section="hero" className="hero" aria-labelledby="hero-title">
         <Image src={hero.imageUrl} alt={hero.imageAlt} fill priority sizes="100vw" className="hero-image" />
         <div className="hero-copy">
           <p className="eyebrow home-hero-kicker"><HomeIcon name="flower" size={20} />{hero.eyebrow}</p>
@@ -36,7 +36,7 @@ export default async function HomePage() {
       </section>
       <HomeShortcuts />
 
-      <section className="intro-section home-intro section-shell" aria-labelledby="intro-title">
+      <section data-analytics-section="intro" className="intro-section home-intro section-shell" aria-labelledby="intro-title">
         <div className="intro-layout home-intro-layout">
           <div className="intro-copy">
             <p className="eyebrow">{home.intro.eyebrow}</p>
@@ -50,7 +50,7 @@ export default async function HomePage() {
       </section>
       <HomeOccasions products={products} />
 
-      <section id="collection" className="collection section-shell" aria-labelledby="collection-title">
+      <section data-analytics-section="collection" id="collection" className="collection section-shell" aria-labelledby="collection-title">
         <div className="section-heading">
           <div>
             <p className="eyebrow">{home.collection.eyebrow}</p>

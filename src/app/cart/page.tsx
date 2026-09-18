@@ -4,6 +4,7 @@ import { loadRuntimeMode } from "@/shared/infrastructure/config/runtime-config";
 import { CartPage } from "@/ui/cart-page";
 import { CheckoutProgress } from "@/ui/checkout-progress";
 import { application } from "@/shared/infrastructure/composition-root";
+import { AnalyticsEvent } from "@/ui/analytics/analytics-event";
 
 export const metadata: Metadata = {
   title: "カート",
@@ -20,7 +21,8 @@ export default async function CartRoute({ searchParams }: CartRouteProps) {
   const catalogPrices = (await application.listProducts.execute()).flatMap((product) => product.shippingAmount !== undefined ? [{ productId: product.id, unitAmount: product.price.amount, shippingAmount: product.shippingAmount }] : []);
   const loyalty = loadRuntimeMode() === "preview" ? null : await loadCurrentCustomerLoyalty();
   return (
-    <section className="checkout-page section-shell" data-checkout-page="cart">
+    <section className="checkout-page section-shell" data-checkout-page="cart" data-analytics-section="cart">
+      <AnalyticsEvent name="view_cart" params={{ currency: "JPY" }} />
       <CheckoutProgress currentStep={3} />
       <header className="checkout-header">
         <p className="eyebrow">YOUR CART</p>

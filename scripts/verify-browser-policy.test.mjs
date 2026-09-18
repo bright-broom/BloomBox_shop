@@ -31,6 +31,19 @@ describe("delivered document script inspection", () => {
     const value = headers(); value.set("content-security-policy", weaken(value.get("content-security-policy")));
     expect(() => verifyBrowserPolicy(html, value)).toThrow();
   });
+  it("accepts the consented analytics hosts only as the exact pair, and never on staff screens", () => {
+    const measured = new Headers({ "content-security-policy": browserPolicy(nonce, "/flowers", false, true), "cache-control": "private, no-store" });
+    expect(verifyBrowserPolicy(html, measured, "/flowers").nonce).toBe(nonce);
+    const partial = new Headers(measured);
+    partial.set("content-security-policy", measured.get("content-security-policy").replace(/img-src [^;]+/, "img-src 'self' data: blob:"));
+    expect(() => verifyBrowserPolicy(html, partial, "/flowers")).toThrow();
+    const widened = new Headers(measured);
+    widened.set("content-security-policy", measured.get("content-security-policy").replace("connect-src 'self'", "connect-src 'self' https://unapproved.invalid"));
+    expect(() => verifyBrowserPolicy(html, widened, "/flowers")).toThrow();
+    const staff = new Headers(measured);
+    expect(() => verifyBrowserPolicy(html, staff, "/operations")).toThrow();
+    expect(() => verifyBrowserPolicy('<script src="https://www.googletagmanager.com/gtag/js?id=G-TEST1234"></script>' + html, measured, "/flowers")).toThrow();
+  });
   it("rejects cached HTML, mismatched nonces, missing assets and report-only policy", () => {
     const cached = headers(); cached.set("cache-control", "public, max-age=3600");
     expect(() => verifyBrowserPolicy(html, cached)).toThrow();
