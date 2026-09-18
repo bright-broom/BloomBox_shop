@@ -5,6 +5,7 @@ import { CartPage } from "@/ui/cart-page";
 import { CheckoutProgress } from "@/ui/checkout-progress";
 import { application } from "@/shared/infrastructure/composition-root";
 import { AnalyticsEvent } from "@/ui/analytics/analytics-event";
+import { purchaseTerms } from "@/shared/infrastructure/content/purchase-terms";
 
 export const metadata: Metadata = {
   title: "カート",
@@ -36,6 +37,7 @@ export default async function CartRoute({ searchParams }: CartRouteProps) {
         checkoutCancelled={query.checkout === "cancelled"}
         previousOrderKept={query.previous === "completed"}
         previewMode={loadRuntimeMode() === "preview"}
+        purchaseTerms={purchaseTerms}
       />
     </section>
   );

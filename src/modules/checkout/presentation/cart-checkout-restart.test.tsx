@@ -1,6 +1,7 @@
 import { Children, isValidElement, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CartPage } from "@/ui/cart-page";
+import { purchaseTerms } from "@/shared/infrastructure/content/purchase-terms";
 import { getEarliestDeliveryDate } from "@/modules/fulfillment/public";
 import { CartChangedError, readRecoverableCart, storeCart } from "./browser-checkout-session";
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
@@ -45,7 +46,7 @@ function elements(node: ReactNode): Array<Record<string, unknown>> {
 }
 function render() {
   harness.cursor = 0;
-  return CartPage({ added: false, checkoutCancelled: false, previewMode: false, catalogPrices: [] });
+  return CartPage({ added: false, checkoutCancelled: false, previewMode: false, catalogPrices: [], purchaseTerms });
 }
 function cart() {
   return { version: 1 as const, requestId, productId: "test-product", productName: "テスト商品", unitAmount: 4000, quantity: 1,

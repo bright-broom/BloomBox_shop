@@ -22,9 +22,27 @@ type StripeCheckoutRequest = Readonly<{
   unitAmount: number;
   shippingAmount?: number;
   currency: "JPY";
+  /** The requested delivery date (YYYY-MM-DD), shown on Stripe's final confirmation screen. */
+  deliveryDate: string;
   expiresAt: Date;
   idempotencyKey: string;
 }>;
+
+/** Purchase terms that must appear on the final confirmation screen (特定商取引法 12条の6). */
+export type StripeFinalConfirmation = Readonly<{ payment: string; cancellation: string; returns: string }>;
+/** Stripe's limit for custom_text.submit.message. */
+export const STRIPE_SUBMIT_MESSAGE_LIMIT = 1_200;
+
+export function finalConfirmationMessage(terms: StripeFinalConfirmation, deliveryDate: string): string {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(deliveryDate)
+    ? new Intl.DateTimeFormat("ja-JP", { timeZone: "UTC", year: "numeric", month: "long", day: "numeric", weekday: "short" })
+      .format(new Date(`${deliveryDate}T00:00:00Z`))
+    : null;
+  if (!date) throw new CheckoutPreparationUnavailableError();
+  const message = [`お届け予定日：${date}`, `お支払い：${terms.payment}`, `キャンセル：${terms.cancellation}`, `返品・交換：${terms.returns}`].join("\n");
+  if (message.length > STRIPE_SUBMIT_MESSAGE_LIMIT) throw new CheckoutPreparationUnavailableError();
+  return message;
+}
 
 type StripeCheckoutResponse = Readonly<{
   id: string;
@@ -90,6 +108,7 @@ export class StripeCheckoutSessionProvider implements CheckoutSessionProvider {
       externalProductReference: intent.item.externalProductReference,
       productName: intent.item.productName,
       quantity: intent.item.quantity,
+      deliveryDate: intent.recipient.deliveryDate,
       unitAmount: intent.item.unitPriceSnapshot.amount - (intent.loyalty?.discountYen ?? 0),
       shippingAmount: intent.shippingAmount?.amount,
       currency: intent.item.unitPriceSnapshot.currency,
@@ -116,6 +135,7 @@ export class StripeSdkCheckoutApi implements StripeCheckoutApi {
   constructor(
     private readonly config: StripeConfig,
     sessions?: StripeCheckoutSessionsClient,
+    private readonly confirmation?: StripeFinalConfirmation,
   ) {
     const stripe = createStripeCheckoutClient(config);
     this.sessions = sessions ?? {
@@ -126,6 +146,7 @@ export class StripeSdkCheckoutApi implements StripeCheckoutApi {
   }
 
   validateCreate(request: Omit<StripeCheckoutRequest, "idempotencyKey">): void {
+    if (this.confirmation) finalConfirmationMessage(this.confirmation, request.deliveryDate);
     if (request.productId.startsWith("native_") && request.shippingAmount === undefined) throw new CheckoutPreparationUnavailableError();
     if (request.shippingAmount !== undefined && (
       !Number.isSafeInteger(request.shippingAmount) || request.shippingAmount < 0
@@ -136,6 +157,7 @@ export class StripeSdkCheckoutApi implements StripeCheckoutApi {
 
   async create(request: StripeCheckoutRequest): Promise<StripeCheckoutResponse> {
     this.validateCreate(request);
+    const confirmation = this.confirmation ? finalConfirmationMessage(this.confirmation, request.deliveryDate) : null;
     const session = await this.sessions.create({
       mode: "payment",
       client_reference_id: request.purchaseIntentId,
@@ -144,6 +166,8 @@ export class StripeSdkCheckoutApi implements StripeCheckoutApi {
       billing_address_collection: "auto",
       automatic_tax: { enabled: this.config.automaticTaxEnabled },
       consent_collection: { terms_of_service: this.config.termsAcceptance },
+      // Stripe hosts the final confirmation screen, so the delivery, payment and cancellation terms appear beside "支払う".
+      ...(confirmation ? { custom_text: { submit: { message: confirmation } } } : {}),
       line_items: [{
         price_data: {
           currency: request.currency.toLowerCase(),
