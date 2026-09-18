@@ -355,3 +355,4 @@ flowchart LR
 
 - [マイページのセルフサービス](docs/operations/CUSTOMER_SELF_SERVICE.md)：プロフィール・住所帳・問い合わせ・アカウント管理と導入手順。
 - [取引通知](docs/operations/NOTIFICATIONS.md)：購入者への注文確認・発送のお知らせメール、配信事業者と送信ドメインの設定手順。
+- [新規会員登録](docs/operations/MEMBER_REGISTRATION.md)：Googleでの登録と、利用規約・プライバシーポリシーへの版つき同意の記録。

@@ -28,6 +28,7 @@ import {
   sendAccountRequest,
   endAllCustomerSessions,
 } from "../portal-actions";
+import { requireMembershipAgreement } from "../membership-gate";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "マイページ",
@@ -43,6 +44,7 @@ export default async function AccountSectionPage({
   const { section: value } = await params;
   if (!accountSections.some((s) => s === value)) notFound();
   const section = value as AccountSection;
+  await requireMembershipAgreement("/account/" + section);
   const state = await loadCustomerPortal();
   if (state.status === "signed-out")
     redirect(loginHref("customer", "/account/" + section));

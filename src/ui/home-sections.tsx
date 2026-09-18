@@ -98,7 +98,10 @@ export function HomeMembership() {
         <Link href="/account/favorites" prefetch={false}><HomeIcon name="heart" /><span>{homeContent.visual.accountLinks.favorites}</span></Link>
         <Link href="/account/addresses" prefetch={false}><HomeIcon name="pin" /><span>{homeContent.visual.accountLinks.addresses}</span></Link>
       </nav>
-      <Link className="primary-button" href="/account" prefetch={false}>{copy.action}<HomeIcon name="arrow" /></Link>
+      <div className="home-membership-actions">
+        <Link className="primary-button" href="/account/register" prefetch={false}>{copy.register}<HomeIcon name="arrow" /></Link>
+        <Link className="secondary-button" href="/account" prefetch={false}>{copy.action}</Link>
+      </div>
     </div><div className="home-membership-note"><HomeIcon name="sprout" />
       <h3>{copy.benefitTitle}</h3><p>{copy.benefitNote}</p>
     </div></div>

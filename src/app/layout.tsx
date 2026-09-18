@@ -80,6 +80,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             <Link href="/guide">ご利用ガイド</Link>
             <Link href="/faq">よくあるご質問</Link>
             <Link href="/account" prefetch={false}>{customerAccountContent.title}</Link>
+            <Link href="/account/register" prefetch={false}>{customerAccountContent.registration.registerLink}</Link>
             <Link href="/cart">カート</Link>
             <Link href="/operations" prefetch={false}>{customerAccountContent.entry.operator}</Link>
           </MobileNavigation>
@@ -108,6 +109,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                 <Link href="/shipping-returns">配送・返品</Link>
                 <Link href="/faq">よくあるご質問</Link>
                 <Link href="/account" prefetch={false}>{customerAccountContent.title}</Link>
+                <Link href="/account/register" prefetch={false}>{customerAccountContent.registration.registerLink}</Link>
                 <Link href="/gift-next">{giftExperienceContent.recipient.label}</Link>
                 <PreviewFooterLinks runtime={loadRuntimeMode()} checkout={loadCheckoutProviderMode()} />
               </nav>

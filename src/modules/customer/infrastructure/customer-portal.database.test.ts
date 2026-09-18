@@ -167,6 +167,38 @@ suite("customer portal ownership, persistence and recovery", () => {
     ).toBe("WITHDRAWN");
     await expect(identities.registerGoogleSubject(subject)).rejects.toThrow();
   });
+  it("records one versioned membership agreement per version under the application role and withdraws it on closure", async () => {
+    const a = await actor(), b = await actor();
+    const connection = postgres(url!, { max: 1, ssl: false });
+    try {
+      await connection`SET ROLE bloombox_application`;
+      const app = new PostgresCustomerPortal(connection, key);
+      expect(await app.membershipAgreement(a)).toBeNull();
+      // Concurrent submissions on separate connections serialize on the account row: one grant only.
+      await Promise.all([repo.agreeToMembership(a, "2026-09-19-draft"), repo.agreeToMembership(a, "2026-09-19-draft")]);
+      await app.agreeToMembership(a, "2026-09-19-draft");
+      expect(await app.membershipAgreement(a)).toEqual({ status: "GRANTED", version: "2026-09-19-draft" });
+      expect(await app.membershipAgreement(b)).toBeNull();
+      await app.agreeToMembership(a, "2026-10-01");
+      expect(await app.membershipAgreement(a)).toEqual({ status: "GRANTED", version: "2026-10-01" });
+      await expect(app.agreeToMembership(a, "Bad Version")).rejects.toMatchObject({ code: "invalid" });
+    } finally {
+      await connection`RESET ROLE`;
+      await connection.end();
+    }
+    const rows = await sql`SELECT status, policy_version, source FROM bloombox.customer_consents
+      WHERE customer_id = ${a.customerId} AND purpose = 'MEMBERSHIP_TERMS' ORDER BY occurred_at, id`;
+    expect(rows.map((row) => [row.status, row.policy_version, row.source])).toEqual([
+      ["GRANTED", "2026-09-19-draft", "MEMBERSHIP_REGISTRATION"],
+      ["GRANTED", "2026-10-01", "MEMBERSHIP_REGISTRATION"],
+    ]);
+    expect(await sql`SELECT 1 FROM bloombox.audit_logs WHERE resource_id = ${a.customerId} AND action = 'customer.membership.agreed'`).toHaveLength(2);
+    await repo.close(a);
+    const [latest] = await sql`SELECT status, policy_version, source FROM bloombox.customer_consents
+      WHERE customer_id = ${a.customerId} AND purpose = 'MEMBERSHIP_TERMS' ORDER BY occurred_at DESC, id DESC LIMIT 1`;
+    expect([latest.status, latest.policy_version, latest.source]).toEqual(["WITHDRAWN", "2026-10-01", "ACCOUNT_CLOSURE"]);
+    await expect(repo.agreeToMembership(a, "2026-10-01")).rejects.toMatchObject({ code: "expired" });
+  });
   it("uses application grants and rolls back preferences when audit fails", async () => {
     const connection = postgres(url!, { max: 1, ssl: false }),
       a = await actor();

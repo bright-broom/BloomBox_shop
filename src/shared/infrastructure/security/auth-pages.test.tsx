@@ -1,20 +1,22 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-const mocks = vi.hoisted(() => ({ customer: vi.fn(), operator: vi.fn(), account: vi.fn(), guard: vi.fn(), catalog: vi.fn(), orders: vi.fn(), report: vi.fn() }));
+const mocks = vi.hoisted(() => ({ customer: vi.fn(), operator: vi.fn(), account: vi.fn(), guard: vi.fn(), catalog: vi.fn(), orders: vi.fn(), report: vi.fn(), agreement: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }), redirect: (url: string) => { throw new Error(`redirect:${url}`); }, notFound: () => { throw new Error("NOT_FOUND"); } }));
 vi.mock("./auth-entry", () => ({ loadCustomerEntry: mocks.customer, loadOperatorEntry: mocks.operator, requireOperatorLogin: mocks.guard }));
 vi.mock("./operator-auth/operations-console", () => ({ openOperatorOrders: mocks.orders, openOperatorReport: mocks.report }));
-vi.mock("../customer-portal", () => ({ loadCustomerPortal: async () => ({ status: "unavailable" }) }));
+vi.mock("../customer-portal", () => ({ loadCustomerPortal: async () => ({ status: "unavailable" }), loadMembershipAgreement: mocks.agreement }));
 vi.mock("../customer-account", () => ({ loadCustomerAccount: mocks.account }));
 vi.mock("./operator-auth/native-catalog-management", () => ({ readManagedCatalog: mocks.catalog }));
-vi.mock("@/app/account/actions", () => ({ startCustomerLogin: vi.fn(), endCustomerLogin: vi.fn() }));
+vi.mock("@/app/account/actions", () => ({ startCustomerLogin: vi.fn(), endCustomerLogin: vi.fn(), startCustomerRegistration: vi.fn(), agreeToMembership: vi.fn() }));
 vi.mock("@/app/operations/actions", () => ({ startOperatorLogin: vi.fn(), endOperatorLogin: vi.fn() }));
 import CustomerLogin from "@/app/account/login/page";
 import OperatorLogin from "@/app/operations/login/page";
 import Account from "@/app/account/page";
+import Register from "@/app/account/register/page";
+import Welcome from "@/app/account/welcome/page";
 import Operations from "@/app/operations/page";
 import Catalog from "@/app/operations/catalog/page";
-beforeEach(() => { vi.resetAllMocks(); vi.stubEnv("BLOOMBOX_RUNTIME_MODE", "preview"); });
+beforeEach(() => { vi.resetAllMocks(); vi.stubEnv("BLOOMBOX_RUNTIME_MODE", "preview"); mocks.agreement.mockResolvedValue({ status: "signed-out" }); });
 afterEach(() => vi.unstubAllEnvs());
 describe("dedicated login and destination pages", () => {
   it.each(["disabled", "signed-out", "expired"])("sends %s customers from My Page to customer login", async (status) => {
@@ -38,6 +40,34 @@ describe("dedicated login and destination pages", () => {
     await expect(CustomerLogin({ searchParams: Promise.resolve({ next: "/operations" }) })).rejects.toThrow("redirect:/account");
     const next = "/account/orders/12345678-abcd-4000-8000-123456789012";
     await expect(CustomerLogin({ searchParams: Promise.resolve({ next }) })).rejects.toThrow(`redirect:${next}`);
+  });
+  it("offers registration from login and explains what Google provides before sign-up", async () => {
+    mocks.customer.mockResolvedValue({ status: "signed-out" });
+    expect(renderToStaticMarkup(await CustomerLogin({ searchParams: Promise.resolve({}) }))).toContain('href="/account/register"');
+    const html = renderToStaticMarkup(await Register({ searchParams: Promise.resolve({}) }));
+    expect(html).toContain("新規会員登録"); expect(html).toContain("Googleで登録する");
+    expect(html).toContain("確認済みのメールアドレス"); expect(html).toContain('href="/account/login"');
+    mocks.customer.mockResolvedValue({ status: "ready" });
+    await expect(Register({ searchParams: Promise.resolve({}) })).rejects.toThrow("redirect:/account");
+  });
+  it("sends a member without the current agreement to the agreement step before any account data", async () => {
+    mocks.agreement.mockResolvedValue({ status: "ready", agreement: { status: "required", version: "v2", previousVersion: null } });
+    await expect(Account({ searchParams: Promise.resolve({}) })).rejects.toThrow("redirect:/account/welcome");
+    expect(mocks.account).not.toHaveBeenCalled();
+  });
+  it("asks for an explicit, versioned agreement with the documents linked, and skips it once agreed", async () => {
+    mocks.agreement.mockResolvedValue({ status: "ready", agreement: { status: "required", version: "2026-09-19-draft", previousVersion: null } });
+    const html = renderToStaticMarkup(await Welcome({ searchParams: Promise.resolve({ next: "/account/profile" }) }));
+    expect(html).toContain('href="/terms"'); expect(html).toContain('href="/privacy"');
+    expect(html).toMatch(/<input type="checkbox" required="" name="agree"\/>/);
+    expect(html).toContain('name="version" value="2026-09-19-draft"'); expect(html).toContain('name="next" value="/account/profile"');
+    expect(html).toContain("同意して登録を完了する"); expect(html).toContain("同意せずにログアウトする");
+    mocks.agreement.mockResolvedValue({ status: "ready", agreement: { status: "required", version: "v2", previousVersion: "v1" } });
+    expect(renderToStaticMarkup(await Welcome({ searchParams: Promise.resolve({ error: "invalid" }) }))).toContain("改定しました");
+    mocks.agreement.mockResolvedValue({ status: "ready", agreement: { status: "agreed", version: "v2" } });
+    await expect(Welcome({ searchParams: Promise.resolve({ next: "https://evil.example" }) })).rejects.toThrow("redirect:/account");
+    mocks.agreement.mockResolvedValue({ status: "signed-out" });
+    await expect(Welcome({ searchParams: Promise.resolve({}) })).rejects.toThrow("redirect:/account/login?next=%2Faccount%2Fwelcome");
   });
   it("does not send unregistered operators into a login loop or grant them management access", async () => {
     mocks.operator.mockResolvedValue({ status: "ready", subject: "verified_subject", bound: false });

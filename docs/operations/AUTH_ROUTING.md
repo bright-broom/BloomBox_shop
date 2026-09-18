@@ -18,7 +18,14 @@ flowchart TD
   Ops -->|認証済み・担当者確認| Hub
   Hub -->|各機能で権限を再確認| Management[商品・在庫 / 顧客 / 注文 / 権限]
   CustomerLogin -. Preview環境の見本リンク .-> Preview[/preview/account：架空データ]
+  Home -->|新規会員登録| Register[/account/register]
+  CustomerLogin -->|初めての方| Register
+  Register -->|顧客Google認証| Welcome[/account/welcome：規約・ポリシーへの同意]
+  Personal -. 現行版に未同意 .-> Welcome
+  Welcome -->|同意を記録| Personal
 ```
+
+2026-09-19追記：新規会員登録の入口と、規約・ポリシーへの同意の記録を追加。詳細は [会員登録](MEMBER_REGISTRATION.md)。
 
 トップの「マイページ」は `/account` を維持する。サーバーで認証状態を確認し、認証済みなら既存の購入履歴・会員ランク画面を表示する。見本に飛ばして本人の注文が見えるように装う処理は入れない。
 

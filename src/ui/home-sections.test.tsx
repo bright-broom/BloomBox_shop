@@ -52,7 +52,7 @@ describe("home customer guidance", () => {
   it("keeps unapproved assurances identified as draft and offers conditions instead of guarantees", () => {
     const html = renderToStaticMarkup(<HomeAssurance />);
     expect(html).toContain(homeContent.assurance.draftNote);
-    expect(html).toContain("正式な受付期限は本番公開前");
+    expect(html).toContain("到着日の翌日までに");
     expect(html).toContain('href="/contact#arrival-problem"');
   });
   it.each(["2026-09-17T14:59:59Z", "2026-09-17T15:00:00Z"])("shares the gift date window across the Japan midnight boundary: %s", (value) => {
@@ -69,6 +69,7 @@ describe("home customer guidance", () => {
   it("offers the existing customer entry without claiming a live discount", () => {
     const html = renderToStaticMarkup(<HomeMembership />);
     expect(html).toContain('href="/account"');
+    expect(html).toContain('href="/account/register"');
     expect(html).toContain("ランク別の自動割引を準備しています");
     expect(html).not.toContain("/operations");
     expect(html).not.toMatch(/\d+%/);

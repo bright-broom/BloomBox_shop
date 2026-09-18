@@ -26,7 +26,9 @@ export default async function CustomerLogin({ searchParams }: { searchParams: Pr
       {loadRuntimeMode() === "preview" ? <aside className="login-preview"><h3>{copy.previewTitle}</h3><p>{copy.previewNote}</p>
         <Link className="secondary-button" prefetch={false} href="/preview/account">{copy.previewLink}</Link></aside> : null}
     </div>
-    <nav className="login-links" aria-label={copy.entry.otherEntry}><Link className="text-link" href="/">{copy.entry.home}</Link>
+    <nav className="login-links" aria-label={copy.entry.otherEntry}>
+      <p>{copy.registration.registerPrompt} <Link className="text-link" prefetch={false} href="/account/register">{copy.registration.registerLink}</Link></p>
+      <Link className="text-link" href="/">{copy.entry.home}</Link>
       <Link className="text-link" prefetch={false} href="/operations/login">{copy.entry.operator}</Link></nav>
   </section>;
 }
