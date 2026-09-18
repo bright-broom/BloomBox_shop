@@ -76,8 +76,15 @@ The workflow remains a **public preview** monitor. Do not make it accept commerc
 - Production secrets and environment protection are configured; no production secret reaches Preview.
 - Monitoring identifies failed checkout handoff, provider errors, latency and invalid webhook rates without logging PII.
 - Native fulfillment operations and recovery are verified. In-flight legacy transactions retain their originally assigned provider.
-- All activation evidence is approved; the current code-level pause is replaced only as part of verified inventory/buyer integration, before commercial activation.
+- All activation evidence is approved. Since ADR 0020 (2026-09-19) the runtime gate opens production intake only when `BLOOMBOX_CHECKOUT_INTAKE_ENABLED=true`, the bundled activation record passes the same evidence rules as `pnpm check:production`, and the storefront content is `approved`; no code change is needed at activation, and a test keeps the release script and runtime rule in agreement.
 - The release owner has exercised frontend rollback, backup restore and incident response while preserving accepted orders.
+
+## Commercial activation sequence (ADR 0020)
+
+1. Record each evidence item in `config/production-commerce-activation.json` with `complete: true` and a reference to its evidence, set `status` to `approved`, and approve the storefront content, all in reviewed PRs. `pnpm check:release` must pass on the merged SHA.
+2. Deploy that SHA through `Production Release`. Intake stays closed until the switch is on.
+3. Set `BLOOMBOX_CHECKOUT_INTAKE_ENABLED=true` in the production environment and redeploy the same SHA. Replace the public-preview smoke contract with the commercial one in the same change window; the current monitor still expects preview disclosures.
+4. To pause new purchases immediately, set `BLOOMBOX_CHECKOUT_INTAKE_ENABLED=false`. Payments, webhooks, reconciliation, refunds and fulfillment of accepted orders continue.
 
 ## Rollback and incidents
 

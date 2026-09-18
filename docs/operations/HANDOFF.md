@@ -62,7 +62,7 @@ nonce CSP、未承認script/CSP低下の公開監視、実ブラウザー回帰�
 ## 本番販売は停止中
 
 - [activation設定](../../config/production-commerce-activation.json) は `blocked`、証跡8項目は未完了。[案内コンテンツ](../../content/storefront.json) は `draft`。
-- [composition-root](../../src/shared/infrastructure/composition-root.ts) の `acceptsNewCheckout` は本番の新規購入を拒否する。環境変数1つで販売を開始できる状態ではない。
+- [composition-root](../../src/shared/infrastructure/composition-root.ts) の `acceptsNewCheckout` は、本番では `BLOOMBOX_CHECKOUT_INTAKE_ENABLED=true`、承認済みの [activation設定](../../config/production-commerce-activation.json)（証跡8項目の完了と参照）、承認済みの案内コンテンツの3つがそろうまで新規購入を拒否する（ADR 0020、2026-09-19）。環境変数1つで販売を開始できる状態ではない。承認はレビュー済みのPRと再配備でのみ反映され、停止は環境変数だけで即時に行える。
 - 2026-09-14の `pnpm check:production` は案内未承認・販売未承認で失敗。正常な停止であり、チェックを通すために承認値だけを変更しない。
 - CI成功、ローカル表示、Googleログイン、架空の支払済み注文は、実決済や販売開始の証拠ではない。Commerce Workerも無効設定時に成功終了できるため、実処理の証拠を確認する。
 - この引き継ぎは本番公開、実課金、外部アカウント作成、実在庫登録、契約・仕様確定の承認ではない。現在のユーザー指示と既存の承認範囲を確認し、通常の調査・実装・検証は自律的に進める。

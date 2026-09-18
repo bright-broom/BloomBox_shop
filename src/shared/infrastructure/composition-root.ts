@@ -1,4 +1,6 @@
 import { PostgresCommerceBacklog } from "@/modules/payment/infrastructure/postgres-commerce-backlog";
+import { acceptsNewCheckout as decideCheckoutIntake } from "@/shared/domain/commerce-activation";
+import { productionCommerceApproval } from "./config/commerce-activation";
 import { PostgresPurgedInboxRecovery } from "@/modules/payment/infrastructure/postgres-purged-inbox-recovery";
 import { StripeInboxRecoverySource } from "@/modules/payment/infrastructure/stripe-inbox-recovery-source";
 import { PostgresCustomerPurchasePerformance } from "@/modules/order/infrastructure/postgres-customer-purchase-performance";
@@ -96,10 +98,13 @@ function createProductRepository(): ProductRepository {
 }
 
 function acceptsNewCheckout(): boolean {
-  const enabled = loadCheckoutIntakeEnabled();
-  // ADR 0009: live inventory/payment recovery and fulfillment evidence remain incomplete.
-  // Settlement/reconciliation must remain available for existing transactions.
-  return loadRuntimeMode() === "preview" && enabled;
+  // ADR 0020: production opens only with the switch, the reviewed activation evidence and approved terms.
+  // Settlement/reconciliation stay available for existing transactions whatever this returns.
+  return decideCheckoutIntake({
+    runtime: loadRuntimeMode(),
+    intakeEnabled: loadCheckoutIntakeEnabled(),
+    ...productionCommerceApproval(),
+  });
 }
 
 function createPurchaseIntentRepository(): InMemoryPurchaseIntentRepository | PostgresPurchaseIntentRepository {
