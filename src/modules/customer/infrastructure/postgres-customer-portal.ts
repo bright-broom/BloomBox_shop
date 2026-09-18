@@ -12,6 +12,11 @@ import {
   ACCOUNT_LIMITS,
   type AccountChange,
 } from "../domain/customer-portal";
+import {
+  MEMBERSHIP_AGREEMENT_PURPOSE,
+  membershipAgreementVersion,
+  type MembershipAgreementRecord,
+} from "../domain/membership-agreement";
 import type {
   AccountActor,
   CustomerPortalRepository,
@@ -39,6 +44,10 @@ export const requestRowSchema = encryptedRow.extend({
   kind: requestInputSchema.shape.kind,
   status: z.enum(["OPEN", "REPLIED", "CLOSED"]),
   created_at: z.date(),
+});
+const agreementRowSchema = z.object({
+  status: z.enum(["GRANTED", "WITHDRAWN"]),
+  policy_version: z.string(),
 });
 export class PostgresCustomerPortal implements CustomerPortalRepository {
   constructor(
@@ -207,6 +216,40 @@ export class PostgresCustomerPortal implements CustomerPortalRepository {
       await this.audit(tx, actor, "customer.request.created");
     });
   }
+  private async latestAgreement(
+    tx: DatabaseTransaction,
+    customerId: string,
+  ): Promise<MembershipAgreementRecord | null> {
+    const [raw] =
+      await tx`SELECT status, policy_version FROM bloombox.customer_consents
+        WHERE customer_id = ${customerId} AND purpose = ${MEMBERSHIP_AGREEMENT_PURPOSE}
+        ORDER BY occurred_at DESC, id DESC LIMIT 1`;
+    if (!raw) return null;
+    const row = agreementRowSchema.parse(raw);
+    return { status: row.status, version: row.policy_version };
+  }
+  membershipAgreement(actor: AccountActor) {
+    return this.transaction(actor, (tx) =>
+      this.latestAgreement(tx, actor.customerId),
+    );
+  }
+  async agreeToMembership(actor: AccountActor, version: string) {
+    let policyVersion: string;
+    try {
+      policyVersion = membershipAgreementVersion(version);
+    } catch {
+      throw new AccountPortalError("invalid");
+    }
+    // The account row lock in transaction() serializes repeated submissions, so one grant is recorded.
+    await this.transaction(actor, async (tx) => {
+      const latest = await this.latestAgreement(tx, actor.customerId);
+      if (latest?.status === "GRANTED" && latest.version === policyVersion)
+        return;
+      await tx`INSERT INTO bloombox.customer_consents(id, customer_id, purpose, status, policy_version, occurred_at, source)
+        VALUES (${randomUUID()}, ${actor.customerId}, ${MEMBERSHIP_AGREEMENT_PURPOSE}, 'GRANTED', ${policyVersion}, clock_timestamp(), 'MEMBERSHIP_REGISTRATION')`;
+      await this.audit(tx, actor, "customer.membership.agreed");
+    });
+  }
   async revokeSessions(actor: AccountActor) {
     await this.transaction(actor, async (tx) => {
       await tx`UPDATE bloombox.customer_accounts SET version = version + 1, updated_at = clock_timestamp() WHERE id = ${actor.customerId}`;
@@ -222,6 +265,10 @@ export class PostgresCustomerPortal implements CustomerPortalRepository {
       await tx`DELETE FROM bloombox.customer_portals WHERE customer_id = ${actor.customerId}`;
       await tx`INSERT INTO bloombox.customer_consents(id, customer_id, purpose, status, policy_version, occurred_at, source)
         VALUES (${randomUUID()}, ${actor.customerId}, 'EMAIL_MARKETING', 'WITHDRAWN', 'account-v1', clock_timestamp(), 'ACCOUNT_CLOSURE')`;
+      const agreement = await this.latestAgreement(tx, actor.customerId);
+      if (agreement?.status === "GRANTED")
+        await tx`INSERT INTO bloombox.customer_consents(id, customer_id, purpose, status, policy_version, occurred_at, source)
+          VALUES (${randomUUID()}, ${actor.customerId}, ${MEMBERSHIP_AGREEMENT_PURPOSE}, 'WITHDRAWN', ${agreement.version}, clock_timestamp(), 'ACCOUNT_CLOSURE')`;
       await tx`UPDATE bloombox.customer_accounts SET status = 'DISABLED', version = version + 1, updated_at = clock_timestamp() WHERE id = ${actor.customerId}`;
       await this.audit(tx, actor, "customer.account.closed");
     });

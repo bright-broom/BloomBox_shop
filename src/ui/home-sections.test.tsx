@@ -69,6 +69,7 @@ describe("home customer guidance", () => {
   it("offers the existing customer entry without claiming a live discount", () => {
     const html = renderToStaticMarkup(<HomeMembership />);
     expect(html).toContain('href="/account"');
+    expect(html).toContain('href="/account/register"');
     expect(html).toContain("ランク別の自動割引を準備しています");
     expect(html).not.toContain("/operations");
     expect(html).not.toMatch(/\d+%/);

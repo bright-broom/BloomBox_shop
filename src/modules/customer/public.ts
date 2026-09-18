@@ -14,3 +14,4 @@ export { LOYALTY_POLICY_VERSION, LOYALTY_TIERS, loyaltyProgress, quoteLoyalty, r
   type LoyaltyProgress, type LoyaltyQuote } from "./domain/customer-loyalty";
 export { ACCOUNT_LIMITS, AccountPortalError, emptyAccountPreferences, changeAccount, type AddressEntry, type AccountPreferences, type AccountChange } from './domain/customer-portal';
 export type { AccountActor, PortalSnapshot, AccountRequest, AccountRequestKind, CustomerPortalRepository } from './application/customer-portal';
+export { MEMBERSHIP_AGREEMENT_PURPOSE, membershipAgreementState, type MembershipAgreementState } from './domain/membership-agreement';

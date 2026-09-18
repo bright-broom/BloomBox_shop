@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   request: vi.fn(),
   read: vi.fn(),
   product: vi.fn(),
+  agreement: vi.fn(),
+  agree: vi.fn(),
 }));
 vi.mock("next/headers", () => ({ headers: mocks.headers }));
 vi.mock("./config/customer-account-config", () => ({
@@ -33,6 +35,8 @@ vi.mock("@/modules/customer/infrastructure/postgres-customer-portal", () => ({
     change = mocks.change;
     request = mocks.request;
     read = mocks.read;
+    membershipAgreement = mocks.agreement;
+    agreeToMembership = mocks.agree;
   },
 }));
 import {
@@ -40,7 +44,10 @@ import {
   createCustomerRequest,
   customerPortalContext,
   loadCustomerPortal,
+  loadMembershipAgreement,
+  recordMembershipAgreement,
 } from "./customer-portal";
+import { storefrontContent } from "./content/storefront-content";
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.config.mockReturnValue({ origin: "https://shop.example" });
@@ -127,5 +134,25 @@ describe("customer portal transport trust boundaries", () => {
     expect(await loadCustomerPortal()).toEqual({ status: "unavailable" });
     mocks.credential.mockResolvedValue(null);
     expect(await loadCustomerPortal()).toEqual({ status: "signed-out" });
+  });
+  it("records only an explicit agreement to the version that is still current, for the signed-in member", async () => {
+    const version = storefrontContent.agreementVersion;
+    await expect(recordMembershipAgreement(form({ version }))).rejects.toMatchObject({ code: "invalid" });
+    await expect(recordMembershipAgreement(form({ agree: "on", version: "older-version" }))).rejects.toMatchObject({ code: "conflict" });
+    expect(mocks.agree).not.toHaveBeenCalled();
+    await recordMembershipAgreement(form({ agree: "on", version, customerId: "forged" }));
+    expect(mocks.agree).toHaveBeenCalledWith(expect.objectContaining({ customerId: "00000000-0000-4000-8000-000000000001" }), version);
+    mocks.headers.mockResolvedValue(new Headers({ origin: "https://evil.example", cookie: "test" }));
+    await expect(recordMembershipAgreement(form({ agree: "on", version }))).rejects.toMatchObject({ code: "expired" });
+  });
+  it("compares the latest record with the current version and keeps unavailable distinct from signed-out", async () => {
+    mocks.agreement.mockResolvedValue(null);
+    expect(await loadMembershipAgreement()).toEqual({ status: "ready", agreement: { status: "required", version: storefrontContent.agreementVersion, previousVersion: null } });
+    mocks.agreement.mockResolvedValue({ status: "GRANTED", version: storefrontContent.agreementVersion });
+    expect(await loadMembershipAgreement()).toEqual({ status: "ready", agreement: { status: "agreed", version: storefrontContent.agreementVersion } });
+    mocks.agreement.mockRejectedValue(Error("private database detail"));
+    expect(await loadMembershipAgreement()).toEqual({ status: "unavailable" });
+    mocks.credential.mockResolvedValue(null);
+    expect(await loadMembershipAgreement()).toEqual({ status: "signed-out" });
   });
 });

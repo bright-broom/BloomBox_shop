@@ -6,6 +6,7 @@ import { redirect, notFound } from "next/navigation";
 import { loadCustomerOrderDetail } from "@/shared/infrastructure/customer-account";
 import { customerAccountContent as copy } from "@/shared/infrastructure/content/customer-account-content";
 import { CustomerOrderDetailPanel } from "@/ui/customer-order-detail";
+import { requireMembershipAgreement } from "../../membership-gate";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -18,6 +19,7 @@ export default async function CustomerOrderPage({
   params: Promise<{ orderId: string }>;
 }) {
   const { orderId } = await params;
+  await requireMembershipAgreement(`/account/orders/${orderId}`);
   const state = await loadCustomerOrderDetail(orderId);
   if (state.status === "disabled" || state.status === "signed-out")
     redirect(loginHref("customer", `/account/orders/${orderId}`));
