@@ -143,3 +143,4 @@ Before a material change, answer:
 - [ADR 0017: 顧客セルフサービス](adr/0017-customer-self-service.md) — 暗号化した登録情報、問い合わせ、同意、失効・退会。
 - [ADR 0018: 同意に基づくGA4アクセス解析](adr/0018-consented-web-analytics.md) — 同意後だけの読み込み、計測しない画面、区画の到達、新規/リピート区分。
 - [ADR 0019: 購入者への取引通知](adr/0019-transactional-notifications.md) — Outboxの消費、購入者だけへの確認・発送メール、冪等キー、再試行、既定で無効。
+- [ADR 0020: 本番の新規購入受付の開始条件](adr/0020-governed-checkout-activation.md) — 証跡の承認・案内の承認・受付スイッチの3条件、コード変更なしの開始と環境変数による即時停止。
