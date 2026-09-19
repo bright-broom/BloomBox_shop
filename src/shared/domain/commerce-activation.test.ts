@@ -25,7 +25,8 @@ describe("isCommerceActivationApproved", () => {
     ["incomplete item", (value: ReturnType<typeof complete>) => ({ ...value, evidence: { ...value.evidence, stripeTestModeE2e: { complete: false, reference: "docs/evidence/x.md" } } })],
     ["short reference", (value: ReturnType<typeof complete>) => ({ ...value, evidence: { ...value.evidence, taxShippingReview: { complete: true, reference: "  todo  " } } })],
     ["missing item", (value: ReturnType<typeof complete>) => {
-      const { backupRollbackIncidentRehearsal: _removed, ...evidence } = value.evidence;
+      const evidence: Record<string, unknown> = { ...value.evidence };
+      delete evidence.backupRollbackIncidentRehearsal;
       return { ...value, evidence };
     }],
     ["extra item", (value: ReturnType<typeof complete>) => ({ ...value, evidence: { ...value.evidence, extra: { complete: true, reference: "docs/evidence/x.md" } } })],
