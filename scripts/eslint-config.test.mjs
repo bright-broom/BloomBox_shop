@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 
 const eslint = new ESLint({ cwd: fileURLToPath(new URL("..", import.meta.url)) });
 
-describe("project ESLint rules after the ESLint 10 migration", () => {
+// The first lint loads the real project configuration and every plugin, which can exceed the default 5s
+// on a loaded machine while the full suite runs in parallel. The rules checked here do not depend on speed.
+describe("project ESLint rules after the ESLint 10 migration", { timeout: 30_000 }, () => {
   it("accepts valid TypeScript and JSX using the actual project configuration", async () => {
     const [result] = await eslint.lintText(
       'export function Greeting({ name }: { name: string }) { return <p>Hello {name}</p>; }',
