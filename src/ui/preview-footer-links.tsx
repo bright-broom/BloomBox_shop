@@ -7,7 +7,7 @@ import { referralContent } from "@/shared/infrastructure/content/referral-conten
 export function PreviewFooterLinks({ runtime, checkout }: { runtime: RuntimeMode; checkout: CheckoutProviderMode }) {
   if (runtime !== "preview") return null;
   return <>
-    <Link href="/preview/gift-experience">{giftExperienceContent.preview.navLabel}</Link>
-    {checkout === "preview" ? <Link href="/referrals">{referralContent.navLabel}</Link> : null}
+    <li><Link href="/preview/gift-experience">{giftExperienceContent.preview.navLabel}</Link></li>
+    {checkout === "preview" ? <li><Link href="/referrals">{referralContent.navLabel}</Link></li> : null}
   </>;
 }

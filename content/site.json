@@ -31,7 +31,18 @@
   "footer": {
     "tagline": "花を贈る。その手前にある想いまで、大切に。",
     "originNote": "SEASONAL FLOWERS · DIRECT FROM GROWERS",
-    "copyrightHolder": "BLOOMBOX"
+    "copyrightHolder": "BLOOMBOX",
+    "eyebrow": "SEND A SEASON",
+    "action": "ギフトをつくる",
+    "contact": "お問い合わせ",
+    "hoursLabel": "お問い合わせ受付",
+    "backToTop": "ページの先頭へ",
+    "groups": {
+      "shop": { "label": "SHOP", "title": "ギフトを選ぶ" },
+      "support": { "label": "SUPPORT", "title": "ご利用について" },
+      "account": { "label": "ACCOUNT", "title": "アカウント" },
+      "about": { "label": "ABOUT", "title": "BloomBoxについて" }
+    }
   },
   "home": {
     "intro": {

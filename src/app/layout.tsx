@@ -8,8 +8,7 @@ import { loadCheckoutProviderMode } from "@/shared/infrastructure/config/checkou
 import { loadSiteUrlConfig } from "@/shared/infrastructure/config/site-url-config";
 import { MobileNavigation } from "@/ui/mobile-navigation";
 import { HeaderCartLink } from "@/ui/header-cart-link";
-import { PreviewFooterLinks } from "@/ui/preview-footer-links";
-import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
+import { SiteFooter } from "@/ui/site-footer";
 import { customerAccountContent } from "@/shared/infrastructure/content/customer-account-content";
 import { AdvertisingConsent } from "@/ui/advertising-consent";
 import { advertisingPublicSettings } from "@/shared/infrastructure/advertising-runtime";
@@ -94,40 +93,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         </header>
         {/* tabIndex -1 lets the skip link move focus into the content, not just scroll, including in Safari. */}
         <main id="main-content" tabIndex={-1}>{children}</main>
-        <footer className="site-footer">
-          <div>
-            <Link className="brand brand-light" href="/">
-              <span>{siteContent.brandName}</span>
-            </Link>
-            <p>{siteContent.footer.tagline}</p>
-          </div>
-          <div className="footer-meta">
-            <div className="footer-nav-groups">
-              <nav className="footer-nav" aria-label="商品・サービス">
-                <Link href="/flowers">季節の花</Link>
-                <Link href="/guide">ご利用ガイド</Link>
-                <Link href="/shipping-returns">配送・返品</Link>
-                <Link href="/faq">よくあるご質問</Link>
-                <Link href="/account" prefetch={false}>{customerAccountContent.title}</Link>
-                <Link href="/account/register" prefetch={false}>{customerAccountContent.registration.registerLink}</Link>
-                <Link href="/gift-next">{giftExperienceContent.recipient.label}</Link>
-                <PreviewFooterLinks runtime={loadRuntimeMode()} checkout={loadCheckoutProviderMode()} />
-              </nav>
-              <nav className="footer-nav" aria-label="BloomBoxについて">
-                <Link href="/about">私たちについて</Link>
-                <Link href="/contact">お問い合わせ</Link>
-                <Link href="/privacy">プライバシー</Link>
-                <Link href="/terms">利用規約</Link>
-                <Link href="/commercial-transactions">特定商取引法に基づく表記</Link>
-                <Link href="/operations" prefetch={false}>{customerAccountContent.entry.operator}</Link>
-              </nav>
-            </div>
-            <div className="footer-note">
-              <span>{siteContent.footer.originNote}</span>
-              <span>© {new Date().getFullYear()} {siteContent.footer.copyrightHolder}</span>
-            </div>
-          </div>
-        </footer>
+        <SiteFooter runtime={loadRuntimeMode()} checkout={loadCheckoutProviderMode()} />
         {advertising.enabled ? <AdvertisingConsent preview={advertising.preview} /> : null}
         {analytics.enabled ? <>
           <AnalyticsLoader measurementId={analytics.measurementId} scriptUrl={analytics.scriptUrl} />

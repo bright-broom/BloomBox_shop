@@ -9,6 +9,9 @@ const sectionCopy = z.object({
   action: shortCopy,
 });
 
+/** A footer link group: a short English label above its Japanese title. */
+const footerGroup = z.object({ label: z.string().trim().regex(/^[A-Z ]{1,20}$/), title: z.string().trim().min(1).max(30) }).strict();
+
 const siteContentSchema = z.object({
   brandName: z.string().trim().min(1).max(80),
   defaultTitle: z.string().trim().min(1).max(120),
@@ -43,6 +46,12 @@ const siteContentSchema = z.object({
     tagline: z.string().trim().min(1).max(120),
     originNote: z.string().trim().min(1).max(120),
     copyrightHolder: z.string().trim().min(1).max(80),
+    eyebrow: z.string().trim().min(1).max(40),
+    action: z.string().trim().min(1).max(30),
+    contact: z.string().trim().min(1).max(30),
+    hoursLabel: z.string().trim().min(1).max(30),
+    backToTop: z.string().trim().min(1).max(30),
+    groups: z.object({ shop: footerGroup, support: footerGroup, account: footerGroup, about: footerGroup }).strict(),
   }),
 });
 
