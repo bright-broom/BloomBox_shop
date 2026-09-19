@@ -30,7 +30,7 @@ describe("real Stripe SDK wire API version", () => {
     const api = new StripeSdkCheckoutApi(config);
     await api.create({ purchaseIntentId: "synthetic-intent", productId: "synthetic-product", externalProductReference: "synthetic-variant",
       productName: "Synthetic flowers", currency: "JPY", unitAmount: 4000, quantity: 1,
-      expiresAt: new Date(session.expires_at * 1000), idempotencyKey: "synthetic-checkout-key" });
+      expiresAt: new Date(session.expires_at * 1000), deliveryDate: "2026-10-01", idempotencyKey: "synthetic-checkout-key" });
     await api.retrieve(session.id);
     expect(transport.fetch).toHaveBeenCalledTimes(2);
     for (let index = 0; index < 2; index++) expect(requestHeaders(index).get("stripe-version")).toBe(STRIPE_API_VERSION);

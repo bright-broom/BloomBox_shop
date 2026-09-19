@@ -24,6 +24,7 @@ import { FlowerLoading } from "@/ui/flower-loading";
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { recordPreviewMetric } from "@/shared/infrastructure/preview-metrics";
 import { SHIPPING_QUOTE_MAX_QUANTITY } from "@/modules/checkout/public";
+import type { PurchaseTerms } from "@/shared/infrastructure/content/purchase-terms";
 
 export function CartPage({
   added,
@@ -32,7 +33,10 @@ export function CartPage({
   catalogPrices,
   loyalty = null,
   previousOrderKept = false,
+  purchaseTerms,
 }: {
+  /** Shown before the order is placed, from the 特定商取引法 disclosure. */
+  purchaseTerms: PurchaseTerms;
   loyalty?: CustomerLoyaltyState | null;
   added: boolean;
   checkoutCancelled: boolean;
@@ -202,6 +206,15 @@ export function CartPage({
         </dl>
         {loyaltyUnavailable ? <p role="alert" className="form-error">{customerAccountContent.loyalty.cartUnavailable}</p> : null}
         {discount > 0 ? <p className="form-hint">{customerAccountContent.loyalty.cartEstimate}</p> : null}
+        <section className="checkout-terms" aria-labelledby="checkout-terms-title">
+          <h3 id="checkout-terms-title">ご注文前にご確認ください</h3>
+          <dl>
+            <div><dt>お届け希望日</dt><dd>{cart.deliveryDate}</dd></div>
+            <div><dt>お支払い</dt><dd>{purchaseTerms.payment}</dd></div>
+            <div><dt>キャンセル</dt><dd>{purchaseTerms.cancellation}</dd></div>
+            <div><dt>返品・交換</dt><dd>{purchaseTerms.returns}</dd></div>
+          </dl>
+        </section>
         <form action={formAction}>
           <input type="hidden" name="requestId" value={cart.requestId} />
           <input type="hidden" name="productId" value={cart.productId} />

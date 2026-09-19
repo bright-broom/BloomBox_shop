@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { money } from "@/shared/domain/money";
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { CartPage } from "@/ui/cart-page";
+import { purchaseTerms } from "@/shared/infrastructure/content/purchase-terms";
 import { GiftForm } from "@/ui/gift-form";
 import { HeaderCartLink } from "@/ui/header-cart-link";
 import { PreviewBuyerForm } from "@/ui/preview-buyer-form";
@@ -50,7 +51,7 @@ describe.each(["property", "getItem"] as const)("denied storage %s", (mode) => {
 
   it.each([
     ["gift", <GiftForm key="GiftForm" productId="test" productName="Test" unitPrice={money(4000)} minDeliveryDate="2026-09-15" maxDeliveryDate="2026-11-11" />],
-    ["cart", <CartPage key="CartPage" added={false} checkoutCancelled={false} previewMode catalogPrices={[]} />],
+    ["cart", <CartPage key="CartPage" added={false} checkoutCancelled={false} previewMode catalogPrices={[]} purchaseTerms={purchaseTerms} />],
     ["buyer", <PreviewBuyerForm key="PreviewBuyerForm" enabled />],
     ["review", <PreviewOrderReview key="PreviewOrderReview" enabled />],
     ["payment", <PreviewPayment key="PreviewPayment" enabled />],

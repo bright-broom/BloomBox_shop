@@ -2,6 +2,7 @@ import { loyaltyProgress } from "@/modules/customer/public";
 import { Children, isValidElement, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CartPage } from "@/ui/cart-page";
+import { purchaseTerms } from "@/shared/infrastructure/content/purchase-terms";
 import { getEarliestDeliveryDate } from "@/modules/fulfillment/public";
 import { CartChangedError, readRecoverableCart, storeCart } from "./browser-checkout-session";
 import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
@@ -32,7 +33,7 @@ function elements(node: ReactNode): Array<Record<string, unknown>> {
 }
 function render(catalogPrices: Parameters<typeof CartPage>[0]["catalogPrices"] = [], previewMode = true) {
   harness.cursor = 0;
-  return CartPage({ added: false, checkoutCancelled: false, previewMode, catalogPrices });
+  return CartPage({ added: false, checkoutCancelled: false, previewMode, catalogPrices, purchaseTerms });
 }
 function removeButton(tree: ReactNode) {
   const button = elements(tree).find((item) => item.elementType === "button" && item.children === "カートから削除");
@@ -118,7 +119,7 @@ it.each(["ready", "unavailable", "preview"] as const)("keeps native cart rewards
   if (!cart) throw new Error("Missing fixture cart");
   const productId = "native_12345678-abcd-4000-8000-123456789012";
   storeCart(storage, { ...cart, productId, unitAmount: 1 }); // Server catalog replaces stale/browser prices.
-  const tree = CartPage({ added: false, checkoutCancelled: false, previewMode: state === "preview",
+  const tree = CartPage({ added: false, checkoutCancelled: false, purchaseTerms, previewMode: state === "preview",
     catalogPrices: [{ productId, unitAmount: 4000, shippingAmount: 1000 }],
     loyalty: state === "unavailable" ? { status: "unavailable" } : { status: "ready", progress: loyaltyProgress(12000) } });
   const nodes = elements(tree), text = nodes.flatMap((item) => Array.isArray(item.children) ? item.children : [item.children]).filter((child) => typeof child === "string" || typeof child === "number").join(" ");
@@ -210,8 +211,18 @@ describe("production cart removal cancels the prepared purchase first", () => {
 
 it.each([true, false])("says a replaced completed checkout was not cancelled only when told so: %s", (previousOrderKept) => {
   harness.cursor = 0;
-  const tree = CartPage({ added: true, checkoutCancelled: false, previewMode: false, catalogPrices: [], previousOrderKept });
+  const tree = CartPage({ added: true, checkoutCancelled: false, previewMode: false, catalogPrices: [], previousOrderKept, purchaseTerms });
   const notice = elements(tree).some((item) => item.role === "status" && item.children === giftExperienceContent.cart.previousOrderKeptNotice);
   expect(notice).toBe(previousOrderKept);
   expect(readRecoverableCart(storage)).not.toBeNull();
+});
+
+it("shows the delivery date and the payment, cancellation and return terms before the order is placed", () => {
+  harness.cursor = 0;
+  const tree = CartPage({ added: false, checkoutCancelled: false, previewMode: false, catalogPrices: [], purchaseTerms });
+  const strings = elements(tree).flatMap((item) => Array.isArray(item.children) ? item.children : [item.children])
+    .filter((child): child is string => typeof child === "string");
+  for (const value of [purchaseTerms.payment, purchaseTerms.cancellation, purchaseTerms.returns, getEarliestDeliveryDate(), "ご注文前にご確認ください"]) {
+    expect(strings).toContain(value);
+  }
 });
