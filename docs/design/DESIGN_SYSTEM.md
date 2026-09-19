@@ -136,7 +136,7 @@ Version 2.3 · 2026-09-17 · 対象：公開サイト、商品一覧・詳細、
 | SummaryPanel | `.checkout-totals` | 薄灰・16px角丸。PCは追従、狭幅は本文の後。合計を罫線で区切る |
 | Disclosure | FAQの`details`／`summary` | 開閉を+/−で示す。回答は通常の本文サイズ |
 | StatePanel | empty／error／loading／confirmation | 説明と次にできる操作。色だけで状態を伝えない |
-| Footer | ブランドと説明、2組のナビ、出自・著作権 | 黒背景、補足も読める灰色。法務・配送情報を残す |
+| Footer | `SiteFooter`：結びの一文と主操作（ギフトをつくる）・副操作（お問い合わせ）→ 英字ラベル付きの4グループ（SHOP／SUPPORT／ACCOUNT／ABOUT）→ 大きなブランド名と受付時間 → 出自・著作権・ページ先頭へ | 黒背景。リンクは`--inverse-soft`でhover時に白＋下線、40px以上。文言は`content/site.json`、受付時間はお問い合わせページの窓口から読む。日本語は`word-break: auto-phrase`で語の途中で折り返さない。959px以下は2列、519px以下は操作を縦積み。法務・配送情報を残す |
 
 ボタンは操作なら`button`、ページ移動なら`Link`。同じ見た目を得るためにクリック可能な`div`を作らない。共通のCSSクラスで十分な表示を、巨大なvariants APIへ置き換えない。振る舞いを持つメニューと繰り返す商品カードだけを専用コンポーネントにする。
 
