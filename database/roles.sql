@@ -104,6 +104,10 @@ GRANT INSERT ON
   bloombox.fulfillment_status_transitions
 TO bloombox_worker;
 
+-- Scheduled removal of the gift's personal data; the order's amounts and states stay unchanged.
+GRANT UPDATE (pii_key_id, recipient_ciphertext, address_ciphertext, gift_message_ciphertext, pii_purged_at)
+  ON bloombox.order_gift_snapshots TO bloombox_worker;
+
 GRANT SELECT, INSERT ON
   bloombox.financial_transactions,
   bloombox.ledger_entries,
