@@ -1,7 +1,7 @@
 import { PostgresCheckoutBuyerWriter } from "@/modules/customer/infrastructure/postgres-checkout-buyer-writer";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { money } from "@/shared/domain/money";
@@ -56,8 +56,12 @@ describeDatabase("PostgreSQL commerce foundation", () => {
       ORDER BY version
     `;
 
-    expect(rows).toHaveLength(28);
-    expect(rows.map((row) => row.version)).toEqual(["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025", "0026", "0027", "0028"]);
+    // Every checked-in migration is applied exactly once, in order. Adding one does not need this test edited.
+    const versions = (await readdir("database/migrations"))
+      .filter((file) => file.endsWith(".sql")).map((file) => file.slice(0, 4)).sort();
+    expect(versions.length).toBeGreaterThanOrEqual(28);
+    expect(versions[0]).toBe("0001");
+    expect(rows.map((row) => row.version)).toEqual(versions);
     expect(rows.every((row) => /^[0-9a-f]{64}$/.test(row.checksum))).toBe(true);
   });
 
