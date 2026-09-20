@@ -15,6 +15,7 @@ export {
   type PublicOrderStatus,
 } from "./application/order-status-query";
 
+export { InvalidOrderRetentionError, ORDER_PII_RETENTION_DAYS, orderPiiRetentionExpiry } from "./domain/order-retention";
 export { assessOrderPricing, type OrderPricingFacts, type OrderPricingAssessment, type OrderPriceSnapshot, type OrderPriceComponent } from "./domain/order-pricing";
 export { type AcceptedShopifyOrder, type ShopifyAcceptedOrderQuery, ShopifyAcceptedOrderUnavailableError } from "./application/shopify-accepted-order-query";
 export {

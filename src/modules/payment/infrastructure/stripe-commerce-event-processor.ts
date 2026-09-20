@@ -1,4 +1,5 @@
 import { paymentStatusAfterRefund, resolveRefundState, type RefundStatus } from "../domain/refund-state";
+import { orderPiiRetentionExpiry } from "@/modules/order/public";
 import { restoreLoyaltyQuote } from "@/modules/customer/public";
 import { InventoryUnavailableError, type InventoryReservations } from "@/modules/inventory/public";
 import type { CheckoutBuyerWriter } from "@/modules/customer/public";
@@ -306,10 +307,11 @@ export class StripeCommerceEventProcessor implements ProviderEventProcessor {
       await transaction`
         INSERT INTO bloombox.order_gift_snapshots (
           order_id, recipient_id, delivery_date, pii_key_id, recipient_ciphertext,
-          address_ciphertext, gift_message_ciphertext
+          address_ciphertext, gift_message_ciphertext, retention_expires_at
         ) VALUES (
           ${orderId}, ${recipientId}, ${intent.delivery_date}, ${orderRecipient.keyId},
-          ${orderRecipient.ciphertext}, ${orderAddress.ciphertext}, ${orderGiftMessage.ciphertext}
+          ${orderRecipient.ciphertext}, ${orderAddress.ciphertext}, ${orderGiftMessage.ciphertext},
+          ${orderPiiRetentionExpiry(String(intent.delivery_date), event.occurredAt)}
         )
       `;
       await transaction`
