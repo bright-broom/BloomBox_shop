@@ -4,7 +4,7 @@
 
 Next.jsの画面と、PostgreSQLを中心とした自作の顧客・商品・注文・在庫管理を、ひとつのアプリケーションにまとめています。顧客はGoogleで直接認証し、決済は既存のStripe Checkoutへ接続する方針です。
 
-> **現在は販売準備中です。** 新規の本番注文はコードと公開判定で停止しています。以下では、実装済みの処理・部分的な接続確認・これから完成させる運用を区別します。最新の状態は [残課題台帳](docs/operations/BACKLOG.md) が正本です。
+> **現在は販売準備中です。** 本番の新規注文は、受付スイッチ・承認済みの公開証跡・承認済みの案内コンテンツの3つがそろうまで受け付けません（[ADR 0020](docs/architecture/adr/0020-governed-checkout-activation.md)）。現在はいずれも未承認です。以下では、実装済みの処理・部分的な接続確認・これから完成させる運用を区別します。最新の状態は [残課題台帳](docs/operations/BACKLOG.md) が正本です。
 
 2026-09-18の整理・統合は [Issue見直し](docs/operations/ISSUE_REVIEW_2026-09-18.md) と [統合記録](docs/operations/ISSUE_CLEANUP_2026-09-18.md) を参照してください。全Issueの依存・実装／判断／設定／検証の区分は [2026-09-17監査](docs/operations/ISSUE_AUDIT_2026-09-17.md) に記録しています。監査後の状態は [GitHub Issue一覧](https://github.com/bright-broom/BloomBox_shop/issues) と照合してください。公開先は [bloom-box-shop-ybb9.vercel.app](https://bloom-box-shop-ybb9.vercel.app/) です。マージと公開反映は別です。
 
@@ -63,10 +63,13 @@ flowchart TB
 | 顧客Google認証 | ローカルの架空注文で本人表示・相互非表示、公開HTTPSでも実Google2顧客のログインを確認 | Google一般公開、実Stripe購入からの紐付け・E2E |
 | 顧客・運営管理 | 専用権限による一覧・注文検索・集計・参照監査、公開の管理者1名と専用サポートDB接続を確認 | 担当者・監査保持期限・各業務の公開操作検証。[公開接続記録](docs/operations/CUSTOMER_SELF_SERVICE_RELEASE_2026-09-17.md) |
 | 顧客セルフサービス | プロフィール・住所帳・お気に入り・問い合わせ・退会・データ出力を実装し公開反映。実Googleとお気に入り保存を確認 | 全操作の公開環境検証、情報保持・サポート運用の確定。[導入と検証範囲](docs/operations/CUSTOMER_SELF_SERVICE.md) |
+| 新規会員登録 | 登録の入口と、利用規約・プライバシーポリシーへの版つき同意の記録を実装。未同意・改定時はマイページから同意画面へ誘導 | Googleログインの一般公開（テストユーザー2名のまま）、規約本文の承認。[会員登録](docs/operations/MEMBER_REGISTRATION.md) |
+| 取引通知 | 注文確認・発送のお知らせを購入者だけに送る実装。冪等キー・再試行・48時間の送信期限。既定で無効 | メール配信事業者の契約・送信ドメイン認証・実送達。返金の連絡はStripeのメールへ委譲。[取引通知](docs/operations/NOTIFICATIONS.md) |
 | 商品・在庫管理 | 実Google＋隔離DBで登録・編集・補充・訂正・競合・権限失効を確認 | 正式な商品画像・実在庫・本番設定 |
 | 注文・送料・在庫 | 購入者紐付け、購入時の価格・送料固定、予約・確定・安全な解放を内部実装・DB検証 | 実Stripeの最終金額、通信断後の実運用、発送・返品 |
 | 発送・追跡 | 自作注文の準備・保留・発送・追跡訂正・配達完了、専用権限と監査を実装・隔離DB検証 | 専用DB/担当者の公開設定、実引渡し、通知送達。[導入手順](docs/operations/NATIVE_FULFILLMENT.md) |
-| 画面 | M/L、カート編集、入力復旧、期間付きお知らせ、スマホの横ずれ抑制・フォーカス等を確認 | 正式素材、実機Safari、商用状態の読み上げ・購入E2E |
+| 画面 | M/L、カート編集、入力復旧、期間付きお知らせ、結びの導線を持つフッター、スマホの横ずれ抑制・フォーカス等を確認 | 正式素材、実機Safari、商用状態の読み上げ・購入E2E |
+| 販売条件の表示 | 特商法の表記・お問い合わせ窓口に暫定の事業者情報を掲載。カートとStripeの支払い画面に、お届け予定日・支払時期・キャンセル・返品条件を表示 | 事業者情報と規約本文の正式承認（現在は下書き扱い） |
 | 安全性・復旧 | nonce CSP・公開監視・ブラウザー回帰試験、DB復元演習、migration履歴の読取専用検査を実装 | 公開先への反映、DB確認専用接続の発行、実環境の復旧・当番運用 |
 | 会員ランク・自動割引 | 本人の全購入実績・現在ランク・進捗、購入時割引の保存、Stripe金額照合を実装 | 料率は0/2/3/5%の先行案。採算・条件確定と実決済検証。[設計・検証](docs/operations/CUSTOMER_LOYALTY.md) |
 | 紹介特典 | Test Modeで紹介・値引き・配達後付与・返金時取消を試せる | 本番の顧客・永続台帳・割引・正式イベントとの接続 |
@@ -317,6 +320,8 @@ flowchart TB
 
 必要な証跡は、①有効化判断、②自作カタログ、③StripeテストE2E、④在庫、⑤税・送料、⑥個人情報・サポート、⑦正式な案内の承認、⑧バックアップ・切り戻し・障害演習です。承認値だけを書き換えて公開判定を通すことはしません。
 
+証跡と案内が承認され、受付スイッチ `BLOOMBOX_CHECKOUT_INTAKE_ENABLED=true` を入れたときだけ、本番が新規注文を受け付けます。承認はレビュー済みのPRと再配備でのみ反映され、環境変数だけでは開始できません。停止は同じスイッチで即時に行え、受付済みの注文の決済・返金・発送は続きます。手順は [RELEASE.md](docs/operations/RELEASE.md) の「Commercial activation sequence」、判断は [ADR 0020](docs/architecture/adr/0020-governed-checkout-activation.md) を参照してください。
+
 | 資料 | 用途 |
 | --- | --- |
 | [HANDOFF.md](docs/operations/HANDOFF.md) | 参加直後に読む短い引き継ぎ |
@@ -327,7 +332,7 @@ flowchart TB
 | [GOVERNANCE.md](docs/operations/GOVERNANCE.md) | レビュー・権限・環境の保護 |
 | [RELEASE.md](docs/operations/RELEASE.md) | 本番候補の検査・承認・配備・復旧 |
 
-README更新：2026-09-18。実装はmain `10c606a` を基準に確認。公開状態は [公開準備の実確認](docs/operations/PUBLIC_READINESS_2026-09-18.md) の実施時点の記録です。最新の完了・未完了は台帳と対象コード、実際の設定・検証記録を参照してください。
+README更新：2026-09-20。実装はmain `dec9750` を基準に確認。公開状態は [公開準備の実確認](docs/operations/PUBLIC_READINESS_2026-09-18.md) の実施時点の記録です。最新の完了・未完了は台帳と対象コード、実際の設定・検証記録を参照してください。
 
 ## 広告との連携
 
