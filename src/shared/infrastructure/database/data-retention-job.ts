@@ -87,18 +87,20 @@ export class PostgresDataRetentionJob {
           address_ciphertext = NULL,
           gift_message_ciphertext = NULL,
           pii_purged_at = ${now}
-        WHERE gift.order_id IN (
-          SELECT snapshot.order_id
-          FROM bloombox.order_gift_snapshots AS snapshot
-          JOIN bloombox.orders AS orders ON orders.id = snapshot.order_id
-          WHERE snapshot.pii_purged_at IS NULL
-            AND snapshot.retention_expires_at IS NOT NULL
-            AND snapshot.retention_expires_at <= ${now}
-            AND orders.status <> 'PENDING_CONFIRMATION'
-          ORDER BY snapshot.retention_expires_at, snapshot.order_id
-          LIMIT 200
-          FOR UPDATE OF snapshot SKIP LOCKED
-        )
+        WHERE gift.pii_purged_at IS NULL
+          AND gift.order_id IN (
+            -- No row lock here: the worker holds column-level UPDATE only, which cannot lock rows.
+            -- A concurrent run re-checks pii_purged_at above and removes nothing twice.
+            SELECT snapshot.order_id
+            FROM bloombox.order_gift_snapshots AS snapshot
+            JOIN bloombox.orders AS orders ON orders.id = snapshot.order_id
+            WHERE snapshot.pii_purged_at IS NULL
+              AND snapshot.retention_expires_at IS NOT NULL
+              AND snapshot.retention_expires_at <= ${now}
+              AND orders.status <> 'PENDING_CONFIRMATION'
+            ORDER BY snapshot.retention_expires_at, snapshot.order_id
+            LIMIT 200
+          )
         RETURNING gift.order_id
       `;
       for (const order of orders) {
