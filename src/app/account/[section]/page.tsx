@@ -44,10 +44,14 @@ export default async function AccountSectionPage({
   const { section: value } = await params;
   if (!accountSections.some((s) => s === value)) notFound();
   const section = value as AccountSection;
-  await requireMembershipAgreement("/account/" + section);
+  const requested = await searchParams;
+  // Keep the product a signed-out visitor wanted to favorite through login and the agreement step.
+  const destination = section === "favorites" && typeof requested.add === "string"
+    ? `/account/favorites?add=${encodeURIComponent(requested.add)}`
+    : "/account/" + section;
+  await requireMembershipAgreement(destination);
   const state = await loadCustomerPortal();
-  if (state.status === "signed-out")
-    redirect(loginHref("customer", "/account/" + section));
+  if (state.status === "signed-out") redirect(loginHref("customer", destination));
   if (state.status !== "ready")
     return (
       <AccountPortalFrame section={section}>
@@ -89,7 +93,7 @@ export default async function AccountSectionPage({
       ),
       application.listProducts.execute(),
     ]);
-    const { add } = await searchParams;
+    const add = requested.add;
     const sorted = [...candidates].sort(
       (a, b) => Number(b.id === add) - Number(a.id === add),
     );
