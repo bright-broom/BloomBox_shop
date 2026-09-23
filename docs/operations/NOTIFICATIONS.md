@@ -39,10 +39,25 @@ flowchart LR
    | `NOTIFICATION_EMAIL_FROM` | 送信元。例：`BLOOM BOX <orders@mail.example.jp>`。認証済みドメインのアドレスにする |
    | `NOTIFICATION_EMAIL_REPLY_TO` | 任意。問い合わせ窓口のアドレス |
    | `RESEND_API_KEY` | `re_` で始まる送信用キー |
+| `NOTIFICATION_TEST_RECIPIENT` | 送信設定の確認コマンドだけが使う宛先。アプリの実行時には設定しない |
    | `BLOOMBOX_PUBLIC_ORIGIN` | 本番のHTTPS origin（メール内のリンクに使う） |
 
-5. **商取引ワーカーを有効にする。** GitHubの変数 `STRIPE_RECONCILIATION_ENABLED=true` にする。送信は5分ごとのワーカーの中で行う。
-6. **Stripeのメールを設定する。** レシートと返金メールを有効にする（返金の通知はこちらで行う）。
+5. **送信設定を確認する。** 顧客には影響しない確認メールを、指定したアドレスへ1通だけ送る。
+
+   ```bash
+   NOTIFICATION_EMAIL_FROM='BLOOM BOX <orders@mail.example.jp>' \
+   NOTIFICATION_TEST_RECIPIENT='確認用の自分のアドレス' \
+   RESEND_API_KEY='re_...' \
+   pnpm notifications:verify
+   ```
+
+   - 文面を先に見るだけなら `pnpm notifications:verify --dry-run`（送信しない）。
+   - 宛先は `NOTIFICATION_TEST_RECIPIENT` に明示したアドレスだけ。顧客のデータは読まない。
+   - 失敗時は、APIキーの問題か、送信元ドメインの問題かを区別して表示する。応答本文やキーは出力しない。
+   - 届いたメールが迷惑メールに分類されていないかも確認する。
+
+6. **商取引ワーカーを有効にする。** GitHubの変数 `STRIPE_RECONCILIATION_ENABLED=true` にする。送信は5分ごとのワーカーの中で行う。
+7. **Stripeのメールを設定する。** レシートと返金メールを有効にする（返金の通知はこちらで行う）。
 
 runtimeが `preview` の環境では、設定しても送信しない。Stripeのテストモードの注文も、本番runtimeでは実際のメールアドレスへ送る。テストでは自分のアドレスを入力する。
 
