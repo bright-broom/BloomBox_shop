@@ -20,6 +20,7 @@
     "db:status": "node scripts/database-status.mjs",
     "db:migrate": "node scripts/migrate-database.mjs",
     "stripe:verify:test": "node scripts/verify-stripe-test-mode.mjs",
+    "notifications:verify": "node scripts/verify-notification-delivery.mjs",
     "test:database": "vitest run --config vitest.database.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
