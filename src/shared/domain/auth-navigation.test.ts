@@ -25,6 +25,28 @@ describe("separate local login destinations", () => {
     expect(loginDestination("/operations/unknown", "operator")).toBe("/operations");
     expect(loginHref("operator", "/operations/catalog")).toBe("/operations/login?next=%2Foperations%2Fcatalog");
   });
+  it("carries only a catalog identifier for the favorite a signed-out visitor asked to save", () => {
+    for (const productId of ["prod_bloombox_m", "native_12345678-abcd-4000-8000-123456789012"]) {
+      const path = `/account/favorites?add=${productId}`;
+      expect(loginDestination(path, "customer")).toBe(path);
+      expect(loginHref("customer", path)).toBe(`/account/login?next=${encodeURIComponent(path)}`);
+      expect(authRedirect(`https://shop.example${path}`, "https://shop.example", "customer")).toBe(`https://shop.example${path}`);
+      expect(loginDestination(path, "operator")).toBe("/operations");
+    }
+  });
+  it.each([
+    "/account/favorites?add=",
+    "/account/favorites?add=../../operations",
+    "/account/favorites?add=prod bloombox",
+    "/account/favorites?add=prod_bloombox_m&next=https://evil.example",
+    "/account/favorites?add=https://evil.example",
+    "/account/favorites?add=" + "a".repeat(65),
+    "/account/favorites?remove=prod_bloombox_m",
+    "/account/profile?add=prod_bloombox_m",
+    "/account/favorites#add=prod_bloombox_m",
+  ])("drops an unsafe favorite return %s", (path) => {
+    expect(loginDestination(path, "customer")).toBe("/account");
+  });
   it("returns operators only to validated native fulfillment routes", () => {
     for (const path of ["/operations/native-fulfillments", `/operations/native-fulfillments/${id}`]) {
       expect(loginDestination(path, "operator")).toBe(path);

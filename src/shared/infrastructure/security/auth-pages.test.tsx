@@ -1,22 +1,25 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-const mocks = vi.hoisted(() => ({ customer: vi.fn(), operator: vi.fn(), account: vi.fn(), guard: vi.fn(), catalog: vi.fn(), orders: vi.fn(), report: vi.fn(), agreement: vi.fn() }));
+const mocks = vi.hoisted(() => ({ customer: vi.fn(), operator: vi.fn(), account: vi.fn(), guard: vi.fn(), catalog: vi.fn(), orders: vi.fn(), report: vi.fn(), agreement: vi.fn(), portal: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }), redirect: (url: string) => { throw new Error(`redirect:${url}`); }, notFound: () => { throw new Error("NOT_FOUND"); } }));
 vi.mock("./auth-entry", () => ({ loadCustomerEntry: mocks.customer, loadOperatorEntry: mocks.operator, requireOperatorLogin: mocks.guard }));
 vi.mock("./operator-auth/operations-console", () => ({ openOperatorOrders: mocks.orders, openOperatorReport: mocks.report }));
-vi.mock("../customer-portal", () => ({ loadCustomerPortal: async () => ({ status: "unavailable" }), loadMembershipAgreement: mocks.agreement }));
+vi.mock("../customer-portal", () => ({ loadCustomerPortal: mocks.portal, loadMembershipAgreement: mocks.agreement, loadCustomerRequests: vi.fn() }));
 vi.mock("../customer-account", () => ({ loadCustomerAccount: mocks.account }));
 vi.mock("./operator-auth/native-catalog-management", () => ({ readManagedCatalog: mocks.catalog }));
 vi.mock("@/app/account/actions", () => ({ startCustomerLogin: vi.fn(), endCustomerLogin: vi.fn(), startCustomerRegistration: vi.fn(), agreeToMembership: vi.fn() }));
+vi.mock("@/app/account/portal-actions", () => ({ saveAccountPreferences: vi.fn(), sendAccountRequest: vi.fn(), endAllCustomerSessions: vi.fn() }));
+vi.mock("@/shared/infrastructure/composition-root", () => ({ application: { getProduct: { byId: vi.fn() }, listProducts: { execute: vi.fn() } } }));
 vi.mock("@/app/operations/actions", () => ({ startOperatorLogin: vi.fn(), endOperatorLogin: vi.fn() }));
 import CustomerLogin from "@/app/account/login/page";
 import OperatorLogin from "@/app/operations/login/page";
 import Account from "@/app/account/page";
 import Register from "@/app/account/register/page";
 import Welcome from "@/app/account/welcome/page";
+import AccountSection from "@/app/account/[section]/page";
 import Operations from "@/app/operations/page";
 import Catalog from "@/app/operations/catalog/page";
-beforeEach(() => { vi.resetAllMocks(); vi.stubEnv("BLOOMBOX_RUNTIME_MODE", "preview"); mocks.agreement.mockResolvedValue({ status: "signed-out" }); });
+beforeEach(() => { vi.resetAllMocks(); vi.stubEnv("BLOOMBOX_RUNTIME_MODE", "preview"); mocks.agreement.mockResolvedValue({ status: "signed-out" }); mocks.portal.mockResolvedValue({ status: "unavailable" }); });
 afterEach(() => vi.unstubAllEnvs());
 describe("dedicated login and destination pages", () => {
   it.each(["disabled", "signed-out", "expired"])("sends %s customers from My Page to customer login", async (status) => {
@@ -68,6 +71,21 @@ describe("dedicated login and destination pages", () => {
     await expect(Welcome({ searchParams: Promise.resolve({ next: "https://evil.example" }) })).rejects.toThrow("redirect:/account");
     mocks.agreement.mockResolvedValue({ status: "signed-out" });
     await expect(Welcome({ searchParams: Promise.resolve({}) })).rejects.toThrow("redirect:/account/login?next=%2Faccount%2Fwelcome");
+  });
+  it("keeps the product a signed-out visitor wanted to favorite through login and the agreement step", async () => {
+    const add = "prod_bloombox_m";
+    const next = `/account/favorites?add=${add}`;
+    const open = (section: string, params: Record<string, string> = { add }) =>
+      AccountSection({ params: Promise.resolve({ section }), searchParams: Promise.resolve(params) });
+    mocks.portal.mockResolvedValue({ status: "signed-out" });
+    await expect(open("favorites")).rejects.toThrow(`redirect:/account/login?next=${encodeURIComponent(next)}`);
+    // A member who has not agreed yet returns to the same product after agreeing.
+    mocks.agreement.mockResolvedValue({ status: "ready", agreement: { status: "required", version: "v1", previousVersion: null } });
+    await expect(open("favorites")).rejects.toThrow(`redirect:/account/welcome?next=${encodeURIComponent(next)}`);
+    mocks.agreement.mockResolvedValue({ status: "signed-out" });
+    // Other sections and forged values keep their plain destination.
+    await expect(open("profile")).rejects.toThrow("redirect:/account/login?next=%2Faccount%2Fprofile");
+    await expect(open("favorites", { add: "https://evil.example" })).rejects.toThrow("redirect:/account/login");
   });
   it("does not send unregistered operators into a login loop or grant them management access", async () => {
     mocks.operator.mockResolvedValue({ status: "ready", subject: "verified_subject", bound: false });
