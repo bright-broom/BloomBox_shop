@@ -78,6 +78,19 @@ Command groups:
 
 Production readiness is intentionally separate from PR CI while the preview application is being developed. Never weaken it to make a release green.
 
+### When the workstation cannot run a gate
+
+An agent or developer may work in a sandbox that blocks part of the toolchain. Report what could not run instead of lowering the gate, and let CI be the authority for it.
+
+- **No local PostgreSQL** (`pnpm test:database` skips, or the server cannot start): the DB suite runs in CI on every PR. Say in the PR which DB tests never ran locally. A sandbox that denies System V shared memory cannot start PostgreSQL at all.
+- **`pnpm build` fails fetching fonts**: `next/font/google` downloads Noto Sans JP at build time. Without access to `fonts.googleapis.com` the build cannot complete locally; CI builds it.
+- **Missing packages** (`lucide-react`, `parse5`, `@eslint/compat` absent, so lint and some tests fail): reinstall from the lockfile before concluding anything about the code. When the default pnpm home is unreadable, run it with explicit directories, for example `CI=true npm_config_cache=<tmp>/npm-cache npx pnpm@<packageManager version> install --frozen-lockfile --store-dir <tmp>/pnpm-store`.
+- **`git push` / `gh` blocked**: commit locally, then give the exact push and `gh pr create` commands to the person who can run them. Never work around a blocked credential.
+- **Reading a failed CI run** when `gh` is available to the operator:
+  `gh run view "$(gh run list --repo <owner>/<repo> --branch <branch> --workflow ci.yml --limit 1 --json databaseId --jq '.[0].databaseId')" --repo <owner>/<repo> --log-failed | tail -60`.
+  Fix from the log, not from a guess; a wrong guess costs a full CI cycle.
+- **Checking a visual change without the dev server**: render the component to static HTML with the real `src/app/globals.css` and open it over a local static server. This verifies layout, wrapping and responsive rules; it does not verify data fetching, hydration or fonts.
+
 ## Change and PR discipline
 
 - One PR has one coherent responsibility. Separate unrelated UI, domain, and infrastructure changes.
