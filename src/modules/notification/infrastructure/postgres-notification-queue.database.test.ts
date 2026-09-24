@@ -88,7 +88,11 @@ suite("buyer notification queue on the shared outbox", () => {
   });
 
   it("reports why nothing can be sent without guessing another address", async () => {
+    const purged = await order();
+    await sql`UPDATE bloombox.order_gift_snapshots SET pii_key_id = NULL, recipient_ciphertext = NULL,
+      address_ciphertext = NULL, gift_message_ciphertext = NULL, pii_purged_at = clock_timestamp() WHERE order_id = ${purged}`;
     const cases = [
+      [purged, "NO_BUYER_EMAIL"],
       [await order({ email: null }), "NO_BUYER_EMAIL"],
       [await order({ address: false }), "NO_BUYER_EMAIL"],
       [await order({ status: "CANCELLED" }), "ORDER_NOT_ACTIVE"],

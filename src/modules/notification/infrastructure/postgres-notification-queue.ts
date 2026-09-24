@@ -31,7 +31,8 @@ const factsRow = z.object({
   total_minor: z.coerce.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   currency: z.string(),
   delivery_date: z.string(),
-  pii_key_id: z.string(),
+  // Both are cleared together once the order's personal data reaches its retention limit (P0-17).
+  pii_key_id: z.string().nullable(),
   address_ciphertext: z.instanceof(Buffer).nullable(),
   product_name_snapshot: z.string().min(1),
   quantity: z.number().int().positive(),
@@ -100,7 +101,7 @@ export class PostgresNotificationQueue implements NotificationQueue {
     if (row.commerce_provider !== "STRIPE" || row.currency !== "JPY" || !["CONFIRMED", "CLOSED"].includes(row.status)) {
       return "ORDER_NOT_ACTIVE";
     }
-    if (!row.address_ciphertext) return "NO_BUYER_EMAIL";
+    if (!row.address_ciphertext || !row.pii_key_id) return "NO_BUYER_EMAIL";
     let contact: unknown;
     try {
       contact = JSON.parse(this.protector.unprotect(

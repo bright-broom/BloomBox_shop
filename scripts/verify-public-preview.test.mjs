@@ -1,6 +1,6 @@
 import { browserPolicy } from "../src/shared/infrastructure/security/browser-policy";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { previewOrigin, verifyHealth, productLinks, verifyCatalogSearch, verifyPreviewSafety, verifyCommercialSafety, verifyDocument, verifyPublicPreview, PUBLIC_COMMERCIAL_ROUTES, PUBLIC_PREVIEW_ROUTES, TEST_CHECKOUT_ROUTES } from "./verify-public-preview.mjs";
+import { previewOrigin, verifyHealth, productLinks, verifyCatalogSearch, verifyPreviewSafety, verifyCommercialSafety, verifyDocument, verifyPublicPreview, verifyEmptyCatalogSearch, PUBLIC_COMMERCIAL_ROUTES, PUBLIC_PREVIEW_ROUTES, PREVIEW_PRODUCT_ROUTES, TEST_CHECKOUT_ROUTES } from "./verify-public-preview.mjs";
 const matching = '<main><h1>すべての季節の花</h1><a href="/flowers/bloom-box-m">M</a><a href="/flowers/bloom-box-m">詳細</a></main>';
 const empty = '<main><h1>季節の花</h1><div role="status">該当する花がありません</div></main>';
 describe("public preview smoke contracts", () => {
@@ -55,9 +55,18 @@ describe("public preview smoke contracts", () => {
     expect(() => verifyCommercialSafety(home,cart,legal,new Headers())).toThrow();
   });
 
-  it("excludes the rehearsal routes from the selling route list", () => {
-    expect(PUBLIC_COMMERCIAL_ROUTES).toEqual(PUBLIC_PREVIEW_ROUTES.filter((path) => !TEST_CHECKOUT_ROUTES.includes(path)));
-    expect(TEST_CHECKOUT_ROUTES.every((path) => PUBLIC_PREVIEW_ROUTES.includes(path))).toBe(true);
+  it("keeps the rehearsal and the preview fixture products out of the selling route list", () => {
+    for (const path of [...TEST_CHECKOUT_ROUTES, ...PREVIEW_PRODUCT_ROUTES]) {
+      expect(PUBLIC_PREVIEW_ROUTES).toContain(path);
+      expect(PUBLIC_COMMERCIAL_ROUTES).not.toContain(path);
+    }
+    for (const path of ["/", "/flowers", "/cart", "/commercial-transactions"]) expect(PUBLIC_COMMERCIAL_ROUTES).toContain(path);
+  });
+
+  it("accepts any catalog for an impossible search, and still requires an empty accessible state", () => {
+    expect(() => verifyEmptyCatalogSearch(empty)).not.toThrow();
+    expect(() => verifyEmptyCatalogSearch(matching)).toThrow();
+    expect(() => verifyEmptyCatalogSearch('<main><h1>季節の花</h1></main>')).toThrow();
   });
 });
 
@@ -82,6 +91,8 @@ describe("public preview search responses", () => {
           : "記載内容は販売開始前の暫定版です。現在は販売を行っていません。";
       }
       if (path === "/cart" && commerce === "open") body += "ご注文前にご確認ください";
+      if (path === "/flowers") body += '<a href="/flowers/live-product">季節の花</a>';
+      if (path === "/flowers/live-product") body = '<main><h1>季節の花（実カタログ）</h1></main>';
       if (path === searchPaths[0]) body = matching;
       if (path === searchPaths[1]) body = empty;
       body += `<script nonce="${nonce}" src="/_next/static/chunks/app.js"></script>`;
@@ -99,17 +110,27 @@ describe("public preview search responses", () => {
     const fetchMock = serve();
     await expect(verifyPublicPreview("https://site.example", () => {})).resolves.toBe("a".repeat(40));
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(
-      ["/api/health", ...PUBLIC_PREVIEW_ROUTES, ...searchPaths].map((path) => `https://site.example${path}`),
+      ["/api/health", ...PUBLIC_PREVIEW_ROUTES, searchPaths[1], searchPaths[0]].map((path) => `https://site.example${path}`),
     );
   });
 
-  it("checks the selling contract and requires the rehearsal routes to be gone once commerce is open", async () => {
+  it("checks the selling contract against the live catalog, with the rehearsal routes gone", async () => {
     const fetchMock = serve((path, page) => {
-      if (TEST_CHECKOUT_ROUTES.includes(path)) { page.status = 404; }
+      if (TEST_CHECKOUT_ROUTES.includes(path) || PREVIEW_PRODUCT_ROUTES.includes(path)) { page.status = 404; }
     }, "open");
     await expect(verifyPublicPreview("https://site.example", () => {})).resolves.toBe("a".repeat(40));
     const requested = fetchMock.mock.calls.map(([url]) => url.slice("https://site.example".length));
-    expect(requested).toEqual(["/api/health", ...PUBLIC_COMMERCIAL_ROUTES, ...TEST_CHECKOUT_ROUTES, ...searchPaths]);
+    // The fixture products are never requested; the product page comes from the catalog listing instead.
+    expect(requested).toEqual(["/api/health", ...PUBLIC_COMMERCIAL_ROUTES, ...TEST_CHECKOUT_ROUTES, searchPaths[1], "/flowers/live-product"]);
+    expect(requested.some((path) => PREVIEW_PRODUCT_ROUTES.includes(path))).toBe(false);
+  });
+
+  it("fails while selling when the catalog listing renders no product", async () => {
+    serve((path, page) => {
+      if (TEST_CHECKOUT_ROUTES.includes(path)) { page.status = 404; }
+      if (path === "/flowers") { page.body = page.body.replace(/<a [^>]*><\/a>|<a [^>]*>[^<]*<\/a>/g, ""); }
+    }, "open");
+    await expect(verifyPublicPreview("https://site.example", () => {})).rejects.toThrow(/renders no product/);
   });
 
   it("fails while selling when a rehearsal route is still reachable", async () => {
