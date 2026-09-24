@@ -1,0 +1,57 @@
+name: Advertising Worker
+
+on:
+  schedule:
+    # Consented conversions are sent every five minutes; retention is swept once a day at 03:10 JST.
+    - cron: "*/5 * * * *"
+    - cron: "10 18 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Which pass to run on demand
+        type: choice
+        options: [delivery, retention]
+        default: delivery
+
+permissions:
+  contents: read
+
+concurrency:
+  group: advertising-delivery
+  cancel-in-progress: false
+
+jobs:
+  advertising:
+    if: github.ref == 'refs/heads/main'
+    name: Deliver consented conversions and apply advertising retention
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
+      ADVERTISING_DELIVERY_ENABLED: ${{ vars.ADVERTISING_DELIVERY_ENABLED }}
+      COMMERCE_WORKER_SECRET: ${{ secrets.COMMERCE_WORKER_SECRET }}
+      # The daily schedule sweeps retention; every other trigger sends.
+      MODE: ${{ github.event.schedule == '10 18 * * *' && 'retention' || inputs.mode || 'delivery' }}
+    steps:
+      - name: Invoke protected advertising worker
+        run: |
+          if [ -z "$PRODUCTION_BASE_URL" ] || [ -z "$COMMERCE_WORKER_SECRET" ]; then
+            echo "The protected worker endpoint is not configured; skipping."
+            exit 0
+          fi
+          query=""
+          if [ "$MODE" = "retention" ]; then
+            # Deleting expired click data and old delivery records must continue after advertising is
+            # switched off, because the privacy policy promises it for data already stored.
+            query="?mode=retention"
+          elif [ "$ADVERTISING_DELIVERY_ENABLED" != "true" ]; then
+            echo "Advertising delivery is disabled; skipping the sending pass."
+            exit 0
+          fi
+          echo "Running advertising $MODE pass."
+          # The response carries only counts, never click identifiers or provider payloads. It is not printed.
+          curl --fail-with-body --silent --show-error --max-time 90 \
+            --request POST \
+            --header "Authorization: Bearer $COMMERCE_WORKER_SECRET" \
+            --output "$RUNNER_TEMP/advertising-response.json" \
+            "${PRODUCTION_BASE_URL%/}/api/internal/advertising-delivery${query}"
