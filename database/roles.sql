@@ -202,12 +202,16 @@ GRANT USAGE ON SCHEMA bloombox TO bloombox_native_fulfillment;
 GRANT EXECUTE ON FUNCTION bloombox.lock_native_fulfillment_operator(uuid) TO bloombox_native_fulfillment;
 GRANT SELECT (id, order_id, status, version) ON bloombox.fulfillments TO bloombox_native_fulfillment;
 GRANT UPDATE (id, status, version, updated_at) ON bloombox.fulfillments TO bloombox_native_fulfillment;
-GRANT SELECT (id, display_id, status, commerce_provider, created_at) ON bloombox.orders TO bloombox_native_fulfillment;
+GRANT SELECT (id, display_id, status, commerce_provider, created_at, confirmed_at) ON bloombox.orders TO bloombox_native_fulfillment;
 GRANT UPDATE (id) ON bloombox.orders TO bloombox_native_fulfillment;
 GRANT SELECT (id, order_id, status) ON bloombox.payments TO bloombox_native_fulfillment;
 GRANT UPDATE (id) ON bloombox.payments TO bloombox_native_fulfillment;
 GRANT SELECT (order_id, product_name_snapshot, quantity, position) ON bloombox.order_items TO bloombox_native_fulfillment;
-GRANT SELECT (order_id, delivery_date, pii_key_id, address_ciphertext) ON bloombox.order_gift_snapshots TO bloombox_native_fulfillment;
+GRANT SELECT (order_id, delivery_date, pii_key_id, address_ciphertext, pii_purged_at, retention_expires_at)
+  ON bloombox.order_gift_snapshots TO bloombox_native_fulfillment;
+-- A delivery date the operator agreed to change, with the retention deadline that follows it (P1-02).
+GRANT UPDATE (delivery_date, retention_expires_at) ON bloombox.order_gift_snapshots TO bloombox_native_fulfillment;
+GRANT SELECT, INSERT ON bloombox.order_delivery_date_changes TO bloombox_native_fulfillment;
 GRANT SELECT (id, fulfillment_id, carrier_code, tracking_reference, shipped_at, delivered_at)
   ON bloombox.shipments TO bloombox_native_fulfillment;
 GRANT INSERT ON bloombox.shipments TO bloombox_native_fulfillment;

@@ -17,6 +17,8 @@ export {
 
 export { InvalidOrderRetentionError, ORDER_PII_RETENTION_DAYS, orderPiiRetentionExpiry } from "./domain/order-retention";
 export { InvalidOrderChangeWindowError, ORDER_CHANGE_DEADLINE_DAYS, orderChangeWindow, orderDispatched, type OrderChangeWindow } from "./domain/order-change-window";
+export { ORDER_DELIVERY_DATE_CHANGE_CODES, ORDER_DELIVERY_DATE_HISTORY_LIMIT, ORDER_DELIVERY_DATE_REASON_MAX_LENGTH, OrderDeliveryDateChangeError, type OrderDeliveryDateChangeCode, type OrderDeliveryDateCommand, type OrderDeliveryDateFormState, type OrderDeliveryDateWindow } from "./domain/order-delivery-date-change";
+export { ChangeOrderDeliveryDate, type OrderDeliveryDateActor, type OrderDeliveryDateChangeRecord, type OrderDeliveryDateReceipt, type OrderDeliveryDateStore } from "./application/change-order-delivery-date";
 export { assessOrderPricing, type OrderPricingFacts, type OrderPricingAssessment, type OrderPriceSnapshot, type OrderPriceComponent } from "./domain/order-pricing";
 export { type AcceptedShopifyOrder, type ShopifyAcceptedOrderQuery, ShopifyAcceptedOrderUnavailableError } from "./application/shopify-accepted-order-query";
 export {
