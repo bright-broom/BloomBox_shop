@@ -43,14 +43,15 @@ flowchart LR
 | BLOOMBOX_PII_KEYRING | 既存の暗号鍵リング形式。期限まで旧復号鍵を保持 |
 | DATABASE_URL / DATABASE_WORKER_URL | 通常アプリ/worker接続。0026適用後にroles.sqlの広告テーブル権限を付与 |
 | COMMERCE_WORKER_SECRET | 既存形式のworker認証secret |
+| GitHub変数 ADVERTISING_DELIVERY_ENABLED | `true` で定期送信を開始。保持期限の掃除はこの変数に関係なく毎日実行する |
 
 有効にする媒体だけ、その媒体の設定一式を登録する。設定が部分的なら無効として検出。広告設定エラーはサイトを停止せず、匿名化したobservabilityイベントを出す。公開顧客認証専用DBロールへの権限追加や、現在の公開プレビューでの計測有効化は行っていない。
 
 ## 定期処理と監視
 
-認証ヘッダー `Authorization: Bearer <COMMERCE_WORKER_SECRET>` 付きPOSTを `/api/internal/advertising-delivery` へ5分ごとに実行するスケジューラーを設定する。1回最大5件、最大60秒。Vercel CronのGETとは異なるため、認証POST対応の既存ジョブ実行基盤から呼び出す。今回はスケジュールを作成しない。
+定期実行は [Advertising Worker](../../.github/workflows/advertising-delivery.yml)（2026-09-24追加）。認証ヘッダー `Authorization: Bearer <COMMERCE_WORKER_SECRET>` 付きPOSTを `/api/internal/advertising-delivery` へ5分ごとに送る。1回最大5件、最大60秒。Vercel CronのGETとは異なるため、認証POSTを送るGitHub Actionsから呼び出す。送信は GitHub変数 `ADVERTISING_DELIVERY_ENABLED=true` のときだけ実行し、未設定なら何もしない。
 
-送信と別に、同じ認証のPOST `/api/internal/advertising-delivery?mode=retention` を毎日実行する。広告を無効化した後もこの掃除は継続する。クリック情報は同意撤回時に消去、期限切れ時はworkerが消去する。送信待ち/受理記録は90日保持。保持期限は処理実行に依存するので、worker停止を監視する。
+送信と別に、同じ認証のPOST `/api/internal/advertising-delivery?mode=retention` を毎日03:10（JST）に実行する。この掃除は `ADVERTISING_DELIVERY_ENABLED` に依存せず、広告を無効化した後も継続する。保存済みのクリック情報と送達記録の削除はプライバシーポリシーで約束しているため、広告を使わない場合でもワークフローを止めない。クリック情報は同意撤回時に消去、期限切れ時はworkerが消去する。送信待ち/受理記録は90日保持。保持期限は処理実行に依存するので、worker停止を監視する。
 
 送信先の応答待ちは4秒（GoogleはOAuth+送信で最大8秒）、応答32KB、リダイレクト禁止。DBは接続障害時に既存接続上限を適用する。購入時のAdvertising保存失敗は注文を失敗にせず `advertising_bind_checkout` として記録する。その場合の広告計測欠落を監視する。
 
