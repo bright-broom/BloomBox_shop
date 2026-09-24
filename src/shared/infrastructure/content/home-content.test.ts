@@ -2,6 +2,8 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { activeHomeAnnouncements, homeContent, homeContentSchema, homeSection } from "./home-content";
+import { LOYALTY_TIERS } from "@/modules/customer/public";
+import { customerAccountContent } from "./customer-account-content";
 
 const notice = { id: "delivery", title: "お届けのご案内", body: "詳細をご確認ください。", severity: "info" as const,
   startsAt: "2026-09-17T09:00:00+09:00", endsAt: "2026-09-18T09:00:00+09:00", href: "/shipping-returns" };
@@ -12,6 +14,11 @@ describe("home content publication", () => {
     expect(activeHomeAnnouncements(content, new Date("2026-09-16T23:59:59Z"))).toEqual([]);
     expect(activeHomeAnnouncements(content, new Date("2026-09-17T00:00:00Z")).map((item) => item.id)).toEqual(["urgent", "delivery"]);
     expect(activeHomeAnnouncements(content, new Date("2026-09-18T00:00:00Z"))).toEqual([]);
+  });
+  it("does not describe the member discount as unavailable while a rank actually grants one", () => {
+    // The discount is applied automatically at checkout; only the rates are still provisional.
+    expect(LOYALTY_TIERS.some((tier) => tier.basisPoints > 0)).toBe(true);
+    for (const value of [homeContent.membership.benefitNote, ...customerAccountContent.registration.benefits]) expect(value).not.toMatch(/準備中|準備しています/);
   });
   it.each(["javascript:alert(1)", "//external.example", "/%2f%2fexternal.example", "/\\external.example"])("rejects unsafe editorial links: %s", (href) => {
     expect(homeContentSchema.safeParse({ ...homeContent, announcements: [{ ...notice, href }] }).success).toBe(false);
