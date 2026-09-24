@@ -13,8 +13,8 @@ export default function GiftNextPage() {
     {loadRuntimeMode() === "preview" ? <PreviewMetric event={{ name: "recipient_page_view" }} /> : null}
     <p className="eyebrow">PASS ON THE JOY</p>
     <h1>{copy.title}</h1><p className="section-description">{copy.lead}</p>
-    <div className="checkout-notice"><p>{copy.notice}</p><button className="secondary-button" disabled>{copy.disabledAction}</button></div>
     <Link className="primary-button" href="/flowers">{copy.action}<span aria-hidden="true">→</span></Link>
+    <p>{copy.support} <Link className="text-link" href="/contact">{copy.supportLabel}</Link></p>
     <p className="field-note">{copy.privacy}</p>
   </section>;
 }
