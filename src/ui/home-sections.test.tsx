@@ -66,12 +66,13 @@ describe("home customer guidance", () => {
     expect(commercial).toContain(homeContent.delivery.rangeLabel);
     expect(commercial).not.toContain(homeContent.delivery.previewLabel);
   });
-  it("offers the existing customer entry without claiming a live discount", () => {
+  it("offers the customer entry and states the rank benefit without quoting a rate", () => {
     const html = renderToStaticMarkup(<HomeMembership />);
     expect(html).toContain('href="/account"');
     expect(html).toContain('href="/account/register"');
-    expect(html).toContain("ランク別の自動割引を準備しています");
+    expect(html).toContain(homeContent.membership.benefitNote);
     expect(html).not.toContain("/operations");
+    // Rates live in the loyalty policy and are shown on the member's own page; the home page must not restate them.
     expect(html).not.toMatch(/\d+%/);
   });
   it("escapes notice text and removes expired announcements", () => {

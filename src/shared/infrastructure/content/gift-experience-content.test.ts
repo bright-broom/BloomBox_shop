@@ -8,7 +8,8 @@ describe("gift experience content", () => {
   });
   it("requires a short loading tip and explicit unavailability copy", () => {
     expect(giftExperienceSchema.safeParse({ ...giftExperienceContent, loading: { ...giftExperienceContent.loading, tips: [] } }).success).toBe(false);
-    expect(giftExperienceContent.recipient.notice).toContain("発行・利用はできません");
+    // The recipient page must not announce a benefit that does not exist yet (P2-08).
+    for (const value of Object.values(giftExperienceContent.recipient)) expect(value).not.toMatch(/準備中|特典/);
     expect(giftExperienceContent.launch.notice).toContain("箱の寸法は確認中");
   });
 });
