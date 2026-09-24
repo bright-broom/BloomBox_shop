@@ -64,7 +64,8 @@ flowchart TB
 | 顧客・運営管理 | 専用権限による一覧・注文検索・集計・参照監査、公開の管理者1名と専用サポートDB接続を確認 | 担当者・監査保持期限・各業務の公開操作検証。[公開接続記録](docs/operations/CUSTOMER_SELF_SERVICE_RELEASE_2026-09-17.md) |
 | 顧客セルフサービス | プロフィール・住所帳・お気に入り・問い合わせ・退会・データ出力を実装し公開反映。実Googleとお気に入り保存を確認 | 全操作の公開環境検証、情報保持・サポート運用の確定。[導入と検証範囲](docs/operations/CUSTOMER_SELF_SERVICE.md) |
 | 新規会員登録 | 登録の入口と、利用規約・プライバシーポリシーへの版つき同意の記録を実装。未同意・改定時はマイページから同意画面へ誘導 | Googleログインの一般公開（テストユーザー2名のまま）、規約本文の承認。[会員登録](docs/operations/MEMBER_REGISTRATION.md) |
-| 取引通知 | 注文確認・発送のお知らせを購入者だけに送る実装。冪等キー・再試行・48時間の送信期限。既定で無効 | メール配信事業者の契約・送信ドメイン認証・実送達。返金の連絡はStripeのメールへ委譲。[取引通知](docs/operations/NOTIFICATIONS.md) |
+| 取引通知 | 注文確認・発送のお知らせを購入者だけに送る実装。注文に紐づく問い合わせに回答したときは、回答を掲載したことだけを知らせる（本文は送らない、[ADR 0021](docs/architecture/adr/0021-support-reply-notifications.md)）。冪等キー・再試行・48時間の送信期限。既定で無効 | メール配信事業者の契約・送信ドメイン認証・実送達。返金の連絡はStripeのメールへ委譲。[取引通知](docs/operations/NOTIFICATIONS.md) |
+| キャンセル・変更 | 購入者の注文詳細に、お届け希望日と「いつまで相談できるか」を日付で表示（お届け希望日の4日前、特商法表記と同じ日数を試験で固定）。期限後・発送済み・取消済みは別の案内。担当者は発送前の注文のお届け希望日を、理由と履歴つきで変更できる（保持期限も追従）。返金はStripe管理画面で行い、通知で反映 | 担当者の実Google・公開DBでの変更操作の確認、実Stripeでの返金反映の確認。[取消・返金の運用](docs/operations/REFUNDS_AND_CANCELLATIONS.md) |
 | 商品・在庫管理 | 実Google＋隔離DBで登録・編集・補充・訂正・競合・権限失効を確認 | 正式な商品画像・実在庫・本番設定 |
 | 注文・送料・在庫 | 購入者紐付け、購入時の価格・送料固定、予約・確定・安全な解放を内部実装・DB検証 | 実Stripeの最終金額、通信断後の実運用、発送・返品 |
 | 発送・追跡 | 自作注文の準備・保留・発送・追跡訂正・配達完了、専用権限と監査を実装・隔離DB検証 | 専用DB/担当者の公開設定、実引渡し、通知送達。[導入手順](docs/operations/NATIVE_FULFILLMENT.md) |
@@ -332,7 +333,7 @@ flowchart TB
 | [GOVERNANCE.md](docs/operations/GOVERNANCE.md) | レビュー・権限・環境の保護 |
 | [RELEASE.md](docs/operations/RELEASE.md) | 本番候補の検査・承認・配備・復旧 |
 
-README更新：2026-09-20。実装はmain `dec9750` を基準に確認。公開状態は [公開準備の実確認](docs/operations/PUBLIC_READINESS_2026-09-18.md) の実施時点の記録です。最新の完了・未完了は台帳と対象コード、実際の設定・検証記録を参照してください。
+README更新：2026-09-25。実装はmain `f802550` と、問い合わせ回答の通知（ADR 0021）を基準に確認。公開状態は [公開準備の実確認](docs/operations/PUBLIC_READINESS_2026-09-18.md) の実施時点の記録です。最新の完了・未完了は台帳と対象コード、実際の設定・検証記録を参照してください。
 
 ## 広告との連携
 
@@ -347,6 +348,8 @@ flowchart LR
   E --> F[Google / Meta / Webhook]
   B -->|なし| G[通常どおり購入]
 ```
+
+確定購入の送信は5分ごと、保持期限を過ぎた広告データの削除は毎日03:10（日本時間）に、GitHub Actions（`.github/workflows/advertising-delivery.yml`）から実行します。`PRODUCTION_BASE_URL` と `COMMERCE_WORKER_SECRET` を設定するまでは何もしません。削除は広告送信の有効・無効に関係なく動きます（プライバシーポリシーで約束した削除のため）。
 
 設定・定期処理・保持期限・未接続項目は [広告連携の運用](docs/operations/ADVERTISING.md)、設計判断は [ADR 0014](docs/architecture/adr/0014-advertising-conversions.md) を参照してください。
 

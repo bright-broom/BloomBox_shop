@@ -1,6 +1,7 @@
 import { z } from "zod";
 import data from "../../../../content/native-fulfillment.json";
 import { NATIVE_FULFILLMENT_ACTIONS, NATIVE_CARRIER_CODES, NATIVE_FULFILLMENT_ERROR_CODES, FULFILLMENT_STATUSES } from "@/modules/fulfillment/public";
+import { ORDER_DELIVERY_DATE_CHANGE_CODES } from "@/modules/order/public";
 const text = z.string().trim().min(1);
 export const nativeFulfillmentContent = z.object({
   title: text,
@@ -43,4 +44,8 @@ export const nativeFulfillmentContent = z.object({
   carriers: z.record(z.enum(NATIVE_CARRIER_CODES), text),
   reasons: z.record(z.enum(["PAYMENT_REVIEW", "ADDRESS_REVIEW", "STOCK_SHORTAGE", "CUSTOMER_REQUEST", "PAYMENT_ISSUE", "UNDELIVERABLE_ADDRESS", "OTHER"]), text),
   messages: z.record(z.enum(["IDLE", "SAVED", ...NATIVE_FULFILLMENT_ERROR_CODES]), z.string()),
+  // Every outcome of a delivery date change needs wording an operator can act on.
+  reschedule: z.object({ title: text, note: text, date: text, current: text, range: text, reason: text, reasonHint: text,
+    confirm: text, save: text, saving: text, history: text, noHistory: text,
+    messages: z.record(z.enum(["IDLE", "SAVED", ...ORDER_DELIVERY_DATE_CHANGE_CODES]), z.string()) }).strict(),
 }).strict().parse(data);
