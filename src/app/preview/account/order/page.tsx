@@ -6,6 +6,10 @@ import { CustomerOrderDetailPanel } from "@/ui/customer-order-detail";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: copy.detail.previewTitle, robots: { index: false, follow: false } };
+/** A sample delivery date N days from now in Asia/Tokyo. */
+function sampleDeliveryDate(days: number): string {
+  return new Date(Date.now() + days * 86_400_000 + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
 export default async function CustomerOrderPreview({ searchParams }: { searchParams: Promise<{ sample?: string | string[] }> }) {
   if (loadRuntimeMode() !== "preview") notFound();
   const large = (await searchParams).sample === "sample-2";
@@ -14,6 +18,8 @@ export default async function CustomerOrderPreview({ searchParams }: { searchPar
     orderedAt: large ? "2026-09-01T04:00:00Z" : "2026-09-10T04:00:00Z", totalYen: large ? 8000 : 5000,
     subtotalYen: large ? 8000 : 4000, shippingYen: large ? 0 : 1000, taxYen: 0, discountYen: 0,
     payment: "CAPTURED", fulfillment: large ? "SHIPPED" : "PENDING_FULFILLMENT", cancelled: false,
+    // Sample dates relative to the visit, so the preview shows a live change window rather than an expired one.
+    deliveryDate: sampleDeliveryDate(large ? 2 : 10),
     items: [{ name: large ? copy.detail.sampleLargeProduct : copy.detail.sampleProduct, quantity: 1, unitYen: large ? 8000 : 4000, totalYen: large ? 8000 : 4000 }],
     shipment: null,
   } }} />;

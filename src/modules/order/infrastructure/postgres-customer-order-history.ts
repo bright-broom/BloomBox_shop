@@ -11,7 +11,7 @@ const rowSchema = z.object({ id: z.uuid(), display_id: z.string().min(1).max(100
   payment_states: z.array(z.string()).nullable(), fulfillment_states: z.array(z.string()).nullable() });
 const yen = z.coerce.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const shipmentSchema = z.object({ carrier: z.string().min(1).max(80), trackingNumber: z.string().min(1).max(100), shippedAt: z.iso.datetime(), deliveredAt: z.iso.datetime().nullable() });
-const detailSchema = rowSchema.extend({ shipment: shipmentSchema.nullable(),
+const detailSchema = rowSchema.extend({ shipment: shipmentSchema.nullable(), delivery_date: z.string().nullable(),
   refunds: z.array(z.object({ amountYen: yen, currency: z.literal('JPY'), status: z.enum(['REQUESTED','PROCESSING','SUCCEEDED','FAILED','CANCELLED']), createdAt: z.iso.datetime() })), subtotal_minor: yen, tax_minor: yen, shipping_minor: yen, discount_minor: yen,
   items: z.array(z.object({ name: z.string().min(1), quantity: z.number().int().positive(), currency: z.literal("JPY"),
     unit_minor: yen, total_minor: yen, product_id: z.string().nullable() }).strict()).min(1) });
@@ -24,6 +24,7 @@ export class PostgresCustomerOrderHistory implements CustomerOrderHistoryQuery, 
       // Ownership and all snapshots are read in one statement. Never join current catalog or recipient data.
       const rows = await this.sql`SELECT orders.id, orders.display_id, orders.currency, orders.total_minor, orders.status,
           orders.subtotal_minor, orders.tax_minor, orders.shipping_minor, orders.discount_minor,
+          gift.delivery_date::text AS delivery_date,
           to_char(orders.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
           payment.states AS payment_states, fulfillment.states AS fulfillment_states,
           (SELECT jsonb_agg(jsonb_build_object('name', item.product_name_snapshot, 'quantity', item.quantity,
@@ -40,6 +41,9 @@ export class PostgresCustomerOrderHistory implements CustomerOrderHistoryQuery, 
             FROM bloombox.refunds r JOIN bloombox.payments p ON p.id = r.payment_id WHERE p.order_id = orders.id), '[]'::jsonb) AS refunds
         FROM bloombox.orders orders JOIN bloombox.buyers buyer ON buyer.id = orders.buyer_id
         JOIN bloombox.customer_accounts customer ON customer.id = buyer.customer_id AND customer.status = 'ACTIVE'
+        -- The requested delivery date is the buyer's own order fact; no recipient name or address is read.
+        -- Left joined on purpose: a missing gift snapshot must never hide the buyer's own order.
+        LEFT JOIN bloombox.order_gift_snapshots gift ON gift.order_id = orders.id
         LEFT JOIN LATERAL (SELECT array_agg(DISTINCT status) AS states FROM bloombox.payments WHERE order_id = orders.id) payment ON TRUE
         LEFT JOIN LATERAL (SELECT array_agg(DISTINCT status) AS states FROM bloombox.fulfillments WHERE order_id = orders.id) fulfillment ON TRUE
         WHERE orders.id = ${orderId} AND buyer.customer_id = ${customerId} AND orders.commerce_provider = 'STRIPE'`;
@@ -48,6 +52,7 @@ export class PostgresCustomerOrderHistory implements CustomerOrderHistoryQuery, 
       return { id: row.id, name: row.display_id, orderedAt: cursorSchema.shape.createdAt.parse(row.created_at),
         totalYen: row.total_minor, subtotalYen: row.subtotal_minor, taxYen: row.tax_minor,
         shippingYen: row.shipping_minor, discountYen: row.discount_minor, cancelled: row.status === "CANCELLED",
+        deliveryDate: row.delivery_date,
         payment: onlyState(row.payment_states), fulfillment: onlyState(row.fulfillment_states),
         items: row.items.map((item) => ({ name: item.name, quantity: item.quantity, unitYen: item.unit_minor, totalYen: item.total_minor, productId: item.product_id ?? undefined })),
         shipment: row.shipment, refunds: row.refunds.map(({ amountYen, status, createdAt }) => ({ amountYen, status, createdAt })) };

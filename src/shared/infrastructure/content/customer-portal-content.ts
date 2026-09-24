@@ -65,7 +65,7 @@ export const customerPortalContent = z
     reply: text,
     emptyRequests: text,
     confirmation: text,
-    orderHelp: text,
+    orderHelp: text, deliveryDate: text, changeOpen: text, changeClosed: text, changeShipped: text,
     print: text,
     printNote: text,
     reorder: text,

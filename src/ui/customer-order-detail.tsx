@@ -4,6 +4,17 @@ import Link from "next/link";
 import type { CustomerOrderDetailState } from "@/shared/infrastructure/customer-account";
 import { customerAccountContent as copy } from "@/shared/infrastructure/content/customer-account-content";
 import { formatMoney, money } from "@/shared/domain/money";
+import { orderChangeWindow, orderDispatched } from "@/modules/order/public";
+
+const jstDate = (value: string) =>
+  new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", dateStyle: "long" }).format(new Date(`${value}T00:00:00+09:00`));
+
+/** States when a cancellation or change request still arrives in time, from the published terms. */
+function changeNotice(deliveryDate: string, dispatched: boolean, now: Date): string {
+  if (dispatched) return portalCopy.changeShipped;
+  const { lastDay, open } = orderChangeWindow(deliveryDate, now);
+  return (open ? portalCopy.changeOpen : portalCopy.changeClosed).replace("{date}", jstDate(lastDay));
+}
 
 export function CustomerOrderDetailPanel({ state, preview = false, retryHref, reorderProducts = [] }: {
   reorderProducts?: readonly { id: string; name: string }[]; state: CustomerOrderDetailState; preview?: boolean; retryHref?: string;
@@ -23,7 +34,9 @@ export function CustomerOrderDetailPanel({ state, preview = false, retryHref, re
           <dl className="account-order-facts">
             <div><dt>{copy.payment}</dt><dd>{Object.hasOwn(copy.payments, order.payment) ? copy.payments[order.payment] : copy.payments.UNKNOWN}</dd></div>
             <div><dt>{copy.fulfillment}</dt><dd>{Object.hasOwn(copy.fulfillments, order.fulfillment) ? copy.fulfillments[order.fulfillment] : copy.fulfillments.UNKNOWN}</dd></div>
+            {order.deliveryDate ? <div><dt>{portalCopy.deliveryDate}</dt><dd>{jstDate(order.deliveryDate)}</dd></div> : null}
           </dl>
+          {order.deliveryDate && !order.cancelled ? <p className="form-hint">{changeNotice(order.deliveryDate, order.shipment !== null || orderDispatched(order.fulfillment), new Date())}</p> : null}
         </section>
         <section><h2>{copy.detail.items}</h2><ol className="account-order-list">{order.items.map((item, index) => <li key={index}>
           <h3>{item.name}</h3><dl className="account-order-facts">

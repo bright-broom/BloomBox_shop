@@ -109,9 +109,13 @@ describeDatabase("native customer identity and order ownership", () => {
     await sql`INSERT INTO bloombox.recipients (id, customer_id) VALUES (${recipient}, ${a.customerId})`;
     await sql`INSERT INTO bloombox.order_gift_snapshots (order_id, recipient_id, delivery_date, pii_key_id, recipient_ciphertext, gift_message_ciphertext)
       VALUES (${foreign}, ${recipient}, '2026-09-20', 'synthetic', ${Buffer.from("PRIVATE RECIPIENT")}, ${Buffer.from("PRIVATE MESSAGE")})`;
+    // The buyer's own snapshot: only its delivery date may reach the detail, never the recipient or the message.
+    await sql`INSERT INTO bloombox.order_gift_snapshots (order_id, recipient_id, delivery_date, pii_key_id, recipient_ciphertext, gift_message_ciphertext)
+      VALUES (${own}, ${recipient}, '2026-09-18', 'synthetic', ${Buffer.from("PRIVATE RECIPIENT")}, ${Buffer.from("PRIVATE MESSAGE")})`;
     const detail = await history.readDetail(a.customerId, own);
     expect(detail).toMatchObject({
       id: own,
+      deliveryDate: "2026-09-18",
       subtotalYen: 4000,
       shippingYen: 1000,
       taxYen: 0,
@@ -132,6 +136,10 @@ describeDatabase("native customer identity and order ownership", () => {
       expect(await history.readDetail(a.customerId, inaccessible)).toBeNull();
     }
     expect(await history.readDetail(b.customerId, own)).toBeNull();
+    // A purged or never-written gift snapshot must not hide the order; the date is simply absent.
+    const undated = await order(buyerA);
+    await item(undated);
+    expect(await history.readDetail(a.customerId, undated)).toMatchObject({ id: undated, deliveryDate: null });
     expect(JSON.stringify(detail)).not.toMatch(
       /PRIVATE|OTHER CUSTOMER|recipient|ciphertext|external_product|customerId|buyer/,
     );
