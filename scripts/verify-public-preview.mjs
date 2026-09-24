@@ -3,9 +3,12 @@ import { pathToFileURL } from "node:url";
 import { verifyBrowserPolicy } from "./verify-browser-policy.mjs";
 
 export const TEST_CHECKOUT_ROUTES = ["/checkout/test", "/checkout/test/review", "/checkout/test/payment", "/checkout/test/complete"];
-export const PUBLIC_PREVIEW_ROUTES = ["/", "/flowers", "/flowers/bloom-box-m", "/flowers/bloom-box-l", "/gift/prod_bloombox_m", "/gift/prod_bloombox_l", "/cart", ...TEST_CHECKOUT_ROUTES, "/about", "/guide", "/faq", "/shipping-returns", "/privacy", "/terms", "/commercial-transactions", "/contact", "/robots.txt", "/sitemap.xml", "/manifest.webmanifest"];
-/** While selling, the dummy-checkout rehearsal must not be reachable. */
-export const PUBLIC_COMMERCIAL_ROUTES = PUBLIC_PREVIEW_ROUTES.filter((path) => !TEST_CHECKOUT_ROUTES.includes(path));
+/** Preview fixture products. A real catalog has its own slugs, so these are checked only while paused. */
+export const PREVIEW_PRODUCT_ROUTES = ["/flowers/bloom-box-m", "/flowers/bloom-box-l", "/gift/prod_bloombox_m", "/gift/prod_bloombox_l"];
+const INFORMATION_ROUTES = ["/about", "/guide", "/faq", "/shipping-returns", "/privacy", "/terms", "/commercial-transactions", "/contact", "/robots.txt", "/sitemap.xml", "/manifest.webmanifest"];
+export const PUBLIC_PREVIEW_ROUTES = ["/", "/flowers", ...PREVIEW_PRODUCT_ROUTES, "/cart", ...TEST_CHECKOUT_ROUTES, ...INFORMATION_ROUTES];
+/** While selling, the rehearsal must be gone and the products come from the live catalog, not from fixtures. */
+export const PUBLIC_COMMERCIAL_ROUTES = ["/", "/flowers", "/cart", ...INFORMATION_ROUTES];
 
 export function previewOrigin(value) {
   const url = new URL(value);
@@ -29,6 +32,11 @@ export function productLinks(html) {
     if (href && /^\/flowers\/[^/?#]+$/.test(href)) links.add(href);
   }
   return links;
+}
+/** Whatever the catalog holds, an impossible term must render no product and an accessible empty state. */
+export function verifyEmptyCatalogSearch(emptyHtml) {
+  assert(productLinks(emptyHtml).size === 0, "A non-matching search must render no product links");
+  assert(/role=["']status["']/.test(renderedHtml(emptyHtml)), "A non-matching search must render an accessible empty state");
 }
 export function verifyCatalogSearch(matchingHtml, emptyHtml) {
   const matching = productLinks(matchingHtml), empty = productLinks(emptyHtml);
@@ -120,9 +128,19 @@ export async function verifyPublicPreview(origin, log = console.log) {
   } else {
     verifyPreviewSafety(home.body, pages.get("/cart").body, pages.get("/checkout/test/payment").body, pages.get("/commercial-transactions").body, home.headers);
   }
-  const matching = await getVerifiedPage(base, "/flowers?q=BLOOM%20BOX%20M");
   const empty = await getVerifiedPage(base, "/flowers?q=__bloombox_smoke_no_match_29482__");
-  verifyCatalogSearch(matching.body, empty.body);
+  if (commerce === "open") {
+    // The live catalog is the seller's; take a product from the listing instead of assuming fixture slugs.
+    const listed = [...productLinks(pages.get("/flowers").body)];
+    assert(listed.length > 0, "The catalog listing renders no product while selling");
+    const product = await getVerifiedPage(base, listed[0]);
+    assert(/<h1\b/.test(renderedHtml(product.body)), `Product page is missing its heading at ${listed[0]}`);
+    log(`PASS ${listed[0]}`);
+    verifyEmptyCatalogSearch(empty.body);
+  } else {
+    const matching = await getVerifiedPage(base, "/flowers?q=BLOOM%20BOX%20M");
+    verifyCatalogSearch(matching.body, empty.body);
+  }
   log(`PASS catalog filtering and the ${commerce === "open" ? "selling" : "non-selling"} contract; release ${release}`);
   return release;
 }
