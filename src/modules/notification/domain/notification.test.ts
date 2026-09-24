@@ -4,6 +4,7 @@ import { composeNotification, notificationRetryDelaySeconds, unknownPlaceholders
 const copy: NotificationCopy = {
   orderConfirmed: { subject: "ご注文 {displayId}", body: ["{productName} × {quantity}", "{deliveryDate} / {total}", "{accountUrl}"] },
   orderShipped: { subject: "発送 {displayId}", body: ["{carrier} {trackingNumber}"] },
+  requestReplied: { subject: "回答 {displayId}", body: ["{supportUrl}"] },
   carriers: { YAMATO: "ヤマト運輸", SAGAWA: "佐川急便", JAPAN_POST: "日本郵便" },
   signature: ["{contactUrl}"],
 };
@@ -21,6 +22,12 @@ describe("composeNotification", () => {
     expect(composeNotification("ORDER_SHIPPED", order, { carrier: "JAPAN_POST", trackingNumber: "AB123456CD" }, copy, "https://shop.example").text)
       .toContain("日本郵便 AB123456CD");
     expect(() => composeNotification("ORDER_SHIPPED", order, null, copy, "https://shop.example")).toThrow();
+  });
+
+  it("tells the buyer an answer exists without repeating the order or the answer", () => {
+    const message = composeNotification("REQUEST_REPLIED", order, null, copy, "https://shop.example");
+    expect(message).toEqual({ subject: "回答 BB-1", text: "https://shop.example/account/support\n\nhttps://shop.example/contact" });
+    for (const secret of ["BLOOM BOX M", "2026-10-01", "5,000"]) expect(message.text).not.toContain(secret);
   });
 
   it("never lets order data break the subject line", () => {

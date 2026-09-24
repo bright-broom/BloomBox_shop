@@ -16,11 +16,13 @@ export type ClaimedNotification = Readonly<{
   kind: NotificationKind;
   attempts: number;
   orderId: string;
+  /** The answered request, for REQUEST_REPLIED only; never any of its content. */
+  requestId: string | null;
   shipment: ShipmentFacts | null;
 }>;
 export type NotificationFacts = Readonly<{ email: string; order: OrderNotificationFacts }>;
 /** Why a notification is permanently not sent. Never contains personal data. */
-export type NotificationSkipReason = "NO_BUYER_EMAIL" | "ORDER_NOT_ACTIVE" | "ORDER_NOT_FOUND" | "REJECTED";
+export type NotificationSkipReason = "NO_BUYER_EMAIL" | "ORDER_NOT_ACTIVE" | "ORDER_NOT_FOUND" | "REJECTED" | "REQUEST_NOT_ANSWERED";
 
 export interface NotificationQueue {
   claim(limit: number): Promise<readonly ClaimedNotification[]>;

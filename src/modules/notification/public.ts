@@ -1,6 +1,8 @@
 export {
   NOTIFICATION_EVENT_TYPES,
   NOTIFICATION_PLACEHOLDERS,
+  REQUEST_REPLIED_PLACEHOLDERS,
+  placeholdersIn,
   unknownPlaceholders,
   type NotificationCopy,
   type NotificationKind,

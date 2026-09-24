@@ -5,12 +5,14 @@ import { DeliverNotifications, EmailRejectedError, type ClaimedNotification, typ
 const copy: NotificationCopy = {
   orderConfirmed: { subject: "ご注文 {displayId}", body: ["{productName}"] },
   orderShipped: { subject: "発送 {displayId}", body: ["{carrier} {trackingNumber}"] },
+  requestReplied: { subject: "回答 {displayId}", body: ["{supportUrl}"] },
   carriers: { YAMATO: "ヤマト運輸", SAGAWA: "佐川急便", JAPAN_POST: "日本郵便" },
   signature: ["BLOOM BOX"],
 };
 const claimed = (attempts = 1, kind: ClaimedNotification["kind"] = "ORDER_CONFIRMED"): ClaimedNotification => ({
   eventId: "11111111-1111-4111-8111-111111111111", lease: "lease", kind, attempts,
   orderId: "22222222-2222-4222-8222-222222222222",
+  requestId: kind === "REQUEST_REPLIED" ? "33333333-3333-4333-8333-333333333333" : null,
   shipment: kind === "ORDER_SHIPPED" ? { carrier: "YAMATO", trackingNumber: "123456789012" } : null,
 });
 const facts = { email: "buyer@example.test", order: { displayId: "BB-1", productName: "BLOOM BOX M", quantity: 1, deliveryDate: "2026-10-01", totalYen: 5000 } };
@@ -37,11 +39,18 @@ describe("DeliverNotifications", () => {
   });
 
   it("skips permanently without sending when there is no buyer email or the order is no longer active", async () => {
-    queue.claim.mockResolvedValue([claimed(), claimed()]);
-    queue.facts.mockResolvedValueOnce("NO_BUYER_EMAIL").mockResolvedValueOnce("ORDER_NOT_ACTIVE");
-    expect(await useCase().execute()).toEqual({ sent: 0, retried: 0, failed: 0, skipped: 2 });
+    queue.claim.mockResolvedValue([claimed(), claimed(), claimed(1, "REQUEST_REPLIED")]);
+    queue.facts.mockResolvedValueOnce("NO_BUYER_EMAIL").mockResolvedValueOnce("ORDER_NOT_ACTIVE").mockResolvedValueOnce("REQUEST_NOT_ANSWERED");
+    expect(await useCase().execute()).toEqual({ sent: 0, retried: 0, failed: 0, skipped: 3 });
     expect(send).not.toHaveBeenCalled();
-    expect(queue.fail.mock.calls.map((call) => call[1])).toEqual(["NO_BUYER_EMAIL", "ORDER_NOT_ACTIVE"]);
+    expect(queue.fail.mock.calls.map((call) => call[1])).toEqual(["NO_BUYER_EMAIL", "ORDER_NOT_ACTIVE", "REQUEST_NOT_ANSWERED"]);
+  });
+
+  it("tells the buyer an answer is waiting without putting it in the mail", async () => {
+    queue.claim.mockResolvedValue([claimed(1, "REQUEST_REPLIED")]);
+    expect(await useCase().execute()).toEqual({ sent: 1, retried: 0, failed: 0, skipped: 0 });
+    expect(send).toHaveBeenCalledWith({ to: "buyer@example.test", subject: "回答 BB-1",
+      text: "https://shop.example/account/support\n\nBLOOM BOX", idempotencyKey: "11111111-1111-4111-8111-111111111111" });
   });
 
   it("retries a transient failure with backoff and gives up after the attempt limit", async () => {
