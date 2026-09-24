@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CustomerOrderDetailPanel } from "@/ui/customer-order-detail";
 import { customerAccountContent as copy } from "@/shared/infrastructure/content/customer-account-content";
+import { customerPortalContent as portalCopy } from "@/shared/infrastructure/content/customer-portal-content";
 import CustomerOrderPreview from "@/app/preview/account/order/page";
 import CustomerOrderPage from "@/app/account/orders/[orderId]/page";
 import type { CustomerOrderDetail } from "@/modules/order/public";
@@ -11,6 +12,7 @@ vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("NOT_FOUND
 const order: CustomerOrderDetail = { id: "sample", name: "#100", orderedAt: "2026-09-10T22:00:00Z",
   totalYen: 7500, subtotalYen: 8000, taxYen: 0, shippingYen: 0, discountYen: 500,
   payment: "PARTIALLY_REFUNDED", fulfillment: "UNKNOWN", cancelled: false,
+  deliveryDate: "2026-09-20",
   items: [{ name: "<script>snapshot</script>", quantity: 2, unitYen: 4000, totalYen: 7500 }], shipment: null };
 afterEach(() => { vi.unstubAllEnvs(); vi.resetAllMocks(); });
 describe("customer order detail presentation", () => {
@@ -19,6 +21,35 @@ describe("customer order detail presentation", () => {
     for (const expected of ["#100", "2026/09/11", "7,500", "8,000", "4,000", "500", copy.totalNote, copy.payments.PARTIALLY_REFUNDED,
       copy.fulfillments.UNKNOWN, "&lt;script&gt;snapshot&lt;/script&gt;", 'href="/account"']) expect(html).toContain(expected);
     expect(html).not.toContain("<script>snapshot");
+  });
+  it("states the cancellation deadline from the delivery date and withdraws it once the gift is dispatched", () => {
+    const render = (now: string, overrides: Partial<CustomerOrderDetail> = {}) => {
+      vi.useFakeTimers({ now: new Date(now), toFake: ["Date"] });
+      try { return renderToStaticMarkup(<CustomerOrderDetailPanel state={{ status: "ready", order: { ...order, ...overrides } }} />); }
+      finally { vi.useRealTimers(); }
+    };
+    // 2026-09-20 delivery: a request still arrives in time through 2026-09-16 in Tokyo.
+    const deadline = "2026年9月16日";
+    const open = render("2026-09-16T14:59:00Z");
+    expect(open).toContain(portalCopy.deliveryDate);
+    expect(open).toContain("2026年9月20日");
+    expect(open).toContain(portalCopy.changeOpen.replace("{date}", deadline));
+    const closed = render("2026-09-16T15:00:00Z");
+    expect(closed).toContain(portalCopy.changeClosed.replace("{date}", deadline));
+    expect(closed).not.toContain(portalCopy.changeOpen.replace("{date}", deadline));
+    for (const dispatched of [{ fulfillment: "SHIPPED" }, { shipment: { carrier: "ヤマト運輸", trackingNumber: "1234", shippedAt: "2026-09-17T02:00:00Z", deliveredAt: null } }] as Partial<CustomerOrderDetail>[]) {
+      const html = render("2026-09-10T00:00:00Z", dispatched);
+      expect(html).toContain(portalCopy.changeShipped);
+      expect(html).not.toContain(deadline);
+    }
+    // A cancelled order gets no deadline at all; there is nothing left to change.
+    const cancelled = render("2026-09-10T00:00:00Z", { cancelled: true });
+    expect(cancelled).not.toContain(deadline);
+    expect(cancelled).not.toContain(portalCopy.changeShipped);
+    // An order without a gift snapshot still renders; it simply states no date.
+    const undated = render("2026-09-10T00:00:00Z", { deliveryDate: null });
+    expect(undated).toContain("#100");
+    for (const absent of [portalCopy.deliveryDate, portalCopy.changeShipped, deadline]) expect(undated).not.toContain(absent);
   });
   it("shows unavailable states without order information and offers retry only for load failure", () => {
     for (const status of ["disabled", "signed-out", "not-found", "unavailable"] as const) {
