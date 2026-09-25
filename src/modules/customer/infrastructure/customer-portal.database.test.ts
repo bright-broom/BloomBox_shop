@@ -219,6 +219,42 @@ suite("customer portal ownership, persistence and recovery", () => {
       await connection.end();
     }
   });
+  it("announces an answer about an order without putting the answer in the event", async () => {
+    const a = await actor(), buyer = randomUUID(), order = randomUUID();
+    const operator = { operatorId: randomUUID(), expiresAt: new Date(Date.now() + 60000) };
+    await sql`INSERT INTO bloombox.buyers(id,customer_id) VALUES (${buyer},${a.customerId})`;
+    await sql`INSERT INTO bloombox.orders(id,display_id,buyer_id,status,commerce_provider,external_order_id,currency,subtotal_minor,tax_minor,shipping_minor,discount_minor,total_minor,created_at,updated_at) VALUES (${order},${order},${buyer},'CONFIRMED','STRIPE',${order},'JPY',4000,0,1000,0,5000,now(),now())`;
+    await sql`INSERT INTO bloombox.customer_support_operators(operator_id,enabled,valid_until) VALUES (${operator.operatorId},true,clock_timestamp()+interval '1 hour')`;
+    const linked = { id: randomUUID(), kind: "CANCELLATION" as const, orderId: order, message: "秘密の相談" };
+    const unlinked = { id: randomUUID(), kind: "OTHER" as const, orderId: null, message: "注文以外の相談" };
+    await repo.request(a, linked);
+    await repo.request(a, unlinked);
+    const connection = postgres(url!, { max: 1, ssl: false });
+    try {
+      await connection`SET ROLE bloombox_customer_support`;
+      const reply = (id: string, revision: number, status: "REPLIED" | "CLOSED") =>
+        withCustomerSupport(connection, operator, "HISTORY", async (tx) => ({
+          value: await new PostgresCustomerRequests(tx, key).reply({ id, revision, status, reply: "秘密の回答" }, operator.operatorId),
+          customerIds: [a.customerId],
+        }));
+      await reply(linked.id, 1, "REPLIED");
+      const events = await sql`SELECT aggregate_id, aggregate_type, payload, status FROM bloombox.outbox_events WHERE event_type = 'customer.request.replied'`;
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ aggregate_id: linked.id, aggregate_type: "CustomerRequest", status: "PENDING" });
+      expect(events[0].payload).toEqual({ orderId: order, requestId: linked.id });
+      // Neither the relayed answer nor the customer's own words may reach the event.
+      expect(JSON.stringify(events[0].payload)).not.toMatch(/秘密|回答|相談/);
+      // Closing the thread is not a new answer, and a request without an order has nobody to notify.
+      await reply(linked.id, 2, "CLOSED");
+      await reply(unlinked.id, 1, "REPLIED");
+      expect(await sql`SELECT id FROM bloombox.outbox_events WHERE event_type = 'customer.request.replied'`).toHaveLength(1);
+      // The support role may queue notices and nothing else in the outbox.
+      await expect(connection`SELECT * FROM bloombox.outbox_events`).rejects.toMatchObject({ code: "42501" });
+      await expect(connection`UPDATE bloombox.outbox_events SET status = 'PUBLISHED' WHERE false`).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await connection.end();
+    }
+  });
   it("allows audited support replies without exposing profiles or mutating orders", async () => {
     const a = await actor(),
       input = {

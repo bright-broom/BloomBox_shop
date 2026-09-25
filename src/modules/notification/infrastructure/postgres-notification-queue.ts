@@ -23,6 +23,8 @@ const claimedRow = z.discriminatedUnion("event_type", [
   z.object({ event_type: z.literal("fulfillment.shipped"), id: uuid, attempts: z.number().int().positive(),
     payload: z.object({ orderId: uuid, carrier: z.enum(["YAMATO", "SAGAWA", "JAPAN_POST"]),
       trackingNumber: z.string().regex(/^[A-Z0-9]{8,32}$/) }) }),
+  z.object({ event_type: z.literal("customer.request.replied"), id: uuid, attempts: z.number().int().positive(),
+    payload: z.object({ orderId: uuid, requestId: uuid }) }),
 ]);
 const factsRow = z.object({
   display_id: z.string().min(1),
@@ -79,6 +81,7 @@ export class PostgresNotificationQueue implements NotificationQueue {
         kind: NOTIFICATION_EVENT_TYPES[row.event_type],
         attempts: row.attempts,
         orderId: row.payload.orderId,
+        requestId: row.event_type === "customer.request.replied" ? row.payload.requestId : null,
         shipment: row.event_type === "fulfillment.shipped"
           ? { carrier: row.payload.carrier, trackingNumber: row.payload.trackingNumber } : null,
       });
@@ -87,6 +90,15 @@ export class PostgresNotificationQueue implements NotificationQueue {
   }
 
   async facts(notification: ClaimedNotification): Promise<NotificationFacts | NotificationSkipReason> {
+    if (notification.kind === "REQUEST_REPLIED") {
+      // Re-read at send time: an answer withdrawn or closed before delivery is not announced (ADR 0021).
+      const [request] = await this.sql`
+        SELECT status, order_id FROM bloombox.customer_requests WHERE id = ${notification.requestId}`;
+      const answered = z.object({ status: z.string(), order_id: uuid.nullable() }).safeParse(request);
+      if (!answered.success || answered.data.status !== "REPLIED" || answered.data.order_id !== notification.orderId) {
+        return "REQUEST_NOT_ANSWERED";
+      }
+    }
     const [raw] = await this.sql`
       SELECT o.display_id, o.status, o.commerce_provider, o.total_minor, o.currency,
         g.delivery_date::text AS delivery_date, g.pii_key_id, g.address_ciphertext,

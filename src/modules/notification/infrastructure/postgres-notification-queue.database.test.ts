@@ -106,6 +106,34 @@ suite("buyer notification queue on the shared outbox", () => {
     }
   });
 
+  it("announces an answered request only while the answer is still there", async () => {
+    const orderId = await order();
+    const requestId = randomUUID(), customerId = randomUUID();
+    await sql`INSERT INTO bloombox.customer_accounts (id, status) VALUES (${customerId}, 'ACTIVE')`;
+    await sql`INSERT INTO bloombox.customer_requests (id, customer_id, order_id, kind, status, key_id, ciphertext)
+      VALUES (${requestId}, ${customerId}, ${orderId}, 'CANCELLATION', 'REPLIED', 'test', ${Buffer.from("PRIVATE ANSWER")})`;
+    await event(orderId, { type: "customer.request.replied", payload: { orderId, requestId } });
+    const [claimed] = await queue.claim(1);
+    expect(claimed).toMatchObject({ kind: "REQUEST_REPLIED", orderId, requestId });
+    const facts = await queue.facts(claimed);
+    expect(facts).toMatchObject({ email: "buyer@example.test" });
+    // The consumer reads no answer text, only that an answer exists.
+    expect(JSON.stringify(facts)).not.toMatch(/PRIVATE|ANSWER|受取人/);
+    await expect(worker`SELECT ciphertext FROM bloombox.customer_requests WHERE id = ${requestId}`).rejects.toMatchObject({ code: "42501" });
+    // A thread closed or reopened before delivery, or an event pointing at another order, is not announced.
+    for (const update of [sql`UPDATE bloombox.customer_requests SET status = 'CLOSED' WHERE id = ${requestId}`,
+      sql`UPDATE bloombox.customer_requests SET status = 'OPEN' WHERE id = ${requestId}`]) {
+      await update;
+      await event(orderId, { type: "customer.request.replied", payload: { orderId, requestId } });
+      const [pending] = await queue.claim(1);
+      expect(await queue.facts(pending)).toBe("REQUEST_NOT_ANSWERED");
+      await queue.fail(pending, "REQUEST_NOT_ANSWERED");
+    }
+    await event(orderId, { type: "customer.request.replied", payload: { orderId, requestId: randomUUID() } });
+    const [missing] = await queue.claim(1);
+    expect(await queue.facts(missing)).toBe("REQUEST_NOT_ANSWERED");
+  });
+
   it("completes with an audit once, retries later, and fails only under the current lease", async () => {
     const orderId = await order();
     const sent = await event(orderId), later = await event(orderId), dead = await event(orderId);

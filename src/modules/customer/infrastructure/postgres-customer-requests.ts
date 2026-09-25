@@ -67,6 +67,14 @@ export class PostgresCustomerRequests {
       .tx`UPDATE bloombox.customer_requests SET status = ${value.status}, key_id = ${encrypted.keyId}, ciphertext = ${encrypted.ciphertext}, revision = revision + 1, updated_at = clock_timestamp() WHERE id = ${value.id}`;
     await this
       .tx`INSERT INTO bloombox.customer_request_changes(id, request_id, operator_id, revision, status) VALUES (${randomUUID()}, ${value.id}, ${operatorId}, ${row.revision + 1}, ${value.status})`;
+    // An answer to a request about an order is announced to that order's buyer, in the same transaction as
+    // the answer itself. The event carries no answer text, and a request without an order gets no mail (ADR 0021).
+    if (value.status === "REPLIED" && row.order_id) {
+      await this
+        .tx`INSERT INTO bloombox.outbox_events (id, aggregate_type, aggregate_id, event_type, event_version, payload, occurred_at, available_at)
+          VALUES (${randomUUID()}, 'CustomerRequest', ${value.id}, 'customer.request.replied', 1,
+            ${this.tx.json({ orderId: row.order_id, requestId: value.id })}, clock_timestamp(), clock_timestamp())`;
+    }
     return row.customer_id;
   }
   async privacyQueue() {

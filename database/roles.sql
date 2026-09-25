@@ -156,6 +156,8 @@ GRANT SELECT ON bloombox.catalog_products TO bloombox_application, bloombox_work
 
 -- The order ownership constraint reads only the buyer key and its customer reference.
 GRANT SELECT (id, customer_id) ON bloombox.buyers TO bloombox_worker;
+-- The notification consumer confirms an answer still exists before announcing it; it reads no answer text.
+GRANT SELECT (id, order_id, status) ON bloombox.customer_requests TO bloombox_worker;
 
 GRANT SELECT ON bloombox.inventory_stock, bloombox.inventory_reservations, bloombox.inventory_movements
   TO bloombox_application, bloombox_worker;
@@ -196,6 +198,8 @@ GRANT SELECT ON bloombox.customer_requests TO bloombox_customer_support;
 GRANT UPDATE (status, key_id, ciphertext, revision, updated_at) ON bloombox.customer_requests TO bloombox_customer_support;
 GRANT SELECT ON bloombox.data_subject_requests TO bloombox_customer_support;
 GRANT INSERT ON bloombox.customer_request_changes TO bloombox_customer_support;
+-- A reply notice is queued with the reply in the same transaction; the role cannot read or change other events (ADR 0021).
+GRANT INSERT ON bloombox.outbox_events TO bloombox_customer_support;
 
 -- Native fulfillment is a separate least-privilege operator connection.
 GRANT USAGE ON SCHEMA bloombox TO bloombox_native_fulfillment;

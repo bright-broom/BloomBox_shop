@@ -2,10 +2,11 @@
  * Transactional buyer notifications (ADR 0019). Pure rules: which events notify, how often to retry,
  * and how a plain-text message is composed from order facts. Recipients of a gift are never notified.
  */
-export type NotificationKind = "ORDER_CONFIRMED" | "ORDER_SHIPPED";
+export type NotificationKind = "ORDER_CONFIRMED" | "ORDER_SHIPPED" | "REQUEST_REPLIED";
 export const NOTIFICATION_EVENT_TYPES = {
   "order.confirmed": "ORDER_CONFIRMED",
   "fulfillment.shipped": "ORDER_SHIPPED",
+  "customer.request.replied": "REQUEST_REPLIED",
 } as const satisfies Record<string, NotificationKind>;
 export type NotificationEventType = keyof typeof NOTIFICATION_EVENT_TYPES;
 
@@ -30,25 +31,33 @@ export type NotificationTemplate = Readonly<{ subject: string; body: readonly st
 export type NotificationCopy = Readonly<{
   orderConfirmed: NotificationTemplate;
   orderShipped: NotificationTemplate;
+  /** Says only that an answer exists; the answer itself stays behind the customer's login (ADR 0021). */
+  requestReplied: NotificationTemplate;
   carriers: Readonly<Record<ShippingCarrier, string>>;
   signature: readonly string[];
 }>;
 export type NotificationMessage = Readonly<{ subject: string; text: string }>;
 
 export const NOTIFICATION_PLACEHOLDERS = [
-  "displayId", "productName", "quantity", "deliveryDate", "total", "carrier", "trackingNumber", "accountUrl", "contactUrl",
+  "displayId", "productName", "quantity", "deliveryDate", "total", "carrier", "trackingNumber", "accountUrl", "contactUrl", "supportUrl",
 ] as const;
 type Placeholder = (typeof NOTIFICATION_PLACEHOLDERS)[number];
+/**
+ * A reply notice may name the order and where to read the answer, and nothing else. Keeping the list here
+ * means the copy cannot start carrying the gift's details into mail (ADR 0021).
+ */
+export const REQUEST_REPLIED_PLACEHOLDERS: readonly Placeholder[] = ["displayId", "accountUrl", "supportUrl", "contactUrl"];
 
 /** Retry after 1, 2, 4, 8, 16 minutes, capped at one hour. */
 export function notificationRetryDelaySeconds(attempts: number): number {
   return Math.min(60 * 2 ** Math.max(0, attempts - 1), 3_600);
 }
 
+export function placeholdersIn(template: string): string[] {
+  return [...template.matchAll(/\{([A-Za-z]+)\}/g)].map((match) => match[1] ?? "");
+}
 export function unknownPlaceholders(template: string): string[] {
-  return [...template.matchAll(/\{([A-Za-z]+)\}/g)]
-    .map((match) => match[1] ?? "")
-    .filter((name) => !(NOTIFICATION_PLACEHOLDERS as readonly string[]).includes(name));
+  return placeholdersIn(template).filter((name) => !(NOTIFICATION_PLACEHOLDERS as readonly string[]).includes(name));
 }
 
 function render(template: string, values: Readonly<Partial<Record<Placeholder, string>>>, singleLine: boolean): string {
@@ -80,13 +89,14 @@ export function composeNotification(
     total: yen(order.totalYen),
     accountUrl: `${base}/account`,
     contactUrl: `${base}/contact`,
+    supportUrl: `${base}/account/support`,
   };
   if (kind === "ORDER_SHIPPED") {
     if (!shipment) throw new Error("Shipment facts are required");
     values.carrier = copy.carriers[shipment.carrier];
     values.trackingNumber = shipment.trackingNumber;
   }
-  const template = kind === "ORDER_CONFIRMED" ? copy.orderConfirmed : copy.orderShipped;
+  const template = kind === "ORDER_CONFIRMED" ? copy.orderConfirmed : kind === "ORDER_SHIPPED" ? copy.orderShipped : copy.requestReplied;
   return {
     subject: render(template.subject, values, true),
     text: [...template.body, "", ...copy.signature].map((line) => render(line, values, false)).join("\n"),
