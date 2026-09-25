@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { reconcile, retain, processInbox, recover, attention, deliver, undelivered, reportUnexpectedError } = vi.hoisted(() => ({
+const { reconcile, retain, processInbox, recover, attention, deliver, undelivered, dispatch, reportUnexpectedError } = vi.hoisted(() => ({
   reconcile: vi.fn(),
   retain: vi.fn(),
   processInbox: vi.fn(),
@@ -8,6 +8,7 @@ const { reconcile, retain, processInbox, recover, attention, deliver, undelivere
   attention: vi.fn(),
   deliver: vi.fn(),
   undelivered: vi.fn(),
+  dispatch: vi.fn(),
   reportUnexpectedError: vi.fn().mockReturnValue("test-error-id"),
 }));
 
@@ -17,6 +18,7 @@ vi.mock("@/shared/infrastructure/composition-root", () => ({
   getStripeInboxProcessor: () => ({ execute: processInbox }),
   getStripeUnrecordedCheckoutRecovery: () => ({ execute: recover }),
   getCommerceWorkerAttention: () => ({ execute: attention }),
+  getDispatchAttention: () => ({ count: dispatch }),
 }));
 vi.mock("@/shared/infrastructure/config/worker-config", () => ({
   loadCommerceWorkerSecret: () => "a-secure-worker-secret-with-32-chars",
@@ -30,7 +32,7 @@ vi.mock("@/shared/infrastructure/notification-runtime", () => ({
 import { POST } from "./route";
 
 const healthy = { failedInboxEvents: 0, unrecordedCheckoutsAwaitingReview: 0, requiresAttention: false };
-const healthyResponse = { ...healthy, undeliveredNotifications: 0, notificationDeliveryUnavailable: false };
+const healthyResponse = { ...healthy, undeliveredNotifications: 0, notificationDeliveryUnavailable: false, ordersAwaitingDispatch: 0 };
 
 function authenticated() {
   return new Request(new URL("reconcile", import.meta.url), {
@@ -46,11 +48,12 @@ function quietCycle() {
   attention.mockResolvedValue(healthy);
   deliver.mockResolvedValue({ disabled: true });
   undelivered.mockResolvedValue(0);
+  dispatch.mockResolvedValue(0);
 }
 
 describe("commerce reconciliation route", () => {
   beforeEach(() => {
-    for (const mock of [reconcile, retain, processInbox, recover, attention, deliver, undelivered]) mock.mockReset();
+    for (const mock of [reconcile, retain, processInbox, recover, attention, deliver, undelivered, dispatch]) mock.mockReset();
     reportUnexpectedError.mockClear();
   });
 
@@ -60,7 +63,7 @@ describe("commerce reconciliation route", () => {
     }));
 
     expect(response.status).toBe(401);
-    for (const mock of [reconcile, retain, processInbox, recover, attention, deliver, undelivered]) expect(mock).not.toHaveBeenCalled();
+    for (const mock of [reconcile, retain, processInbox, recover, attention, deliver, undelivered, dispatch]) expect(mock).not.toHaveBeenCalled();
   });
 
   it("runs bounded reconciliation for an authenticated invocation", async () => {
@@ -103,9 +106,10 @@ describe("commerce reconciliation route", () => {
     deliver.mockImplementation(async () => { order.push("notifications"); return { disabled: true }; });
     attention.mockImplementation(async () => { order.push("attention"); return healthy; });
     undelivered.mockImplementation(async () => { order.push("undelivered"); return 0; });
+    dispatch.mockImplementation(async () => { order.push("dispatch"); return 0; });
 
     expect((await POST(authenticated())).status).toBe(200);
-    expect(order).toEqual(["inbox", "events", "inbox", "retention", "unrecorded", "notifications", "attention", "undelivered"]);
+    expect(order).toEqual(["inbox", "events", "inbox", "retention", "unrecorded", "notifications", "attention", "undelivered", "dispatch"]);
   });
 
   it.each([
@@ -120,7 +124,7 @@ describe("commerce reconciliation route", () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
       ok: false,
-      attention: { ...unresolved, undeliveredNotifications: 0, notificationDeliveryUnavailable: false },
+      attention: { ...unresolved, undeliveredNotifications: 0, notificationDeliveryUnavailable: false, ordersAwaitingDispatch: 0 },
     });
     expect(reportUnexpectedError).not.toHaveBeenCalled();
     expect(recover).toHaveBeenCalled();
@@ -136,7 +140,7 @@ describe("commerce reconciliation route", () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
       ok: false,
-      attention: { ...healthy, undeliveredNotifications: 2, notificationDeliveryUnavailable: false, requiresAttention: true },
+      attention: { ...healthyResponse, undeliveredNotifications: 2, requiresAttention: true },
     });
     for (const mock of [processInbox, reconcile, retain, recover, deliver]) expect(mock).toHaveBeenCalled();
   });
@@ -150,8 +154,22 @@ describe("commerce reconciliation route", () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
       ok: false,
-      attention: { ...healthy, undeliveredNotifications: 0, notificationDeliveryUnavailable: true, requiresAttention: true },
+      attention: { ...healthyResponse, notificationDeliveryUnavailable: true, requiresAttention: true },
     });
+  });
+
+  it("keeps failing while a confirmed order is still unshipped close to its delivery date", async () => {
+    quietCycle();
+    dispatch.mockResolvedValue(1);
+
+    const response = await POST(authenticated());
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      ok: false,
+      attention: { ...healthyResponse, ordersAwaitingDispatch: 1, requiresAttention: true },
+    });
+    for (const mock of [processInbox, reconcile, retain, recover, deliver]) expect(mock).toHaveBeenCalled();
   });
 
   it("stays healthy when delivery is disabled or every notification was sent", async () => {

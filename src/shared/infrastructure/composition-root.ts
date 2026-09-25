@@ -55,6 +55,7 @@ import {
   StripeUnrecordedCheckoutRecovery,
 } from "@/modules/payment/infrastructure/stripe-unrecorded-checkout-recovery";
 import { PostgresCommerceWorkerAttention } from "@/modules/payment/infrastructure/postgres-commerce-worker-attention";
+import { PostgresDispatchAttention } from "@/modules/fulfillment/infrastructure/postgres-dispatch-attention";
 import { PostgresFailedInboxRequeue } from "@/modules/payment/infrastructure/postgres-failed-inbox-requeue";
 import { PostgresDataRetentionJob } from "./database/data-retention-job";
 import { GetOrderStatus, type OrderStatusQuery } from "@/modules/order/public";
@@ -227,6 +228,13 @@ export function getCommerceWorkerAttention(): PostgresCommerceWorkerAttention {
     throw new Error("Commerce worker attention is disabled");
   }
   return new PostgresCommerceWorkerAttention(getWorkerDatabaseClient());
+}
+
+export function getDispatchAttention(): PostgresDispatchAttention {
+  if (loadRuntimeMode() !== "production") {
+    throw new Error("Dispatch attention is disabled");
+  }
+  return new PostgresDispatchAttention(getWorkerDatabaseClient());
 }
 
 export function getStripeFailedInboxRequeue(): PostgresFailedInboxRequeue {

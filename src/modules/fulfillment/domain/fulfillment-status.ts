@@ -12,6 +12,15 @@ export const FULFILLMENT_STATUSES = [
 
 export type FulfillmentStatus = (typeof FULFILLMENT_STATUSES)[number];
 
+/** Not yet handed to a carrier and not cancelled: the gift still depends on an operator shipping it. */
+export const AWAITING_DISPATCH_STATUSES = [
+  "UNFULFILLED",
+  "SCHEDULED",
+  "PROCESSING",
+  "READY",
+  "ON_HOLD",
+] as const satisfies readonly FulfillmentStatus[];
+
 // SCHEDULED is used only by legacy Shopify intake. Native operations start at PROCESSING (ADR 0015).
 const ALLOWED_TRANSITIONS: Readonly<Record<FulfillmentStatus, readonly FulfillmentStatus[]>> = {
   UNFULFILLED: ["SCHEDULED", "PROCESSING", "ON_HOLD", "CANCELLED"],

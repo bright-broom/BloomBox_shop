@@ -65,6 +65,9 @@ jobs:
                   summary += ` Buyer notifications: ${attention.undeliveredNotifications} undelivered in the last 7 days`
                     + (attention.notificationDeliveryUnavailable === true ? "; delivery cannot run (configuration or sender failure)." : ".");
                 }
+                if (Number.isInteger(attention?.ordersAwaitingDispatch)) {
+                  summary += ` Orders not yet shipped with a delivery date within 2 days or past: ${attention.ordersAwaitingDispatch}.`;
+                }
               }
             } catch {
               // Keep the generic summary when the worker returned no readable attention counts.

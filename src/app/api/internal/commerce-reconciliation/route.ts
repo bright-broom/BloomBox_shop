@@ -1,6 +1,7 @@
 import {
   getCommerceDataRetentionJob,
   getCommerceWorkerAttention,
+  getDispatchAttention,
   getStripeInboxProcessor,
   getStripeEventReconciler,
   getStripeUnrecordedCheckoutRecovery,
@@ -32,12 +33,14 @@ export async function POST(request: Request): Promise<Response> {
     // Orders confirmed above are notified in the same run; delivery failures are retried, never fatal here.
     const notifications = await deliverBuyerNotifications();
     // Count unresolved dead letters and checkouts awaiting review on every run, so the incident stays open until
-    // they are resolved rather than closing after the next quiet run. Undelivered buyer notifications and a broken
-    // delivery configuration are reported here too, after all commerce work has run. Only counts are returned.
+    // they are resolved rather than closing after the next quiet run. Undelivered buyer notifications, a broken
+    // delivery configuration, and orders still unshipped close to their delivery date are reported here too, after
+    // all commerce work has run. Only counts are returned.
     const attention = workerAttention(
       await getCommerceWorkerAttention().execute(),
       await countUndeliveredBuyerNotifications(),
       notifications,
+      await getDispatchAttention().count(),
     );
     if (attention.requiresAttention) {
       return Response.json({ ok: false, attention }, { status: 500 });
@@ -53,13 +56,16 @@ function workerAttention(
   commerce: Readonly<{ failedInboxEvents: number; unrecordedCheckoutsAwaitingReview: number; requiresAttention: boolean }>,
   undeliveredNotifications: number,
   notifications: NotificationRunResult,
+  ordersAwaitingDispatch: number,
 ) {
   const notificationDeliveryUnavailable = "error" in notifications;
   return {
     ...commerce,
     undeliveredNotifications,
     notificationDeliveryUnavailable,
-    requiresAttention: commerce.requiresAttention || undeliveredNotifications > 0 || notificationDeliveryUnavailable,
+    ordersAwaitingDispatch,
+    requiresAttention: commerce.requiresAttention || undeliveredNotifications > 0 || notificationDeliveryUnavailable
+      || ordersAwaitingDispatch > 0,
   };
 }
 

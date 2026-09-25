@@ -2,6 +2,12 @@ import { BUSINESS_TIME_ZONE } from "@/shared/domain/time";
 
 export const DELIVERY_LEAD_TIME_DAYS = 3;
 export const DELIVERY_BOOKING_WINDOW_DAYS = 60;
+/**
+ * An order not yet shipped whose delivery date (Asia/Tokyo) is this close needs an operator now: a two-day transit
+ * to remote regions leaves no slack after this point. Provisional until shipping cut-offs and transit times by region
+ * are decided (P0-07); an order at the minimum lead time is flagged if it is still unshipped a day later.
+ */
+export const DISPATCH_ATTENTION_DAYS_BEFORE_DELIVERY = 2;
 
 export function getEarliestDeliveryDate(now: Date = new Date()): string {
   return dateInBusinessTimeZone(addDays(now, DELIVERY_LEAD_TIME_DAYS));
@@ -9,6 +15,11 @@ export function getEarliestDeliveryDate(now: Date = new Date()): string {
 
 export function getLatestDeliveryDate(now: Date = new Date()): string {
   return dateInBusinessTimeZone(addDays(now, DELIVERY_BOOKING_WINDOW_DAYS));
+}
+
+/** Delivery dates on or before this Tokyo date belong to orders that must already be on their way. */
+export function getDispatchAttentionCutoff(now: Date = new Date()): string {
+  return dateInBusinessTimeZone(addDays(now, DISPATCH_ATTENTION_DAYS_BEFORE_DELIVERY));
 }
 
 function addDays(now: Date, days: number): Date {

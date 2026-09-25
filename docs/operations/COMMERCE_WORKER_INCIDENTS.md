@@ -6,10 +6,10 @@
 
 ## 最初に確認すること
 
-1. Issue本文の未解決件数を見ます。「failed Inbox event(s)」は失敗した通知、「unrecorded checkout(s) awaiting review」は要確認の未記録決済、「Buyer notifications: N undelivered」「delivery cannot run」は購入者へのメールが届かない状態です（下記D）。
+1. Issue本文の未解決件数を見ます。「failed Inbox event(s)」は失敗した通知、「unrecorded checkout(s) awaiting review」は要確認の未記録決済、「Buyer notifications: N undelivered」「delivery cannot run」は購入者へのメールが届かない状態（下記D）、「Orders not yet shipped …」はお届け日が近い未発送の注文（下記E）です。
 2. 件数が書かれていない場合は、認証・通信・想定外エラーによる失敗です。ワークフロー実行ログのHTTPステータスを確認します。
    - 401：`COMMERCE_WORKER_SECRET` の不一致
-   - 500で件数あり：未解決データが残っている（下記B・C・D）
+   - 500で件数あり：未解決データが残っている（下記B〜E）
    - 500で件数なし：想定外エラー（下記A）
 3. 本番の新規購入が停止中でも、ワーカーは既存取引の処理のために動きます。ワークフローを無効化して障害を隠さないでください。
 
@@ -123,6 +123,18 @@ WHERE intent.status = 'READY_FOR_CHECKOUT'
 
 - Outboxの行を手でUPDATE・DELETEして件数を減らさないでください。送信の記録と監査が食い違います。
 - 48時間を過ぎた通知を再送する仕組みはありません。自動で送り直すことはしません。
+
+## E. お届け日が近い未発送の注文（2026-09-25）
+
+**意味**：`Orders not yet shipped with a delivery date within 2 days or past: N` は、確定済みの自作注文のうち、お届け予定日が東京時間で今日から2日後以前（過ぎたものを含む）なのに、まだ発送も取消もされていない件数です（[ADR 0015追記](../architecture/adr/0015-native-fulfillment-operations.md)）。ギフトが指定日に届かないおそれがあります。
+
+1. `/operations/native-fulfillments` で、未発送の状態（未対応・準備中・準備完了・保留）の注文を開き、お届け予定日の近い順に確認します。
+2. 発送できる注文は、[発送管理](NATIVE_FULFILLMENT.md)の手順で準備→発送を登録します。発送を登録すると、次のワーカー実行で件数から外れます。
+3. 間に合わない注文は、購入者へ「顧客からのご相談」またはお問い合わせ窓口から連絡し、合意に応じてお届け希望日の変更、または[取消・返金](REFUNDS_AND_CANCELLATIONS.md)を行います。全額返金した注文も、発送管理で取消を登録するまで件数に残ります。
+4. Issueには注文の表示IDと対応内容だけを書き、宛先・贈る言葉は書きません。
+
+- 件数を減らすために、発送していない注文を発送済みにしないでください。
+- 2日という基準は暫定値です。地域別の所要日数・締切（P0-07）が決まったら見直します。
 
 ## やってはいけないこと
 
