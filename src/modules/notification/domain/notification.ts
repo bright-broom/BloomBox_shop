@@ -14,6 +14,13 @@ export const NOTIFICATION_MAX_ATTEMPTS = 6;
 /** Events older than this are left untouched, so enabling delivery never mails a backlog of old orders. */
 export const NOTIFICATION_SEND_WINDOW_HOURS = 48;
 export const NOTIFICATION_BATCH_LIMIT = 20;
+/**
+ * A buyer notification that could not be delivered keeps the commerce worker incident open this long, so an operator
+ * contacts the buyer through the support desk. Delivery itself is never retried beyond the send window (ADR 0019).
+ */
+export const NOTIFICATION_ATTENTION_DAYS = 7;
+/** Outcomes where sending nothing is correct: the order was cancelled or the answer was withdrawn. */
+export const EXPECTED_NOTIFICATION_SKIPS = ["ORDER_NOT_ACTIVE", "REQUEST_NOT_ANSWERED"] as const;
 export const NOTIFICATION_LEASE_SECONDS = 300;
 
 export type ShippingCarrier = "YAMATO" | "SAGAWA" | "JAPAN_POST";

@@ -5,6 +5,7 @@ import postgres from "postgres";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AesGcmDataProtector } from "@/shared/infrastructure/security/aes-gcm-data-protector";
 import { PostgresNotificationQueue } from "./postgres-notification-queue";
+import { PostgresUndeliveredNotifications } from "./postgres-undelivered-notifications";
 
 const url = process.env.TEST_DATABASE_URL;
 if (url && (!["localhost", "127.0.0.1"].includes(new URL(url).hostname) || !new URL(url).pathname.includes("test"))) {
@@ -160,5 +161,33 @@ suite("buyer notification queue on the shared outbox", () => {
     expect(await row(malformed)).toMatchObject({ status: "FAILED", last_error_code: "INVALID_EVENT" });
     await sql`UPDATE bloombox.outbox_events SET locked_at = clock_timestamp() - interval '6 minutes' WHERE id = ${abandoned}`;
     expect(await queue.claim(5)).toMatchObject([{ eventId: abandoned, attempts: 2 }]);
+  });
+
+  it("counts recent notifications that will not reach the buyer, and nothing expected or never attempted", async () => {
+    const orderId = await order();
+    const settle = async (options: { type?: string; age?: string; attempts?: number; status: string; code?: string | null }) => {
+      const id = await event(orderId, { type: options.type, age: options.age, attempts: options.attempts });
+      await sql`UPDATE bloombox.outbox_events SET status = ${options.status}, last_error_code = ${options.code ?? null} WHERE id = ${id}`;
+    };
+    const undelivered = new PostgresUndeliveredNotifications(worker);
+    await expect(undelivered.count()).resolves.toBe(0);
+
+    // Will not reach the buyer.
+    await settle({ status: "FAILED", code: "REJECTED", attempts: 1 });
+    await settle({ status: "FAILED", code: "RETRY_EXHAUSTED", attempts: 6 });
+    await settle({ status: "FAILED", code: "NO_BUYER_EMAIL", attempts: 1 });
+    await settle({ status: "FAILED", code: "INVALID_EVENT", attempts: 1 });
+    await settle({ status: "PENDING", code: "SEND_FAILED", attempts: 3, age: "49 hours" });
+    await settle({ status: "PENDING", code: "SEND_FAILED", attempts: 6 });
+    // Correctly not sent, still retrying, never attempted, published, older than the attention window, or not a notification.
+    await settle({ status: "FAILED", code: "ORDER_NOT_ACTIVE", attempts: 1 });
+    await settle({ type: "customer.request.replied", status: "FAILED", code: "REQUEST_NOT_ANSWERED", attempts: 1 });
+    await settle({ status: "PENDING", code: "SEND_FAILED", attempts: 2 });
+    await settle({ status: "PENDING", attempts: 0, age: "3 days" });
+    await settle({ status: "PUBLISHED", attempts: 1 });
+    await settle({ status: "FAILED", code: "REJECTED", attempts: 1, age: "8 days" });
+    await settle({ type: "checkout.purchase_intent.expired", status: "FAILED", code: "REJECTED", attempts: 1 });
+
+    await expect(undelivered.count()).resolves.toBe(6);
   });
 });

@@ -1,5 +1,6 @@
 import { DeliverNotifications, type NotificationDeliveryResult } from "@/modules/notification/public";
 import { PostgresNotificationQueue } from "@/modules/notification/infrastructure/postgres-notification-queue";
+import { PostgresUndeliveredNotifications } from "@/modules/notification/infrastructure/postgres-undelivered-notifications";
 import { ResendEmailSender } from "@/modules/notification/infrastructure/resend-email-sender";
 import { getWorkerDatabaseClient } from "./database/database-connections";
 import { loadNotificationConfig } from "./config/notification-config";
@@ -30,4 +31,12 @@ export async function deliverBuyerNotifications(): Promise<NotificationRunResult
     reportUnexpectedError(error, { operation: "notification_delivery" });
     return { error: true };
   }
+}
+
+/**
+ * Recent buyer notifications that will not be delivered. Counted whether delivery is enabled or not, so an operator
+ * still follows up on failures recorded before delivery was switched off.
+ */
+export function countUndeliveredBuyerNotifications(): Promise<number> {
+  return new PostgresUndeliveredNotifications(getWorkerDatabaseClient()).count();
 }

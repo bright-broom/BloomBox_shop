@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assessDeliveryDate,
   InvalidDeliveryAssessmentTimeError,
+  getDispatchAttentionCutoff,
   getEarliestDeliveryDate,
   getLatestDeliveryDate,
   isAvailableDeliveryDate,
@@ -27,6 +28,20 @@ describe("delivery date", () => {
 
   it.each(["not-a-date", "2026-02-30", "2026-8-22"])("rejects invalid calendar date %s", (value) => {
     expect(isAvailableDeliveryDate(value, now)).toBe(false);
+  });
+});
+
+describe("dispatch attention cutoff", () => {
+  it("flags delivery dates up to two Tokyo days ahead, switching at Tokyo midnight", () => {
+    expect(getDispatchAttentionCutoff(new Date("2026-09-25T14:59:59.999Z"))).toBe("2026-09-27");
+    expect(getDispatchAttentionCutoff(new Date("2026-09-25T15:00:00Z"))).toBe("2026-09-28");
+  });
+
+  it("flags an order at the minimum lead time one day after it could be placed, not immediately", () => {
+    const placedAt = new Date("2026-09-25T03:00:00Z");
+    const earliest = getEarliestDeliveryDate(placedAt);
+    expect(earliest > getDispatchAttentionCutoff(placedAt)).toBe(true);
+    expect(earliest <= getDispatchAttentionCutoff(new Date("2026-09-26T03:00:00Z"))).toBe(true);
   });
 });
 

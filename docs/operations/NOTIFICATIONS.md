@@ -86,6 +86,10 @@ runtimeが `preview` の環境では、設定しても送信しない。Stripe�
   - `REJECTED`：配信事業者が拒否した
   - `RETRY_EXHAUSTED`：再試行の上限に達した
 - 再送が必要な場合は、原因を解消してからお問い合わせ窓口で個別に連絡する。48時間を過ぎたイベントは自動では送らない。
+- 2026-09-25から、届かない通知はワーカーの障害Issue（`[Production] Stripe commerce worker is failing`）で知らせる（ADR 0019追記）。応答の `attention` に次の2つが入る。
+  - `undeliveredNotifications`：発生から7日以内で、購入者に届かないことが確定した通知の件数。上の `last_error_code` のうち `ORDER_NOT_ACTIVE` と `REQUEST_NOT_ANSWERED` は数えない。送信を試みたまま48時間を過ぎた `PENDING` も数える。
+  - `notificationDeliveryUnavailable`：送信が有効なのに、設定エラーや送信処理の失敗で配信を実行できなかった。APIキー・送信元・`BLOOMBOX_PUBLIC_ORIGIN` を確認する。直ると次の実行で `false` に戻る。
+- 対応：[障害対応の手順](COMMERCE_WORKER_INCIDENTS.md)の「D. 届かない購入者通知」に従う。7日を過ぎると件数から外れるため、その前に購入者へ連絡する。
 
 ## 未完了
 
