@@ -6,10 +6,10 @@
 
 ## 最初に確認すること
 
-1. Issue本文の未解決件数を見ます。「failed Inbox event(s)」は失敗した通知、「unrecorded checkout(s) awaiting review」は要確認の未記録決済です。
+1. Issue本文の未解決件数を見ます。「failed Inbox event(s)」は失敗した通知、「unrecorded checkout(s) awaiting review」は要確認の未記録決済、「Buyer notifications: N undelivered」「delivery cannot run」は購入者へのメールが届かない状態です（下記D）。
 2. 件数が書かれていない場合は、認証・通信・想定外エラーによる失敗です。ワークフロー実行ログのHTTPステータスを確認します。
    - 401：`COMMERCE_WORKER_SECRET` の不一致
-   - 500で件数あり：未解決データが残っている（下記B・C）
+   - 500で件数あり：未解決データが残っている（下記B・C・D）
    - 500で件数なし：想定外エラー（下記A）
 3. 本番の新規購入が停止中でも、ワーカーは既存取引の処理のために動きます。ワークフローを無効化して障害を隠さないでください。
 
@@ -97,6 +97,32 @@ WHERE intent.status = 'READY_FOR_CHECKOUT'
 - Stripe管理画面で、`created_at` から `expires_at` までに作られたCheckout Sessionのうち、`client_reference_id` が購入準備IDと一致するものを探し、支払状況を確認します。
 - 支払済みの場合は、注文が作られていない入金として扱います。顧客への連絡、発送するか返金するかの判断は担当者が行います。
 - 未記録のSessionを購入準備に取り込み、注文を作る運用ツールは未実装です。予約を手で解放したり、購入準備の状態を手で変えたりしないでください。
+
+## D. 届かない購入者通知（2026-09-25）
+
+**意味**：`Buyer notifications: N undelivered` は、注文確認・発送・回答のお知らせのうち、発生から7日以内で購入者に届かないことが確定した件数です。`delivery cannot run` は、送信が有効なのに配信を実行できない状態です。注文・決済・在庫の処理はすでに終わっており、止まっていません（[ADR 0019追記](../architecture/adr/0019-transactional-notifications.md)）。
+
+1. `delivery cannot run` の場合は、配信の設定（`RESEND_API_KEY`、`NOTIFICATION_EMAIL_FROM`、`BLOOMBOX_PUBLIC_ORIGIN`）と配信事業者の状態を確認し、`pnpm notifications:verify` で送信を確かめます。直ると次の実行で `delivery cannot run` は消えます。止まっていた間の通知は48時間を過ぎると送られないため、復旧後に下の手順で対象を確認します。
+2. 対象の通知を読み取り専用ロールで確認します。メールアドレスや本文は含まれません。
+
+   ```sql
+   SELECT id, event_type, aggregate_id, status, last_error_code, attempts, occurred_at
+   FROM bloombox.outbox_events
+   WHERE event_type IN ('order.confirmed', 'fulfillment.shipped', 'customer.request.replied')
+     AND occurred_at > now() - interval '7 days'
+     AND ((status = 'FAILED' AND last_error_code IS DISTINCT FROM 'ORDER_NOT_ACTIVE'
+           AND last_error_code IS DISTINCT FROM 'REQUEST_NOT_ANSWERED')
+       OR (status = 'PENDING' AND attempts > 0
+           AND (occurred_at <= now() - interval '48 hours' OR attempts >= 6)))
+   ORDER BY occurred_at;
+   ```
+
+3. `last_error_code` で原因を分けます。`REJECTED`（宛先や内容を配信事業者が拒否）、`RETRY_EXHAUSTED`・`SEND_FAILED`（一時的な障害が続いた）、`NO_BUYER_EMAIL`・`ORDER_NOT_FOUND`・`INVALID_EVENT`（データの不整合。開発者に連絡）。
+4. 購入者へは、お問い合わせ窓口から個別に連絡します。宛先は運営管理画面の権限で確認し、Issueやチャットに書きません。
+5. Issueに、確認日時、対象のイベントID、原因、連絡した日（宛先は書かない）を記録します。7日を過ぎた通知は件数から外れ、他に未解決がなければIssueは自動で閉じます。
+
+- Outboxの行を手でUPDATE・DELETEして件数を減らさないでください。送信の記録と監査が食い違います。
+- 48時間を過ぎた通知を再送する仕組みはありません。自動で送り直すことはしません。
 
 ## やってはいけないこと
 

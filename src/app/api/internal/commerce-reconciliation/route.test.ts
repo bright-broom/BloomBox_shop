@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { reconcile, retain, processInbox, recover, attention, reportUnexpectedError } = vi.hoisted(() => ({
+const { reconcile, retain, processInbox, recover, attention, deliver, undelivered, reportUnexpectedError } = vi.hoisted(() => ({
   reconcile: vi.fn(),
   retain: vi.fn(),
   processInbox: vi.fn(),
   recover: vi.fn(),
   attention: vi.fn(),
+  deliver: vi.fn(),
+  undelivered: vi.fn(),
   reportUnexpectedError: vi.fn().mockReturnValue("test-error-id"),
 }));
 
@@ -20,11 +22,15 @@ vi.mock("@/shared/infrastructure/config/worker-config", () => ({
   loadCommerceWorkerSecret: () => "a-secure-worker-secret-with-32-chars",
 }));
 vi.mock("@/shared/infrastructure/observability/report-unexpected-error", () => ({ reportUnexpectedError }));
-vi.mock("@/shared/infrastructure/notification-runtime", () => ({ deliverBuyerNotifications: async () => ({ disabled: true }) }));
+vi.mock("@/shared/infrastructure/notification-runtime", () => ({
+  deliverBuyerNotifications: deliver,
+  countUndeliveredBuyerNotifications: undelivered,
+}));
 
 import { POST } from "./route";
 
 const healthy = { failedInboxEvents: 0, unrecordedCheckoutsAwaitingReview: 0, requiresAttention: false };
+const healthyResponse = { ...healthy, undeliveredNotifications: 0, notificationDeliveryUnavailable: false };
 
 function authenticated() {
   return new Request(new URL("reconcile", import.meta.url), {
@@ -38,11 +44,13 @@ function quietCycle() {
   retain.mockResolvedValue({ purchaseIntentsExpired: 0, webhookPayloadsPurged: 0, purchaseIntentPiiPurged: 0 });
   recover.mockResolvedValue({ checked: 0, released: 0, heldForReview: 0 });
   attention.mockResolvedValue(healthy);
+  deliver.mockResolvedValue({ disabled: true });
+  undelivered.mockResolvedValue(0);
 }
 
 describe("commerce reconciliation route", () => {
   beforeEach(() => {
-    for (const mock of [reconcile, retain, processInbox, recover, attention]) mock.mockReset();
+    for (const mock of [reconcile, retain, processInbox, recover, attention, deliver, undelivered]) mock.mockReset();
     reportUnexpectedError.mockClear();
   });
 
@@ -52,7 +60,7 @@ describe("commerce reconciliation route", () => {
     }));
 
     expect(response.status).toBe(401);
-    for (const mock of [reconcile, retain, processInbox, recover, attention]) expect(mock).not.toHaveBeenCalled();
+    for (const mock of [reconcile, retain, processInbox, recover, attention, deliver, undelivered]) expect(mock).not.toHaveBeenCalled();
   });
 
   it("runs bounded reconciliation for an authenticated invocation", async () => {
@@ -81,7 +89,7 @@ describe("commerce reconciliation route", () => {
       },
       unrecordedCheckouts: { checked: 2, released: 2, heldForReview: 0 },
       notifications: { disabled: true },
-      attention: healthy,
+      attention: healthyResponse,
     });
   });
 
@@ -92,10 +100,12 @@ describe("commerce reconciliation route", () => {
     reconcile.mockImplementation(async () => { order.push("events"); return { checked: 0, relevant: 0, discovered: 0 }; });
     retain.mockImplementation(async () => { order.push("retention"); return { purchaseIntentsExpired: 0, webhookPayloadsPurged: 0, purchaseIntentPiiPurged: 0 }; });
     recover.mockImplementation(async () => { order.push("unrecorded"); return { checked: 0, released: 0, heldForReview: 0 }; });
+    deliver.mockImplementation(async () => { order.push("notifications"); return { disabled: true }; });
     attention.mockImplementation(async () => { order.push("attention"); return healthy; });
+    undelivered.mockImplementation(async () => { order.push("undelivered"); return 0; });
 
     expect((await POST(authenticated())).status).toBe(200);
-    expect(order).toEqual(["inbox", "events", "inbox", "retention", "unrecorded", "attention"]);
+    expect(order).toEqual(["inbox", "events", "inbox", "retention", "unrecorded", "notifications", "attention", "undelivered"]);
   });
 
   it.each([
@@ -108,9 +118,50 @@ describe("commerce reconciliation route", () => {
     const response = await POST(authenticated());
 
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ ok: false, attention: unresolved });
+    expect(await response.json()).toEqual({
+      ok: false,
+      attention: { ...unresolved, undeliveredNotifications: 0, notificationDeliveryUnavailable: false },
+    });
     expect(reportUnexpectedError).not.toHaveBeenCalled();
     expect(recover).toHaveBeenCalled();
+  });
+
+  it("keeps failing while a buyer notification will not be delivered, after all commerce work has run", async () => {
+    quietCycle();
+    deliver.mockResolvedValue({ sent: 1, retried: 0, failed: 1, skipped: 0 });
+    undelivered.mockResolvedValue(2);
+
+    const response = await POST(authenticated());
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      ok: false,
+      attention: { ...healthy, undeliveredNotifications: 2, notificationDeliveryUnavailable: false, requiresAttention: true },
+    });
+    for (const mock of [processInbox, reconcile, retain, recover, deliver]) expect(mock).toHaveBeenCalled();
+  });
+
+  it("fails while enabled notification delivery cannot run, so a broken sender is not reported as healthy", async () => {
+    quietCycle();
+    deliver.mockResolvedValue({ error: true });
+
+    const response = await POST(authenticated());
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      ok: false,
+      attention: { ...healthy, undeliveredNotifications: 0, notificationDeliveryUnavailable: true, requiresAttention: true },
+    });
+  });
+
+  it("stays healthy when delivery is disabled or every notification was sent", async () => {
+    for (const result of [{ disabled: true }, { sent: 2, retried: 1, failed: 0, skipped: 1 }]) {
+      quietCycle();
+      deliver.mockResolvedValue(result);
+      const response = await POST(authenticated());
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ ok: true, notifications: result, attention: healthyResponse });
+    }
   });
 
   it("reports an unexpected failure without exposing its details", async () => {
