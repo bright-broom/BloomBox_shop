@@ -109,6 +109,13 @@ describe("home customer guidance", () => {
     expect(approved).toContain("承認済みの検証仕様");
     expect(approved).not.toContain(homeContent.comparison.pending);
   });
+  it("drops its own heading when embedded under a section title but keeps the preview notice and totals", () => {
+    const embedded = renderToStaticMarkup(<SizeComparison products={[product]} embedded />);
+    expect(embedded).not.toContain(`<h2>${giftExperienceContent.launch.title}</h2>`);
+    expect(embedded).toContain(giftExperienceContent.launch.notice);
+    expect(embedded).toContain("￥5,000");
+    expect(renderToStaticMarkup(<SizeComparison products={[product]} />)).toContain(`<h2>${giftExperienceContent.launch.title}</h2>`);
+  });
   it("marks free shipping only on a size whose preview shipping is zero", () => {
     const paid = renderToStaticMarkup(<SizeComparison products={[product]} />);
     expect(paid).not.toContain(giftExperienceContent.launch.freeShipping);

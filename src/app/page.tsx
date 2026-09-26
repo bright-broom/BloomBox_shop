@@ -60,7 +60,7 @@ export default async function HomePage() {
           <Link className="secondary-button" href="/flowers">{home.collection.action}<HomeIcon name="external" size={20} /></Link>
         </div>
         <HomeGallery products={products} />
-        {products.some((product) => product.previewOffer) ? <SizeComparison products={products} guidance={homeContent.comparison} /> : <div className="product-grid">
+        {products.some((product) => product.previewOffer) ? <SizeComparison products={products} guidance={homeContent.comparison} embedded /> : <div className="product-grid">
           {products.length > 0 ? products.map((product) => (
             <ProductCard key={product.id} product={product} />
           )) : <p className="catalog-empty" role="status">{siteContent.catalog.emptyMessage}</p>}

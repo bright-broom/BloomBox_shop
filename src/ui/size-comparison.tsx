@@ -7,12 +7,15 @@ import { giftExperienceContent } from "@/shared/infrastructure/content/gift-expe
 import { PreviewMetric } from "@/ui/preview-metric";
 import type { HomeContent } from "@/shared/infrastructure/content/home-content";
 
-export function SizeComparison({ products, selectedId, guidance }: { products: readonly Product[]; selectedId?: string; guidance?: HomeContent["comparison"] }) {
+/** `embedded` drops the own heading where the surrounding section already titles the comparison (the home page). */
+export function SizeComparison({ products, selectedId, guidance, embedded = false }: {
+  products: readonly Product[]; selectedId?: string; guidance?: HomeContent["comparison"]; embedded?: boolean;
+}) {
   const options = products.filter((product) => product.previewOffer);
   if (!options.length) return null;
   const copy = giftExperienceContent.launch;
   return <section className="size-comparison" aria-label={copy.sizeLabel}>
-    <h2>{copy.title}</h2><p>{copy.lead}</p>
+    {embedded ? null : <h2>{copy.title}</h2>}<p>{copy.lead}</p>
     <p className="checkout-notice">{copy.notice}</p>
     {guidance && options.some((product) => !guidance.sizes.some((item) => item.size === product.previewOffer!.size && item.status === "approved")) ? <details className="home-comparison-guide"><summary>{guidance.title}</summary>
       <p>{guidance.pending}</p>

@@ -70,13 +70,11 @@ export function HomeOccasions({ products }: { products: readonly Product[] }) {
 export function HomeJourney() {
   const copy = siteContent.home.guide;
   const icons = ["flower", "pen", "gift"] as const;
-  const accents = ["leaf", "heart", "sparkle"] as const;
   return <section data-analytics-section="journey" id="guide" className="how-it-works home-journey section-shell" aria-labelledby="guide-title">
     <div className="journey-heading home-reveal"><div><p className="eyebrow">{copy.eyebrow}</p><h2 id="guide-title">{copy.title}</h2></div><p>{copy.description}</p></div>
     <ol className="home-journey-steps home-reveal">{copy.steps.map((step, index) => <li key={step.title}>
       <div className="home-step-art" aria-hidden="true"><span className="home-step-number">0{index + 1}</span>
-        <HomeIcon className="home-step-main" name={icons[index]} size={72} />
-        <span className="home-step-accent"><HomeIcon name={accents[index]} size={26} /></span>
+        <HomeIcon className="home-step-main" name={icons[index]} size={40} />
       </div><h3>{step.title}</h3><p>{step.description}</p>
       {index < copy.steps.length - 1 ? <span className="home-step-next" aria-hidden="true"><HomeIcon name="arrow" /></span> : null}
     </li>)}</ol>

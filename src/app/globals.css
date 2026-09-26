@@ -286,11 +286,13 @@ main[tabindex="-1"]:focus { outline: none; }
 .home-journey { padding-block: var(--space-8); }
 .home-journey-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-7); padding: 0; margin-block: var(--space-7); list-style: none; }
 .home-journey-steps li { min-width: 0; position: relative; }
-.home-step-art { height: 200px; display: grid; place-items: center; position: relative; isolation: isolate; border-radius: var(--radius-panel); background: var(--accent-gradient); color: var(--accent-ink); }
-.home-step-number { position: absolute; top: var(--space-4); left: var(--space-5); font-size: var(--text-meta); }
-.home-step-main { transition: transform var(--motion-panel) ease; }
-.home-journey-steps li:hover .home-step-main { transform: translateY(-6px) rotate(-6deg); }
-.home-step-accent { position: absolute; right: var(--space-5); bottom: var(--space-4); padding: var(--space-3); border: 1px solid var(--accent); border-radius: var(--radius-card); }
+/* The numeral carries each step; mint is kept to a thin line that fills on hover, so the chapter stays calm. */
+.home-step-art { height: 200px; position: relative; overflow: hidden; padding: var(--space-5); display: flex; align-items: flex-end; justify-content: space-between; border: 1px solid var(--line); border-radius: var(--radius-panel); background: var(--paper); color: var(--accent-ink); }
+.home-step-art::after { content: ""; position: absolute; left: 0; bottom: 0; width: 100%; height: 3px; background: var(--accent-gradient); transform: scaleX(.18); transform-origin: left; transition: transform var(--motion-editorial) var(--ease-editorial); }
+.home-journey-steps li:hover .home-step-art::after { transform: none; }
+.home-step-number { font-family: var(--font-display); font-size: 96px; font-weight: 700; line-height: .8; letter-spacing: -.05em; }
+.home-step-main { color: var(--accent); transition: transform var(--motion-panel) var(--ease-editorial); }
+.home-journey-steps li:hover .home-step-main { transform: translateY(calc(-1 * var(--space-2))); }
 .home-step-next { position: absolute; top: 88px; right: calc(-1 * var(--space-5) - 12px); color: var(--accent); }
 .home-journey-steps h3 { font-size: var(--text-label); margin-block: var(--space-5) var(--space-3); }
 .home-journey-steps p { margin: 0; color: var(--ink-soft); font-size: var(--text-small); }
@@ -402,6 +404,8 @@ main[tabindex="-1"]:focus { outline: none; }
 .summary-copy h2 { margin: 0; font-size: var(--text-label); }
 .summary-copy > p { margin: 0; align-self: end; }
 .summary-note { margin: var(--space-2) 0 0; color: var(--ink-soft); font-size: var(--text-meta); }
+/* Inside the size comparison the preview notice stays fully visible, but reads as a margin note, not a banner. */
+.size-comparison .checkout-notice { padding: var(--space-1) 0 var(--space-1) var(--space-4); border-left: 2px solid var(--accent-mint-end); border-radius: 0; background: transparent; }
 .checkout-notice, .content-notice { margin: 0 0 var(--space-6); padding: var(--space-5); border-radius: var(--radius-card); background: var(--surface); color: var(--ink-soft); font-size: var(--text-small); }
 .gift-form, .checkout-form { display: grid; gap: var(--space-6); }
 .form-intro { padding-bottom: var(--space-5); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: var(--space-3); border-bottom: 1px solid var(--line); }
@@ -616,7 +620,8 @@ main[tabindex="-1"]:focus { outline: none; }
   .home-occasion { gap: var(--space-3); padding: var(--space-4); }
   .home-icon-tile { width: var(--control-height); height: var(--control-height); }
   .home-journey-steps { grid-template-columns: minmax(0, 1fr); gap: var(--space-7); }
-  .home-step-art { height: 180px; }
+  .home-step-art { height: 160px; }
+  .home-step-number { font-size: 80px; }
   .home-step-next { position: static; display: flex; justify-content: center; margin-top: var(--space-5); transform: rotate(90deg); }
   .home-panel, .home-faq { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
   .home-panel { padding: var(--space-5); }
