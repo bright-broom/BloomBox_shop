@@ -2,9 +2,27 @@
 
 ## Confirmed public target (2026-09-17)
 
-The public preview origin is **https://bloom-box-shop-ybb9.vercel.app**, Vercel project `bloom-box-shop-ybb9` (`prj_uguMJ5XHO9Vx6qvij8mELEKAtHyp`). The repository variable `PRODUCTION_BASE_URL` was re-read and matches this origin. `/api/health` returned `259356edf51def7030729822df32e07ff82a3b54`; this is separate from the documentation baseline `7472c5f` on main. Recheck both before any deployment. A local `.vercel/project.json` pointing at old `bloom-box-shop` is not the public target.
+The public preview origin is **https://bloom-box-shop-ybb9.vercel.app**, Vercel project `bloom-box-shop-ybb9` (`prj_uguMJ5XHO9Vx6qvij8mELEKAtHyp`; renamed to `bloom-box` on 2026-09-26, same project ID). The repository variable `PRODUCTION_BASE_URL` was re-read and matches this origin. `/api/health` returned `259356edf51def7030729822df32e07ff82a3b54`; this is separate from the documentation baseline `7472c5f` on main. Recheck both before any deployment. A local `.vercel/project.json` pointing at old `bloom-box-shop` is not the public target; that old project was deleted on 2026-09-26.
 
 Vercel's environment label `production` currently hosts the application's **preview runtime with sales paused**. That label, successful CI, merged code, and a healthy preview do not mean commercial activation. The dedicated public DB was recorded through migration 0027 during [customer self-service deployment](CUSTOMER_SELF_SERVICE_RELEASE_2026-09-17.md); this is not evidence of every future sales credential, backup or payment connection.
+
+## 公開URLの切替：`bloom-box-shop.vercel.app`（2026-09-26決定・未実施）
+
+利用者向けURLから `-ybb9` を外すため、公開用のVercel project（ID `prj_uguMJ5XHO9Vx6qvij8mELEKAtHyp`、2026-09-26に `bloom-box-shop-ybb9` から `bloom-box` へ改名。IDとDB・秘密値・Deploy Hookは不変）はそのまま使い、ドメイン `bloom-box-shop.vercel.app` だけを載せ替える。projectの作り直し・DB・秘密値の移行はしない。コードにURLの直書きはなく、originは以下の設定値だけで決まる。下の手順の完了と確認を記録するまで、上記のybb9 originが現行の正本。
+
+1. 旧Vercel project `bloom-box-shop` を削除し、ドメインを解放する。**2026-09-26 実施済み**（運用者が削除）。
+2. `bloom-box` の Settings → Domains に `bloom-box-shop.vercel.app` を追加し、Production に割り当てる。旧 `bloom-box-shop-ybb9.vercel.app` は当面残す（新URLへのリダイレクト設定は任意）。
+3. Google Cloud の顧客用・運営者用 OAuth client それぞれに、新originの callback を**追加**する（既存のybb9 callbackは切替確認まで削除しない）。
+   - 顧客：`https://bloom-box-shop.vercel.app/api/customer-auth/callback/google`
+   - 運営者：`https://bloom-box-shop.vercel.app/api/operator-auth/callback/google`
+4. Vercel（Production）の環境変数を新originへ揃える：`CUSTOMER_ACCOUNT_ORIGIN`、`AUTH_URL`（前者と完全一致が必須。起動時に検証される）、`BLOOMBOX_PUBLIC_ORIGIN`。値は `https://bloom-box-shop.vercel.app`（末尾スラッシュなし）。
+5. GitHub の repository variable `PRODUCTION_BASE_URL` を同じoriginへ更新する（Commerce Worker・自動配備の健康確認が使う）。
+6. Stripe に webhook endpoint を登録済みなら、URLを `https://bloom-box-shop.vercel.app/api/webhooks/stripe` へ更新する。署名secretが変わった場合は Vercel 側も更新する。
+7. 環境変数を反映するため、現行の公開SHAで再配備する（Deployments → Redeploy）。
+8. 確認：新URLの `/api/health` が `ok` と想定SHAを返す。顧客・運営者のGoogleログインが新URLへ戻る。ページのcanonical・OGP・通知メールのリンクが新URLになっている。
+9. 確認後に本節を「実施済み」へ更新し、HANDOFF・BACKLOGの公開先を差し替える。旧ybb9 callbackの削除はその後に判断する。
+
+戻し方：手順4・5の値をybb9 originへ戻して再配備する。Google callbackは両方登録したままなので、ログインはすぐ戻る。
 
 ## Current status
 
@@ -30,7 +48,7 @@ Preview must be clearly distinguishable and must not send real notifications, ch
 
 Enable it once, in this order:
 
-1. In the `production` GitHub Environment, confirm `PRODUCTION_DEPLOY_HOOK_URL` (a Vercel Deploy Hook for the `main` branch of project `bloom-box-shop-ybb9`) and `DATABASE_MIGRATION_URL` (the owner connection for the public database). Confirm the repository variable `PRODUCTION_BASE_URL` is `https://bloom-box-shop-ybb9.vercel.app`.
+1. In the `production` GitHub Environment, confirm `PRODUCTION_DEPLOY_HOOK_URL` (a Vercel Deploy Hook for the `main` branch of project `bloom-box`, ID `prj_uguMJ5XHO9Vx6qvij8mELEKAtHyp`) and `DATABASE_MIGRATION_URL` (the owner connection for the public database). Confirm the repository variable `PRODUCTION_BASE_URL` is `https://bloom-box-shop-ybb9.vercel.app`.
 2. Check the public database's history with `pnpm db:status` and a history reader ([DATABASE_PREFLIGHT.md](DATABASE_PREFLIGHT.md)). The first automatic run applies everything pending (expected: 0028–0030, all expand-only).
 3. Set the repository variable `AUTO_DEPLOY_ENABLED=true`. The next merge to `main` deploys; to deploy the current `main` immediately, re-run its latest successful `CI` run.
 4. After the first run, confirm `/api/health` shows the new revision and that `Production Smoke` passes.
@@ -50,7 +68,7 @@ Root `vercel.json` sets `git.deploymentEnabled` to `false`. Pushes and PR update
 Use the existing Vercel dashboard for manual previews; no additional CI credential or deployment workflow is required:
 
 1. Finish the local checks and push the focused PR. Wait for the latest commit's quality/tests, dependency audit, security scan, and applicable governance checks to succeed. Do not interpret an absent Vercel check as proof of a successful deployment.
-2. Record the PR's full head commit SHA. In the verified `bloom-box-shop-ybb9` Vercel project, open **Deployments → Create Deployment** and enter that SHA. Select the PR branch configuration and **Preview**, never Production. Stop if the target environment or source cannot be confirmed. Review unfamiliar or forked code before exposing any preview credentials to its build.
+2. Record the PR's full head commit SHA. In the verified `bloom-box` Vercel project (ID `prj_uguMJ5XHO9Vx6qvij8mELEKAtHyp`), open **Deployments → Create Deployment** and enter that SHA. Select the PR branch configuration and **Preview**, never Production. Stop if the target environment or source cannot be confirmed. Review unfamiliar or forked code before exposing any preview credentials to its build.
 3. Create one deployment. If the request times out, inspect Deployments for that SHA before retrying. If Vercel reports the daily quota, stop and wait for the allowance to recover; a manual deployment uses the same allowance. Do not create empty commits or repeatedly redeploy to clear a failed status.
 4. Confirm the deployment is **Ready**, its environment is Preview, and its source SHA still matches the PR head. Check the affected flow on its preview URL. Record the SHA, URL, and result in the PR's verification evidence. If the PR changes, previous preview evidence no longer verifies the new head; deploy again when the next review is ready.
 
