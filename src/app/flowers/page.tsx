@@ -85,7 +85,7 @@ export default async function FlowersPage({ searchParams }: FlowersPageProps) {
         <span>{result.products.length === result.total ? "すべての季節の花" : "検索結果"}</span>
         <span>{String(result.products.length).padStart(2, "0")} / {String(result.total).padStart(2, "0")} {launchPreview ? "SIZES" : "COLLECTIONS"}</span>
       </div>
-      {result.products.some((product) => product.previewOffer) ? <SizeComparison products={result.products} /> : <div className="product-grid">
+      {result.products.some((product) => product.previewOffer) ? <SizeComparison products={result.products} omit={launchPreview ? "lead" : undefined} /> : <div className="product-grid">
         {result.products.length > 0 ? result.products.map((product) => (
           <ProductCard key={product.id} product={product} headingLevel={2} />
         )) : (

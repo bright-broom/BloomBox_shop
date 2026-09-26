@@ -91,3 +91,26 @@ describe("gift form defaults", () => {
     expect(html).toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
   });
 });
+
+describe("gift message card preview", () => {
+  function preview(html: string) {
+    return html.match(/<div class="gift-card-preview"[^]*?<\/div>/)?.[0] ?? "";
+  }
+  it("shows the default message as a card that assistive technology skips, with its caption readable", async () => {
+    const { giftExperienceContent } = await import("@/shared/infrastructure/content/gift-experience-content");
+    const html = renderGift();
+    const card = preview(html);
+    expect(card).toContain('aria-hidden="true"');
+    expect(card).toContain(giftExperienceContent.giftForm.defaultMessage);
+    expect(card).not.toContain(giftExperienceContent.giftForm.previewTo);
+    expect(html).toContain(giftExperienceContent.giftForm.previewCaption);
+  });
+  it("restores the saved recipient and message onto the card when editing the cart", () => {
+    storeCart(window.sessionStorage, savedCart, null);
+    const card = preview(renderToStaticMarkup(<GiftForm productId="prod_bloombox_l" productName="BLOOM BOX L"
+      unitPrice={money(8000)} sizeOptions={sizeOptions}
+      minDeliveryDate={getEarliestDeliveryDate(new Date())} maxDeliveryDate={getLatestDeliveryDate(new Date())} />));
+    expect(card).toContain(savedCart.recipientName);
+    expect(card).toContain(savedCart.giftMessage);
+  });
+});

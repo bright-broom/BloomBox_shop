@@ -1,7 +1,10 @@
 {
   "giftForm": {
     "defaultMessage": "いつもありがとう",
-    "messageHint": "そのまま使うことも、自由に書き換えることもできます。"
+    "messageHint": "そのまま使うことも、自由に書き換えることもできます。",
+    "previewEyebrow": "A NOTE FOR YOU",
+    "previewTo": "TO",
+    "previewCaption": "カードに添えることばのイメージです。カードの実際のデザインは準備中です。"
   },
   "cart": {
     "removeError": "カートを削除できませんでした。もう一度「カートから削除」をお試しください。購入手続きの入力情報は、一部消えている場合があります。",

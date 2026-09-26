@@ -24,6 +24,12 @@ export async function generateMetadata({ params }: InformationPageProps): Promis
   } : {};
 }
 
+/** Pages with this many sections open with a table of contents; shorter pages read in one glance. */
+const CONTENTS_MINIMUM_SECTIONS = 4;
+const sectionNumber = (index: number) => String(index + 1).padStart(2, "0");
+// Sections referenced from elsewhere carry an editorial ID; the rest are addressable by position.
+const sectionAnchor = (id: string | undefined, index: number) => id ?? `section-${index + 1}`;
+
 export default async function InformationPage({ params }: InformationPageProps) {
   const page = findStorefrontPage((await params).informationPage);
   if (!page) notFound();
@@ -39,6 +45,14 @@ export default async function InformationPage({ params }: InformationPageProps) 
         <p>{page.lead}</p>
       </header>
       {page.notice ? <p className="content-notice" role="note">{page.notice}</p> : null}
+      {page.kind !== "faq" && page.sections.length >= CONTENTS_MINIMUM_SECTIONS ? (
+        <nav className="content-toc" aria-label="このページの内容">
+          <p className="eyebrow">CONTENTS</p>
+          <ol>{page.sections.map((section, index) => <li key={section.title}>
+            <a href={`#${sectionAnchor(section.id, index)}`}><span aria-hidden="true">{sectionNumber(index)}</span>{section.title}</a>
+          </li>)}</ol>
+        </nav>
+      ) : null}
       <div className={`content-sections content-sections-${page.kind}`}>
         {page.sections.map((section, index) => page.kind === "faq" ? (
           <details key={section.title} id={section.id} className="faq-item" open={index === 0}>
@@ -46,8 +60,8 @@ export default async function InformationPage({ params }: InformationPageProps) 
             <div>{section.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div>
           </details>
         ) : (
-          <section key={section.title} id={section.id}>
-            <h2>{section.title}</h2>
+          <section key={section.title} id={sectionAnchor(section.id, index)} className="reveal">
+            <h2>{page.sections.length > 1 ? <span className="content-section-index" aria-hidden="true">{sectionNumber(index)}</span> : null}{section.title}</h2>
             {section.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
             {section.items ? (
               <dl className="disclosure-list">
