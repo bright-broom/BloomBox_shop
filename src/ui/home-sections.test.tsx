@@ -4,7 +4,8 @@ import { homeContent, homeContentSchema } from "@/shared/infrastructure/content/
 import { findStorefrontPage } from "@/shared/infrastructure/content/storefront-content";
 import { getEarliestDeliveryDate, getLatestDeliveryDate } from "@/modules/fulfillment/public";
 import { HomeAnnouncements, HomeAssurance, HomeDelivery, HomeFaq, HomeGallery, HomeMembership, HomeReviews } from "./home-sections";
-import { HomeOccasions } from "./home-story";
+import { HomeGiftDiagram, HomeOccasions } from "./home-story";
+import { giftExperienceContent } from "@/shared/infrastructure/content/gift-experience-content";
 import { PreviewFooterLinks } from "./preview-footer-links";
 import { SizeComparison } from "./size-comparison";
 import { productId, type Product } from "@/modules/catalog/public";
@@ -107,6 +108,34 @@ describe("home customer guidance", () => {
     const approved = renderToStaticMarkup(<SizeComparison products={[product]} guidance={{ ...homeContent.comparison, sizes: [{ ...sizes[0], status: "approved", description: "承認済みの検証仕様" }] }} />);
     expect(approved).toContain("承認済みの検証仕様");
     expect(approved).not.toContain(homeContent.comparison.pending);
+  });
+  it("drops its own heading when embedded under a section title but keeps the preview notice and totals", () => {
+    const embedded = renderToStaticMarkup(<SizeComparison products={[product]} embedded />);
+    expect(embedded).not.toContain(`<h2>${giftExperienceContent.launch.title}</h2>`);
+    expect(embedded).toContain(giftExperienceContent.launch.notice);
+    expect(embedded).toContain("￥5,000");
+    expect(renderToStaticMarkup(<SizeComparison products={[product]} />)).toContain(`<h2>${giftExperienceContent.launch.title}</h2>`);
+  });
+  it("marks free shipping only on a size whose preview shipping is zero", () => {
+    const paid = renderToStaticMarkup(<SizeComparison products={[product]} />);
+    expect(paid).not.toContain(giftExperienceContent.launch.freeShipping);
+    const free = renderToStaticMarkup(<SizeComparison products={[{ ...product, previewOffer: { ...product.previewOffer!, size: "L", shippingAmount: 0 } }]} />);
+    expect(free).toContain(giftExperienceContent.launch.freeShipping);
+    expect(free).toContain("￥0");
+  });
+  it("shows the package as a labelled concept with the gift form's own default message", () => {
+    const html = renderToStaticMarkup(<HomeGiftDiagram />);
+    expect(html).toContain(giftExperienceContent.giftForm.defaultMessage);
+    expect(html).toContain(homeContent.visual.diagram.caption);
+    expect(homeContent.visual.diagram.caption).toContain("イメージ");
+    expect(html).toContain(`alt="${homeContent.visual.diagram.image.alt}"`);
+  });
+  it("accepts only a registered design concept for the gift visual, never a photograph or unknown file", () => {
+    const withImage = (src: string) => ({ ...homeContent, visual: { ...homeContent.visual,
+      diagram: { ...homeContent.visual.diagram, image: { ...homeContent.visual.diagram.image, src } } } });
+    expect(homeContentSchema.safeParse(withImage("/images/products/sample.png")).success).toBe(false);
+    expect(homeContentSchema.safeParse(withImage("/images/products/unknown.png")).success).toBe(false);
+    expect(homeContentSchema.safeParse(withImage(homeContent.visual.diagram.image.src)).success).toBe(true);
   });
 });
 

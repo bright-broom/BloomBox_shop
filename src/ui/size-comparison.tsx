@@ -7,12 +7,15 @@ import { giftExperienceContent } from "@/shared/infrastructure/content/gift-expe
 import { PreviewMetric } from "@/ui/preview-metric";
 import type { HomeContent } from "@/shared/infrastructure/content/home-content";
 
-export function SizeComparison({ products, selectedId, guidance }: { products: readonly Product[]; selectedId?: string; guidance?: HomeContent["comparison"] }) {
+/** `embedded` drops the own heading where the surrounding section already titles the comparison (the home page). */
+export function SizeComparison({ products, selectedId, guidance, embedded = false }: {
+  products: readonly Product[]; selectedId?: string; guidance?: HomeContent["comparison"]; embedded?: boolean;
+}) {
   const options = products.filter((product) => product.previewOffer);
   if (!options.length) return null;
   const copy = giftExperienceContent.launch;
   return <section className="size-comparison" aria-label={copy.sizeLabel}>
-    <h2>{copy.title}</h2><p>{copy.lead}</p>
+    {embedded ? null : <h2>{copy.title}</h2>}<p>{copy.lead}</p>
     <p className="checkout-notice">{copy.notice}</p>
     {guidance && options.some((product) => !guidance.sizes.some((item) => item.size === product.previewOffer!.size && item.status === "approved")) ? <details className="home-comparison-guide"><summary>{guidance.title}</summary>
       <p>{guidance.pending}</p>
@@ -22,10 +25,16 @@ export function SizeComparison({ products, selectedId, guidance }: { products: r
       const detail = guidance?.sizes.find((item) => item.size === product.previewOffer!.size && item.status === "approved");
       return <article className="size-option" key={product.id}>
         <PreviewMetric event={{ name: "product_view", productId: product.id }} />
+        <div className="size-option-layout">
         <Link className="size-option-image" href={`/flowers/${product.slug}`} aria-label={`${product.name}の詳細を見る`}>
-          <Image src={product.imageUrl} alt={product.imageAlt} fill sizes="(max-width: 767px) 100vw, 50vw" />
+          <Image src={product.imageUrl} alt={product.imageAlt} fill sizes="(max-width: 767px) 100vw, 30vw" />
+          <span className="size-option-mark" aria-hidden="true">{product.previewOffer!.size}</span>
         </Link>
-        <h3>{product.name}</h3>
+        <div className="size-option-body">
+        <div className="size-option-title">
+          <h3>{product.name}</h3>
+          {totals.shippingAmount === 0 ? <span className="size-option-badge">{copy.freeShipping}</span> : null}
+        </div>
         {detail ? <div className="home-size-facts"><p>{detail.description}</p><dl>{detail.facts.map((fact) =>
           <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl></div> : null}
         <dl className="checkout-details">
@@ -35,6 +44,8 @@ export function SizeComparison({ products, selectedId, guidance }: { products: r
         </dl>
         <p className="field-note">{copy.details}</p>
         <Link className="primary-button" href={`/gift/${product.id}`} aria-current={selectedId === product.id ? "true" : undefined}>{product.previewOffer!.size} — {copy.action}<span aria-hidden="true">→</span></Link>
+        </div>
+        </div>
       </article>;
     })}</div>
   </section>;

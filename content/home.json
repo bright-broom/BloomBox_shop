@@ -54,6 +54,7 @@
   "faq": {
     "eyebrow": "QUESTIONS",
     "title": "よくあるご質問",
+    "mark": "Q&A",
     "sectionIds": [
       "flowers",
       "delivery-date",
@@ -88,8 +89,12 @@
       "flower": "季節の花",
       "message": "あなたのことば",
       "result": "ひとつの贈りものに。",
-      "eyebrow": "MADE WITH FEELING",
-      "caption": "花とことばを組み合わせる、贈りものづくりのイメージ。"
+      "caption": "パッケージのデザインイメージと、メッセージカードの一例です。箱の仕様とカードのデザインは準備中です。",
+      "cardEyebrow": "A NOTE FOR YOU",
+      "image": {
+        "src": "/images/products/bloombox-blue-concept.png",
+        "alt": "淡い青色の縦長の箱に、BloomBoxのロゴが入ったパッケージのデザインイメージ"
+      }
     },
     "occasions": {
       "eyebrow": "A LITTLE REASON",

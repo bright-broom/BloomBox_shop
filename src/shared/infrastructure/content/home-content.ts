@@ -13,6 +13,11 @@ const photo = z.object({
   alt: text,
   caption: text,
 }).strict();
+// A registered design concept, never a photograph of the real product; the caption must say so.
+const conceptImage = z.object({
+  src: z.string().refine((src) => productImageAssets.some((asset) => asset.src === src && asset.kind === "concept")),
+  alt: text,
+}).strict();
 const approval = z.enum(["draft", "approved"]);
 const announcement = z.object({
   id, title: text, body: text, href: href.optional(),
@@ -30,7 +35,9 @@ const sectionReference = z.object({
 export const homeContentSchema = z.object({
   visual: z.object({
     shortcuts: z.object({ label: text, flowers: text, message: text, delivery: text }).strict(),
-    diagram: z.object({ flower: text, message: text, result: text, eyebrow: text, caption: text }).strict(),
+    diagram: z.object({
+      flower: text, message: text, result: text, caption: text, cardEyebrow: text, image: conceptImage,
+    }).strict(),
     occasions: heading.extend({ items: z.array(z.object({
       label: z.enum(["ありがとう", "誕生日", "記念日"]), note: text,
     }).strict()).length(3) }),
@@ -53,7 +60,7 @@ export const homeContentSchema = z.object({
       icon: z.enum(["gift", "mail", "card", "help"]), title: text,
     })).min(1).max(4),
   }),
-  faq: heading.extend({ sectionIds: z.array(id).min(3).max(5), action: text, contact: text }),
+  faq: heading.extend({ mark: z.string().trim().min(1).max(8), sectionIds: z.array(id).min(3).max(5), action: text, contact: text }),
   membership: heading.extend({ description: text, benefitTitle: text, benefitNote: text, action: text, register: text }),
   reviews: heading.extend({ items: z.array(z.object({
     id, status: approval, quote: text, displayName: text,

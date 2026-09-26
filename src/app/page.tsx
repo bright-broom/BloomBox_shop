@@ -37,7 +37,7 @@ export default async function HomePage() {
       <HomeShortcuts />
 
       <section data-analytics-section="intro" className="intro-section home-intro section-shell" aria-labelledby="intro-title">
-        <div className="intro-layout home-intro-layout">
+        <div className="intro-layout home-intro-layout home-reveal">
           <div className="intro-copy">
             <p className="eyebrow">{home.intro.eyebrow}</p>
             <h2 id="intro-title">{home.intro.title.map((line) => <span key={line}>{line}</span>)}</h2>
@@ -50,7 +50,7 @@ export default async function HomePage() {
       </section>
       <HomeOccasions products={products} />
 
-      <section data-analytics-section="collection" id="collection" className="collection section-shell" aria-labelledby="collection-title">
+      <section data-analytics-section="collection" id="collection" className="collection section-shell home-reveal" aria-labelledby="collection-title">
         <div className="section-heading">
           <div>
             <p className="eyebrow">{home.collection.eyebrow}</p>
@@ -60,7 +60,7 @@ export default async function HomePage() {
           <Link className="secondary-button" href="/flowers">{home.collection.action}<HomeIcon name="external" size={20} /></Link>
         </div>
         <HomeGallery products={products} />
-        {products.some((product) => product.previewOffer) ? <SizeComparison products={products} guidance={homeContent.comparison} /> : <div className="product-grid">
+        {products.some((product) => product.previewOffer) ? <SizeComparison products={products} guidance={homeContent.comparison} embedded /> : <div className="product-grid">
           {products.length > 0 ? products.map((product) => (
             <ProductCard key={product.id} product={product} />
           )) : <p className="catalog-empty" role="status">{siteContent.catalog.emptyMessage}</p>}
