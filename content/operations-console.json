@@ -91,6 +91,9 @@
   "privacy": "プライバシー",
   "loyalty": "会員ランク",
   "loyaltyNote": "購入実績に基づくランク別割引です。料率は先行案で、管理画面からの変更はできません。",
+  "attention": "要対応",
+  "latest": "最新",
+  "chartPeak": "期間中の最大",
   "previewDemo": "表示確認用のサンプル",
   "previewDemoNote": "架空の集計・注文です。実データの参照や更新は行いません。",
   "updated": "集計時刻",
@@ -114,7 +117,7 @@
     {
       "href": "/operations/native-fulfillments",
       "key": "fulfillment",
-      "icon": "catalog"
+      "icon": "truck"
     },
     {
       "href": "/operations/customers",
