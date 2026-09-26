@@ -265,6 +265,14 @@ main[tabindex="-1"]:focus { outline: none; }
 .home-gift-recipe strong { font-weight: 500; color: var(--accent-ink); background: var(--accent-mint-middle) var(--accent-gradient); }
 .home-gift-recipe .home-icon { color: var(--accent); }
 .home-gift-recipe strong .home-icon { color: var(--accent-ink); }
+/* The gift form shows the words as a card while they are typed, echoing the home page's card. */
+.gift-card-preview { margin-top: var(--space-5); padding: var(--space-5) var(--space-6); display: grid; gap: var(--space-3); border: 1px solid var(--line); border-top: 3px solid var(--accent-mint-end); border-radius: var(--radius-card); background: var(--paper); transform: rotate(-1deg); transition: transform var(--motion-panel) var(--ease-editorial); }
+.gift-card-preview:hover { transform: none; }
+.gift-card-preview .eyebrow { margin: 0; color: var(--accent); }
+.gift-card-preview-to { display: flex; align-items: baseline; gap: var(--space-3); font-size: var(--text-body); overflow-wrap: anywhere; }
+.gift-card-preview-to small { font-size: var(--text-meta); letter-spacing: .12em; color: var(--ink-soft); }
+.gift-card-preview-message { min-height: 2lh; font-size: var(--text-label); line-height: var(--leading-body); letter-spacing: .03em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.gift-card-preview-caption { margin-top: var(--space-3); }
 .home-gift-visual figcaption { padding-top: var(--space-3); font-size: var(--text-meta); color: var(--ink-soft); text-align: center; }
 .home-occasions { padding-bottom: var(--space-8); }
 .home-occasion-heading { margin-bottom: var(--space-5); }
@@ -340,7 +348,8 @@ main[tabindex="-1"]:focus { outline: none; }
 .detail-page { display: grid; grid-template-columns: 54% 46%; }
 .detail-image { position: relative; min-height: 760px; background: var(--surface); }
 .detail-image img { object-fit: cover; }
-.detail-image.is-package { min-height: 0; aspect-ratio: 1; align-self: start; }
+/* The package stays in view while the long information column scrolls past it. */
+.detail-image.is-package { min-height: 0; aspect-ratio: 1; align-self: start; position: sticky; top: var(--header-height); }
 .detail-image.is-package img { object-fit: contain; }
 .back-link { position: absolute; top: var(--space-5); left: var(--space-5); z-index: 1; min-height: var(--control-height); display: inline-flex; align-items: center; padding: var(--space-3) var(--space-5); border-radius: var(--radius-pill); background: var(--paper); font-size: var(--text-small); }
 .detail-copy { min-width: 0; padding: var(--space-8) var(--page-gutter); align-self: center; }
@@ -507,6 +516,14 @@ main[tabindex="-1"]:focus { outline: none; }
 .content-sections { border-top: 1px solid var(--line); }
 .content-sections > section { padding-block: var(--space-7); display: grid; grid-template-columns: minmax(180px, .38fr) 1fr; column-gap: var(--space-7); border-bottom: 1px solid var(--line); }
 .content-sections h2 { grid-row: 1 / span 8; margin: 0; font-size: var(--text-label); }
+/* Numbered chapters share the home journey's numerals; the thin mint rule is the only colour. */
+.content-section-index { display: block; width: fit-content; margin-bottom: var(--space-4); padding-bottom: var(--space-2); border-bottom: 2px solid var(--accent-mint-end); font-family: var(--font-display); font-size: 40px; font-weight: 700; line-height: 1; letter-spacing: -.04em; color: var(--accent-ink); }
+.content-toc { margin-bottom: var(--space-8); padding: var(--space-5) var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-panel); }
+.content-toc .eyebrow { margin-bottom: var(--space-3); color: var(--accent); }
+.content-toc ol { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 0 var(--space-6); }
+.content-toc a { min-height: var(--control-height); display: flex; align-items: center; gap: var(--space-3); border-bottom: 1px solid var(--line); font-size: var(--text-small); transition: color var(--motion-fast); }
+.content-toc a:hover { color: var(--accent-hover); }
+.content-toc a span { font-family: var(--font-display); font-weight: 700; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
 .content-sections section > p { grid-column: 2; margin: 0 0 var(--space-4); color: var(--ink-soft); }
 .faq-item { border-bottom: 1px solid var(--line); }
 .faq-item summary { position: relative; padding: var(--space-5) var(--space-7) var(--space-5) 0; cursor: pointer; list-style: none; font-size: var(--text-label); }
@@ -523,6 +540,7 @@ main[tabindex="-1"]:focus { outline: none; }
 .content-contact p { margin: 0 0 var(--space-4); color: var(--ink-soft); font-size: var(--text-small); }
 .state-page p:not(.eyebrow) { max-width: var(--reading-max); margin: var(--space-5) auto var(--space-6); }
 .state-page .primary-button { margin-top: var(--space-5); }
+.state-page p.state-mark { width: fit-content; margin: 0 auto var(--space-6); padding-bottom: var(--space-4); border-bottom: 3px solid var(--accent-mint-end); font-family: var(--font-display); font-size: clamp(96px, 14vw, 180px); font-weight: 700; line-height: 1; letter-spacing: -.05em; color: var(--accent-ink); }
 .loading-state { min-height: 70vh; display: grid; place-content: center; gap: var(--space-4); text-align: center; }
 .loading-flower { font-size: var(--text-section); animation: turn 2.4s linear infinite; }
 .loading-flower { display: inline-block; }
@@ -585,6 +603,7 @@ main[tabindex="-1"]:focus { outline: none; }
 .fulfillment-connection { border-top: 1px solid var(--line); padding-top: var(--space-7); max-width: var(--reading-max); }
 
 @media (max-width: 959px) {
+  .detail-image.is-package { position: relative; top: auto; }
   .home-occasion-grid { grid-template-columns: minmax(0, 1fr); }
   .home-occasion { padding: var(--space-4); }
   .home-shortcuts a { padding-inline: var(--space-3); }
@@ -1099,7 +1118,7 @@ body:has(.operations-shell) > .site-footer { display: none; }
    Without support, or with reduced motion, or in print, they are simply present. */
 @supports (animation-timeline: view()) {
   @media screen and (prefers-reduced-motion: no-preference) {
-    .home-reveal { animation: home-reveal linear both; animation-timeline: view(); animation-range: entry 0% entry 55%; }
+    .home-reveal, .reveal { animation: home-reveal linear both; animation-timeline: view(); animation-range: entry 0% entry 55%; }
   }
 }
 @keyframes home-reveal { from { opacity: 0; transform: translateY(var(--reveal-distance)); } to { opacity: 1; transform: none; } }

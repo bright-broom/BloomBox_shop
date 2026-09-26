@@ -70,6 +70,8 @@ function GiftConfigurationForm({
   const [pending, setPending] = useState(false);
   const [quantity, setQuantity] = useState(sizeOptions.length ? LAUNCH_PREVIEW_QUANTITY : editingCart?.quantity ?? GIFT_QUANTITY_MIN);
   const [giftMessage, setGiftMessage] = useState(editingCart?.giftMessage ?? giftExperienceContent.giftForm.defaultMessage);
+  // Mirrors the uncontrolled name field only for the card preview; the submitted value is always read from the form.
+  const [recipientPreview, setRecipientPreview] = useState(editingCart?.recipientName ?? "");
 
   async function addToCart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -185,7 +187,7 @@ function GiftConfigurationForm({
       <div className="form-field">
         {savedRecipients.length ? <><label htmlFor="saved-recipient">{portalCopy.savedRecipients}</label><select id="saved-recipient" defaultValue="" onChange={event => {
           const recipient = savedRecipients.find(item => item.id === event.target.value);
-          if (recipient && recipientInput.current) recipientInput.current.value = recipient.name;
+          if (recipient && recipientInput.current) { recipientInput.current.value = recipient.name; setRecipientPreview(recipient.name); }
         }}><option value="">{portalCopy.selectRecipient}</option>{savedRecipients.map(item => <option key={item.id} value={item.id}>{item.label} · {item.name}</option>)}</select><p className="field-note">{portalCopy.addressUsage}</p></> : null}
         <label htmlFor="recipientName"><span>02</span> お届けする方のお名前 <i aria-hidden="true">*</i></label>
         <input
@@ -193,6 +195,7 @@ function GiftConfigurationForm({
           ref={recipientInput}
           id="recipientName"
           defaultValue={editingCart?.recipientName ?? ""}
+          onChange={(event) => setRecipientPreview(event.target.value)}
           name="recipientName"
           autoComplete="name"
           placeholder="例：山田 花子"
@@ -238,6 +241,12 @@ function GiftConfigurationForm({
         />
         <p className="field-note" id="giftMessage-help">{giftExperienceContent.giftForm.messageHint}</p>
         <FieldError id="giftMessage-error" messages={state.fieldErrors?.giftMessage} />
+        <div className="gift-card-preview" aria-hidden="true">
+          <span className="eyebrow">{giftExperienceContent.giftForm.previewEyebrow}</span>
+          {recipientPreview.trim() ? <span className="gift-card-preview-to"><small>{giftExperienceContent.giftForm.previewTo}</small>{recipientPreview.trim()}</span> : null}
+          <span className="gift-card-preview-message">{giftMessage.trim() || "…"}</span>
+        </div>
+        <p className="field-note gift-card-preview-caption">{giftExperienceContent.giftForm.previewCaption}</p>
       </div>
       {state.error ? <p className="form-error" role="alert">{state.error}</p> : null}
       <button className="primary-button form-submit" type="submit" disabled={pending || (replacingCart && !replacementAccepted)}>
