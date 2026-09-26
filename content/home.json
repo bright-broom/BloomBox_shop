@@ -54,6 +54,7 @@
   "faq": {
     "eyebrow": "QUESTIONS",
     "title": "よくあるご質問",
+    "mark": "Q&A",
     "sectionIds": [
       "flowers",
       "delivery-date",

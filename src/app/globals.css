@@ -296,7 +296,10 @@ main[tabindex="-1"]:focus { outline: none; }
 .home-step-next { position: absolute; top: 88px; right: calc(-1 * var(--space-5) - 12px); color: var(--accent); }
 .home-journey-steps h3 { font-size: var(--text-label); margin-block: var(--space-5) var(--space-3); }
 .home-journey-steps p { margin: 0; color: var(--ink-soft); font-size: var(--text-small); }
-.home-faq-mark { display: inline-flex; padding: var(--space-4); margin-bottom: var(--space-5); background: var(--accent-gradient); color: var(--accent-ink); border-radius: var(--radius-panel); }
+/* A typographic mark in the journey numerals' voice; a thin mint rule replaces the former filled tile. */
+.home-faq-mark { position: relative; display: inline-block; margin-bottom: var(--space-6); padding-bottom: var(--space-5); font-family: var(--font-display); font-size: 72px; font-weight: 700; line-height: 1; letter-spacing: -.04em; color: var(--accent-ink); }
+.home-faq-mark::after { content: ""; position: absolute; left: 0; bottom: 0; width: var(--space-7); height: 3px; background: var(--accent-gradient); }
+.home-faq > div:first-child { align-self: start; position: sticky; top: calc(var(--header-height) + var(--space-6)); }
 .home-account-links { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-block: var(--space-5); }
 .home-account-links a { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control-height); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--paper); font-size: var(--text-small); }
 .home-account-links a:hover { border-color: var(--accent); }
@@ -624,6 +627,8 @@ main[tabindex="-1"]:focus { outline: none; }
   .home-step-number { font-size: 80px; }
   .home-step-next { position: static; display: flex; justify-content: center; margin-top: var(--space-5); transform: rotate(90deg); }
   .home-panel, .home-faq { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
+  .home-faq > div:first-child { position: static; }
+  .home-faq-mark { font-size: 56px; }
   .home-panel { padding: var(--space-5); }
   .home-delivery-window { border-left: 0; border-top: 1px solid var(--control-border); padding: var(--space-5) 0 0; }
   .home-care-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }

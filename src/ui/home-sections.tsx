@@ -75,7 +75,7 @@ export function HomeAssurance() {
 export function HomeFaq() {
   const copy = homeContent.faq;
   return <section data-analytics-section="faq" className="home-section home-faq section-shell home-reveal" aria-labelledby="home-faq-title">
-    <div><span className="home-faq-mark"><HomeIcon name="help" size={44} /></span><p className="eyebrow">{copy.eyebrow}</p><h2 id="home-faq-title">{copy.title}</h2>
+    <div><span className="home-faq-mark" aria-hidden="true">{copy.mark}</span><p className="eyebrow">{copy.eyebrow}</p><h2 id="home-faq-title">{copy.title}</h2>
       <p className="field-note">{homeContent.visual.faqNote}</p>
       <Link className="text-link" href="/faq">{copy.action}<HomeIcon name="arrow" /></Link>
     </div>

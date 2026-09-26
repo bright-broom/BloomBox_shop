@@ -60,7 +60,7 @@ export const homeContentSchema = z.object({
       icon: z.enum(["gift", "mail", "card", "help"]), title: text,
     })).min(1).max(4),
   }),
-  faq: heading.extend({ sectionIds: z.array(id).min(3).max(5), action: text, contact: text }),
+  faq: heading.extend({ mark: z.string().trim().min(1).max(8), sectionIds: z.array(id).min(3).max(5), action: text, contact: text }),
   membership: heading.extend({ description: text, benefitTitle: text, benefitNote: text, action: text, register: text }),
   reviews: heading.extend({ items: z.array(z.object({
     id, status: approval, quote: text, displayName: text,
