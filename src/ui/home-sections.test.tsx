@@ -110,10 +110,15 @@ describe("home customer guidance", () => {
     expect(approved).not.toContain(homeContent.comparison.pending);
   });
   it("drops its own heading when embedded under a section title but keeps the preview notice and totals", () => {
-    const embedded = renderToStaticMarkup(<SizeComparison products={[product]} embedded />);
+    const embedded = renderToStaticMarkup(<SizeComparison products={[product]} omit="title" />);
     expect(embedded).not.toContain(`<h2>${giftExperienceContent.launch.title}</h2>`);
     expect(embedded).toContain(giftExperienceContent.launch.notice);
     expect(embedded).toContain("￥5,000");
+    expect(embedded).toContain(giftExperienceContent.launch.lead);
+    const catalog = renderToStaticMarkup(<SizeComparison products={[product]} omit="lead" />);
+    expect(catalog).not.toContain(giftExperienceContent.launch.lead);
+    expect(catalog).toContain(`<h2>${giftExperienceContent.launch.title}</h2>`);
+    expect(catalog).toContain(giftExperienceContent.launch.notice);
     expect(renderToStaticMarkup(<SizeComparison products={[product]} />)).toContain(`<h2>${giftExperienceContent.launch.title}</h2>`);
   });
   it("marks free shipping only on a size whose preview shipping is zero", () => {
