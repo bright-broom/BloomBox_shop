@@ -1,7 +1,7 @@
 # ADR 0022: main の自動配備と、追加だけの DB 変更の自動適用
 
 - 状態：**採用（2026-09-26）。** ユーザーの「DBの自動適用とmainの自動配備を用意して」という依頼による。実際に動かすには、リポジトリ変数 `AUTO_DEPLOY_ENABLED=true` と、`production` Environment の秘密値（`PRODUCTION_DEPLOY_HOOK_URL`・`DATABASE_MIGRATION_URL`）の設定が必要（既定は無効）。
-- 範囲：公開先 `bloom-box-shop-ybb9` への配備と、公開用 DB への migration 適用。販売の開始（ADR 0020）は扱わない。
+- 範囲：公開先 Vercel project `bloom-box`（2026-09-26に `bloom-box-shop-ybb9` から改名、ID不変）への配備と、公開用 DB への migration 適用。販売の開始（ADR 0020）は扱わない。
 - 関連
   - [RELEASE.md](../../operations/RELEASE.md)：手動の配備・リリース手順
   - [ADR 0020](0020-governed-checkout-activation.md)：新規購入の受付はコードと承認で別に止める

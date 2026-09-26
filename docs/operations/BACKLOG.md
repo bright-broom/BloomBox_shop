@@ -33,7 +33,7 @@
 
 ### 2026-09-17の追記
 
-- 2026-09-26：公開URLを同じVercel projectのまま `https://bloom-box-shop.vercel.app` へ載せ替える決定。Vercel・Google・GitHub・Stripeの設定作業は未実施で、完了までは下記ybb9が正本。手順は [RELEASE.md](RELEASE.md) の「公開URLの切替」。
+- 2026-09-26：公開URLを同じVercel projectのまま `https://bloom-box-shop.vercel.app` へ載せ替える決定。同日、旧 `bloom-box-shop` projectを削除し、公開projectを `bloom-box` へ改名（ID `prj_uguMJ5XHO9Vx6qvij8mELEKAtHyp` 不変）。ドメイン追加・Google・環境変数・GitHub・Stripeの設定作業は未実施で、完了までは下記ybb9が正本。手順は [RELEASE.md](RELEASE.md) の「公開URLの切替」。
 - 公開正本は `https://bloom-box-shop-ybb9.vercel.app`。GitHub変数 `PRODUCTION_BASE_URL` も同じoriginへ修正済みと再取得で確認。公開SHAは上記のとおりで、#187/#188のmain反映と公開を混同しない。
 - 0027・暗号鍵・顧客サポート専用接続・運営者1名の公開確認は [セルフサービス公開記録](CUSTOMER_SELF_SERVICE_RELEASE_2026-09-17.md) の対象範囲。全販売用DB権限や実Stripe接続の証跡ではない。
 - 広告の同意・確定購入送信基盤は実装済み（0026）。Google/Metaのアカウント設定と実送達・帰属は未検証。[広告運用](ADVERTISING.md)を参照。
