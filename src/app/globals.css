@@ -73,6 +73,8 @@
   --hero-glow-mint: rgba(99, 216, 199, .30);
   --hero-glow-leaf: rgba(184, 243, 213, .16);
   --reveal-distance: 32px;
+  /* Chart bars: validated for 3:1 against white (dataviz validator); the latest day uses --accent. */
+  --chart-bar: #2e9e86;
 }
 
 /* Base, focus and shared controls */
@@ -977,11 +979,15 @@ body:has(.operations-shell) > .site-footer { display: none; }
 .ops-toolbar, .ops-section-heading, .ops-pagination { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-3); }
 .ops-toolbar { margin-bottom: var(--space-4); font-size: var(--text-small); color: var(--ink-soft); }
 .ops-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: var(--space-4); }
-.ops-metric { background: var(--paper); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-panel); }
+.ops-metric { position: relative; display: block; background: var(--paper); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-panel); transition: border-color var(--motion-fast), transform var(--motion-panel) var(--ease-editorial); }
+a.ops-metric:hover { border-color: var(--accent); transform: translateY(calc(-1 * var(--space-1))); }
+a.ops-metric > .ops-icon:last-child { position: absolute; right: var(--space-5); bottom: var(--space-5); color: var(--accent); }
+/* A queue with work waiting gets the accent edge; the "要対応" label says why, never colour alone. */
+.ops-metric.is-attention { border-color: var(--accent); box-shadow: inset 4px 0 0 var(--accent-mint-end); }
+.ops-attention { padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--accent-mint-middle) var(--accent-gradient); color: var(--accent-ink); font-size: var(--text-meta); font-weight: 600; }
 .ops-metric > div { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); font-size: var(--text-small); color: var(--ink-soft); }
 .ops-metric strong { display: block; margin-top: var(--space-3); font-size: var(--text-section); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.ops-metric:first-child { background: var(--accent-gradient); color: var(--accent-ink); }
-.ops-metric:first-child > div { color: var(--accent-ink); }
+
 .ops-caption { font-size: var(--text-meta); color: var(--ink-soft); line-height: var(--leading-body); }
 .ops-panel { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius-panel); padding: var(--space-5); margin-block: var(--space-5); min-width: 0; }
 .ops-panel h2 { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-label); font-weight: 600; margin-top: 0; }
@@ -995,10 +1001,18 @@ body:has(.operations-shell) > .site-footer { display: none; }
 .ops-quick a > span { flex: 1; min-width: 0; }
 .ops-quick strong { display: block; font-size: var(--text-small); font-weight: 500; }
 .ops-quick small { display: block; font-size: var(--text-meta); color: var(--ink-soft); }
-.ops-chart { display: flex; align-items: stretch; gap: var(--space-1); height: 168px; border-bottom: 1px solid var(--line); margin-top: var(--space-6); }
-.ops-chart-column { flex: 1; display: flex; align-items: flex-end; min-width: 0; }
-.ops-chart-column span { display: block; width: 100%; background: var(--accent); border-radius: var(--radius-media) var(--radius-media) 0 0; }
-.ops-chart-axis { display: flex; justify-content: space-between; font-size: var(--text-meta); color: var(--ink-soft); margin-block: var(--space-2); }
+/* One series, one calm hue; the latest day is the one solid bar. Gridlines at the peak and half stay recessive. */
+.ops-panel .ops-chart-peak { margin: 0; font-size: var(--text-meta); color: var(--ink-soft); }
+.ops-chart-peak strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.ops-chart { position: relative; display: flex; align-items: stretch; gap: 2px; height: 168px; margin-top: var(--space-4); border-bottom: 1px solid var(--control-border); background: linear-gradient(var(--line), var(--line)) 0 0 / 100% 1px no-repeat, linear-gradient(var(--line), var(--line)) 0 50% / 100% 1px no-repeat; }
+.ops-chart-column { position: relative; flex: 1; display: flex; align-items: flex-end; min-width: 0; }
+.ops-chart-column span { display: block; width: 100%; max-width: 20px; margin-inline: auto; background: var(--chart-bar); border-radius: 4px 4px 0 0; transition: background var(--motion-fast); }
+.ops-chart-column.is-latest span, .ops-chart-column:hover span { background: var(--accent); }
+.ops-chart-column:hover::after { content: attr(data-tip); position: absolute; z-index: 2; bottom: calc(100% + var(--space-2)); left: 50%; transform: translateX(-50%); padding: var(--space-1) var(--space-3); border-radius: var(--radius-media); background: var(--ink); color: var(--paper); font-size: var(--text-meta); white-space: nowrap; pointer-events: none; }
+.ops-chart-column:first-child:hover::after { left: 0; transform: none; }
+.ops-chart-column:last-child:hover::after { left: auto; right: 0; transform: none; }
+.ops-chart-axis { display: flex; justify-content: space-between; font-size: var(--text-meta); color: var(--ink-soft); margin-block: var(--space-2); font-variant-numeric: tabular-nums; }
+.ops-chart-axis i { display: inline-block; width: var(--space-2); height: var(--space-2); margin-right: var(--space-2); border-radius: 2px; background: var(--accent); }
 .ops-state { display: grid; justify-items: start; gap: var(--space-2); padding: var(--space-5); background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius-panel); margin-block: var(--space-4); }
 .ops-state > svg { color: var(--accent); }
 .ops-state h2 { font-size: var(--text-label); margin: var(--space-2) 0; }
@@ -1012,7 +1026,9 @@ body:has(.operations-shell) > .site-footer { display: none; }
 .ops-table .text-link { white-space: nowrap; gap: var(--space-2); }
 .ops-order-reference { display: block; min-width: 130px; max-width: 220px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .ops-amount { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; }
-.ops-badge { display: inline-flex; align-items: center; width: fit-content; background: var(--surface); padding: var(--space-1) var(--space-3); border-radius: var(--radius-pill); font-size: var(--text-meta); }
+.ops-badge { display: inline-flex; align-items: center; width: fit-content; background: var(--surface); padding: var(--space-1) var(--space-3); border-radius: var(--radius-pill); font-size: var(--text-meta); white-space: nowrap; }
+.ops-badge.is-attention { background: var(--paper); box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent-hover); font-weight: 600; }
+.ops-badges { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .ops-filters { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); align-items: start; gap: var(--space-4); background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius-panel); padding: var(--space-5); }
 .ops-search { grid-column: 1/-1; }
 .ops-filters .form-field { gap: var(--space-2); }

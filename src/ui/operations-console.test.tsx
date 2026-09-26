@@ -49,7 +49,11 @@ describe("operations UI boundary states", () => {
     expect(html).not.toContain("<script>unsafe");
     expect(html).toContain("&lt;script&gt;");
     expect(html).toContain('scope="row"');
-    expect(html).toContain(" / ");
+    // Mixed statuses stay separate chips; the ones still needing work are marked by class and keep their label.
+    expect(html).toContain('<span class="ops-badge">支払済み</span>');
+    expect(html).toContain('<span class="ops-badge is-attention">支払い失敗</span>');
+    expect(html).toContain('<span class="ops-badge is-attention">発送前</span>');
+    expect(html).toContain('<span class="ops-badge">発送済み</span>');
     expect(html).toContain('tabindex="0"');
   });
   it("never exposes the synthetic preview in production", async () => {

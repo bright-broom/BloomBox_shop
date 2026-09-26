@@ -99,6 +99,9 @@ export const operationsConsoleContent = z
     previewDemoNote: text,
     updated: text,
     date: text,
+    attention: text,
+    latest: text,
+    chartPeak: text,
     connectionNames: z
       .object({ catalog: text, support: text, fulfillment: text })
       .strict(),
@@ -129,6 +132,7 @@ export const operationsConsoleContent = z
               "orders",
               "customers",
               "catalog",
+              "truck",
               "reports",
               "settings",
             ]),

@@ -43,6 +43,14 @@ const shapes = {
       <path d="M8 10V6a4 4 0 0 1 8 0v4M12 14v3" />
     </>
   ),
+  truck: (
+    <>
+      <path d="M3 6h11v10H3zM14 10h4l3 3v3h-7" />
+      <circle cx="7" cy="18" r="2" />
+      <circle cx="17" cy="18" r="2" />
+    </>
+  ),
+  support: <path d="M4 5h16v11H9l-5 4V5Zm4 5h8M8 13h5" />,
   arrow: <path d="M5 12h14m-5-5 5 5-5 5" />,
   check: <path d="m5 12 4 4L19 6" />,
   clock: (

@@ -40,7 +40,7 @@ export function OperationsShell({
               <span>{copy[item.key]}</span>
             </Link>
           ))}
-          <Link href="/operations/requests" prefetch={false} aria-current={path === "/operations/requests" ? "page" : undefined}><OperationsIcon name="customers" /><span>{portalCopy.support}</span></Link>
+          <Link href="/operations/requests" prefetch={false} aria-current={path === "/operations/requests" ? "page" : undefined}><OperationsIcon name="support" /><span>{portalCopy.support}</span></Link>
         </nav>
         <div className="ops-sidebar-bottom">
           <Link href="/">

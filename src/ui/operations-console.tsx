@@ -70,39 +70,33 @@ export function ConsoleState({
   );
 }
 export function ReportMetrics({ report }: { report: OperatorOrderReport }) {
+  // Counts that ask for work link to where that work is done and are marked while any remain.
+  const items = [
+    { label: copy.orderValue, value: operationsMoney(report.orderValueYen), icon: "reports" as const, pending: 0, href: null },
+    { label: copy.orderCount, value: `${report.orders} ${copy.unit}`, icon: "orders" as const, pending: 0, href: null },
+    { label: copy.awaiting, value: `${report.awaitingShipment} ${copy.unit}`, icon: "truck" as const,
+      pending: report.awaitingShipment, href: "/operations/native-fulfillments" },
+    { label: copy.refunds, value: `${report.refunds} ${copy.unit}`, icon: "clock" as const,
+      pending: report.refunds, href: "/operations/orders" },
+  ];
   return (
     <>
       <div className="ops-metrics">
-        {[
-          {
-            label: copy.orderValue,
-            value: operationsMoney(report.orderValueYen),
-            icon: "reports" as const,
-          },
-          {
-            label: copy.orderCount,
-            value: `${report.orders} ${copy.unit}`,
-            icon: "orders" as const,
-          },
-          {
-            label: copy.awaiting,
-            value: `${report.awaitingShipment} ${copy.unit}`,
-            icon: "catalog" as const,
-          },
-          {
-            label: copy.refunds,
-            value: `${report.refunds} ${copy.unit}`,
-            icon: "clock" as const,
-          },
-        ].map((item) => (
-          <article className="ops-metric" key={item.label}>
+        {items.map((item) => {
+          const body = <>
             <div>
               <span>{item.label}</span>
-              <OperationsIcon name={item.icon} />
+              {item.pending > 0 ? <span className="ops-attention">{copy.attention}</span> : <OperationsIcon name={item.icon} />}
             </div>
             <strong>{item.value}</strong>
-          </article>
-        ))}
+          </>;
+          return item.href ? (
+            <Link key={item.label} className={`ops-metric${item.pending > 0 ? " is-attention" : ""}`} href={item.href} prefetch={false}>
+              {body}
+              <OperationsIcon name="arrow" />
+            </Link>
+          ) : <article className="ops-metric" key={item.label}>{body}</article>;
+        })}
       </div>
       <p className="ops-caption">
         {copy.valueNote} {copy.queueNote}
@@ -112,26 +106,26 @@ export function ReportMetrics({ report }: { report: OperatorOrderReport }) {
 }
 export function DailyReport({ report }: { report: OperatorOrderReport }) {
   const max = Math.max(1, ...report.daily.map((d) => d.orders));
+  const last = report.daily.length - 1;
   return (
     <section className="ops-panel">
       <h2>{copy.daily}</h2>
+      <p className="ops-chart-peak">{copy.chartPeak} <strong>{max}{copy.unit}</strong></p>
       <div
         className="ops-chart"
         role="img"
         aria-label={`${copy.daily}：${report.days}${copy.days}、${report.orders}${copy.unit}`}
       >
-        {report.daily.map((day) => (
-          <div key={day.day} className="ops-chart-column">
-            <span
-              style={{ height: `${(day.orders / max) * 100}%` }}
-              title={`${day.day}：${day.orders}${copy.unit}`}
-            />
+        {report.daily.map((day, index) => (
+          <div key={day.day} className={`ops-chart-column${index === last ? " is-latest" : ""}`}
+            data-tip={`${day.day}　${day.orders}${copy.unit}・${operationsMoney(day.orderValueYen)}`}>
+            <span style={{ height: `${(day.orders / max) * 100}%` }} />
           </div>
         ))}
       </div>
       <div className="ops-chart-axis">
         <span>{report.daily.at(0)?.day}</span>
-        <span>{report.daily.at(-1)?.day}</span>
+        <span><i aria-hidden="true" />{copy.latest} {report.daily.at(-1)?.day}</span>
       </div>
       <details>
         <summary>
@@ -176,13 +170,19 @@ export function DailyReport({ report }: { report: OperatorOrderReport }) {
     </section>
   );
 }
-const labels = (
-  values: readonly string[],
-  dictionary: Readonly<Record<string, string>>,
-) =>
-  values.length
-    ? values.map((v) => dictionary[v] ?? copy.unknown).join(" / ")
-    : copy.unknown;
+// Statuses that still need an operator are tinted; finished ones are quiet. The label always carries the meaning.
+const attentionStatuses = new Set([
+  "UNFULFILLED", "SCHEDULED", "PROCESSING", "READY", "ON_HOLD",
+  "FAILED", "PARTIALLY_REFUNDED", "REFUNDED", "DISPUTED", "REQUIRES_ACTION", "REQUIRES_PAYMENT_METHOD",
+]);
+function StatusBadges({ values, dictionary }: { values: readonly string[]; dictionary: Readonly<Record<string, string>> }) {
+  if (!values.length) return <span className="ops-badge">{copy.unknown}</span>;
+  return <span className="ops-badges">{values.map((value) => (
+    <span key={value} className={`ops-badge${attentionStatuses.has(value) ? " is-attention" : ""}`}>
+      {dictionary[value] ?? copy.unknown}
+    </span>
+  ))}</span>;
+}
 export function OrdersTable({ page }: { page: OperatorOrderPage }) {
   if (!page.orders.length)
     return (
@@ -225,12 +225,10 @@ export function OrdersTable({ page }: { page: OperatorOrderPage }) {
               </td>
               <td className="ops-amount">{operationsMoney(o.totalYen)}</td>
               <td>
-                <span className="ops-badge">
-                  {labels([o.status], states.orderStatuses)}
-                </span>
+                <StatusBadges values={[o.status]} dictionary={states.orderStatuses} />
               </td>
-              <td>{labels(o.payment, states.paymentStatuses)}</td>
-              <td>{labels(o.fulfillment, states.fulfillmentStatuses)}</td>
+              <td><StatusBadges values={o.payment} dictionary={states.paymentStatuses} /></td>
+              <td><StatusBadges values={o.fulfillment} dictionary={states.fulfillmentStatuses} /></td>
               <td>
                 {o.customerId ? (
                   <Link
