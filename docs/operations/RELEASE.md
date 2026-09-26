@@ -6,6 +6,24 @@ The public preview origin is **https://bloom-box-shop-ybb9.vercel.app**, Vercel 
 
 Vercel's environment label `production` currently hosts the application's **preview runtime with sales paused**. That label, successful CI, merged code, and a healthy preview do not mean commercial activation. The dedicated public DB was recorded through migration 0027 during [customer self-service deployment](CUSTOMER_SELF_SERVICE_RELEASE_2026-09-17.md); this is not evidence of every future sales credential, backup or payment connection.
 
+## 公開URLの切替：`bloom-box-shop.vercel.app`（2026-09-26決定・未実施）
+
+利用者向けURLから `-ybb9` を外すため、Vercel project `bloom-box-shop-ybb9` はそのまま使い、ドメイン `bloom-box-shop.vercel.app` だけを載せ替える。projectの作り直し・DB・秘密値の移行はしない。コードにURLの直書きはなく、originは以下の設定値だけで決まる。下の手順の完了と確認を記録するまで、上記のybb9 originが現行の正本。
+
+1. 旧Vercel project `bloom-box-shop` の Settings → Domains から `bloom-box-shop.vercel.app` を外す（または旧projectを改名・削除）。旧projectに必要なデータや設定がないことを先に確認する。
+2. `bloom-box-shop-ybb9` の Settings → Domains に `bloom-box-shop.vercel.app` を追加し、Production に割り当てる。旧 `bloom-box-shop-ybb9.vercel.app` は当面残す（新URLへのリダイレクト設定は任意）。
+3. Google Cloud の顧客用・運営者用 OAuth client それぞれに、新originの callback を**追加**する（既存のybb9 callbackは切替確認まで削除しない）。
+   - 顧客：`https://bloom-box-shop.vercel.app/api/customer-auth/callback/google`
+   - 運営者：`https://bloom-box-shop.vercel.app/api/operator-auth/callback/google`
+4. Vercel（Production）の環境変数を新originへ揃える：`CUSTOMER_ACCOUNT_ORIGIN`、`AUTH_URL`（前者と完全一致が必須。起動時に検証される）、`BLOOMBOX_PUBLIC_ORIGIN`。値は `https://bloom-box-shop.vercel.app`（末尾スラッシュなし）。
+5. GitHub の repository variable `PRODUCTION_BASE_URL` を同じoriginへ更新する（Commerce Worker・自動配備の健康確認が使う）。
+6. Stripe に webhook endpoint を登録済みなら、URLを `https://bloom-box-shop.vercel.app/api/webhooks/stripe` へ更新する。署名secretが変わった場合は Vercel 側も更新する。
+7. 環境変数を反映するため、現行の公開SHAで再配備する（Deployments → Redeploy）。
+8. 確認：新URLの `/api/health` が `ok` と想定SHAを返す。顧客・運営者のGoogleログインが新URLへ戻る。ページのcanonical・OGP・通知メールのリンクが新URLになっている。
+9. 確認後に本節を「実施済み」へ更新し、HANDOFF・BACKLOGの公開先を差し替える。旧ybb9 callbackの削除はその後に判断する。
+
+戻し方：手順4・5の値をybb9 originへ戻して再配備する。Google callbackは両方登録したままなので、ログインはすぐ戻る。
+
 ## Current status
 
 The selected target is native PostgreSQL commerce with direct Google customers ([ADR 0009](../architecture/adr/0009-native-commerce-and-google-customers.md)). The Google/customer-account slice replaces Shopify login. The production catalog reader uses PostgreSQL; real catalog/stock setup and live buyer/payment/fulfillment evidence remain incomplete. Native stock reservation, commitment and safe release are implemented; see [NATIVE_INVENTORY.md](NATIVE_INVENTORY.md). Customer-to-purchase binding is implemented, with real-provider verification still pending. New production checkout is paused in code. The release gate requires native-adapter evidence and remains blocked.

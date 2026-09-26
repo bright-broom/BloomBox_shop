@@ -118,7 +118,7 @@ nonce CSP、未承認script/CSP低下の公開監視、実ブラウザー回帰�
 
 ## 移行文書・監視の現在地（2026-09-17）
 
-正本の公開先は `bloom-box-shop-ybb9`。GitHub変数 `PRODUCTION_BASE_URL` も同originを再確認。[RELEASE.md](RELEASE.md) の配備先・SHA照合と [公開確認記録](PUBLIC_PREVIEW_VERIFICATION_2026-09-17.md) を参照。旧 `bloom-box-shop` のローカルVercel紐付けで配備しない。Shopify名の運用文書は既存取引・旧アダプター向けの契約記録として保持し、現行自作Commerceの導入手順と区別する。
+正本の公開先は `bloom-box-shop-ybb9`（2026-09-26：同projectのまま `bloom-box-shop.vercel.app` へURLを載せ替える決定。未実施。手順は [RELEASE.md](RELEASE.md) の「公開URLの切替」）。GitHub変数 `PRODUCTION_BASE_URL` も同originを再確認。[RELEASE.md](RELEASE.md) の配備先・SHA照合と [公開確認記録](PUBLIC_PREVIEW_VERIFICATION_2026-09-17.md) を参照。旧 `bloom-box-shop` のローカルVercel紐付けで配備しない。Shopify名の運用文書は既存取引・旧アダプター向けの契約記録として保持し、現行自作Commerceの導入手順と区別する。
 
 0027までの公開適用はセルフサービス公開時の記録がある。広告同意・確定購入の送信基盤（0026）は実装済みだが、媒体の実アカウント接続・送信・予算承認は別。監視の成功は販売準備完了や新SHAの配備を意味しない。
 
