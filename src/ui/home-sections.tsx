@@ -41,7 +41,7 @@ function CalendarDate({ value }: { value: string }) {
 
 export function HomeDelivery({ now, preview }: { now: Date; preview: boolean }) {
   const copy = homeContent.delivery;
-  return <section data-analytics-section="delivery" id="delivery" className="home-delivery section-shell" aria-labelledby="home-delivery-title">
+  return <section data-analytics-section="delivery" id="delivery" className="home-delivery section-shell home-reveal" aria-labelledby="home-delivery-title">
     <div className="home-panel">
       <div><p className="eyebrow">{copy.eyebrow}</p><h2 id="home-delivery-title">{copy.title}</h2>
         <ol className="home-delivery-route" aria-label={homeContent.visual.deliverySteps.label}>
@@ -60,7 +60,7 @@ export function HomeDelivery({ now, preview }: { now: Date; preview: boolean }) 
 
 export function HomeAssurance() {
   const copy = homeContent.assurance;
-  return <section data-analytics-section="assurance" className="home-section section-shell" aria-labelledby="home-care-title">
+  return <section data-analytics-section="assurance" className="home-section section-shell home-reveal" aria-labelledby="home-care-title">
     <p className="eyebrow">{copy.eyebrow}</p><h2 id="home-care-title">{copy.title}</h2>
     {storefrontContent.publicationStatus === "draft" ? <p className="field-note">{copy.draftNote}</p> : null}
     <div className="home-care-grid">{copy.items.map((item) => <details className="home-care-item" key={item.section}>
@@ -74,7 +74,7 @@ export function HomeAssurance() {
 
 export function HomeFaq() {
   const copy = homeContent.faq;
-  return <section data-analytics-section="faq" className="home-section home-faq section-shell" aria-labelledby="home-faq-title">
+  return <section data-analytics-section="faq" className="home-section home-faq section-shell home-reveal" aria-labelledby="home-faq-title">
     <div><span className="home-faq-mark"><HomeIcon name="help" size={44} /></span><p className="eyebrow">{copy.eyebrow}</p><h2 id="home-faq-title">{copy.title}</h2>
       <p className="field-note">{homeContent.visual.faqNote}</p>
       <Link className="text-link" href="/faq">{copy.action}<HomeIcon name="arrow" /></Link>
@@ -90,7 +90,7 @@ export function HomeFaq() {
 
 export function HomeMembership() {
   const copy = homeContent.membership;
-  return <section data-analytics-section="membership" className="home-membership section-shell" aria-labelledby="home-membership-title">
+  return <section data-analytics-section="membership" className="home-membership section-shell home-reveal" aria-labelledby="home-membership-title">
     <div className="home-panel"><div><p className="eyebrow">{copy.eyebrow}</p>
       <h2 id="home-membership-title">{copy.title}</h2><p>{copy.description}</p>
       <nav className="home-account-links" aria-label={homeContent.visual.accountLinks.label}>
@@ -112,7 +112,7 @@ export function HomeReviews({ content = homeContent }: { content?: HomeContent }
   const items = content.reviews.items.filter((item) => item.status === "approved"
     && item.verifiedPurchase && item.publicationConsent);
   if (!items.length) return null;
-  return <section data-analytics-section="reviews" className="home-section section-shell" aria-labelledby="home-reviews-title">
+  return <section data-analytics-section="reviews" className="home-section section-shell home-reveal" aria-labelledby="home-reviews-title">
     <p className="eyebrow">{content.reviews.eyebrow}</p><h2 id="home-reviews-title">{content.reviews.title}</h2>
     <div className="home-media-grid">{items.map((item) => <figure className="home-review" key={item.id}>
       {item.photo ? <Image src={item.photo.src} alt={item.photo.alt} width={720} height={720} sizes="(max-width: 767px) 100vw, 33vw" /> : null}

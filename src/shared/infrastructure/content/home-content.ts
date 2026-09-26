@@ -13,6 +13,11 @@ const photo = z.object({
   alt: text,
   caption: text,
 }).strict();
+// A registered design concept, never a photograph of the real product; the caption must say so.
+const conceptImage = z.object({
+  src: z.string().refine((src) => productImageAssets.some((asset) => asset.src === src && asset.kind === "concept")),
+  alt: text,
+}).strict();
 const approval = z.enum(["draft", "approved"]);
 const announcement = z.object({
   id, title: text, body: text, href: href.optional(),
@@ -30,7 +35,9 @@ const sectionReference = z.object({
 export const homeContentSchema = z.object({
   visual: z.object({
     shortcuts: z.object({ label: text, flowers: text, message: text, delivery: text }).strict(),
-    diagram: z.object({ flower: text, message: text, result: text, eyebrow: text, caption: text }).strict(),
+    diagram: z.object({
+      flower: text, message: text, result: text, caption: text, cardEyebrow: text, image: conceptImage,
+    }).strict(),
     occasions: heading.extend({ items: z.array(z.object({
       label: z.enum(["ありがとう", "誕生日", "記念日"]), note: text,
     }).strict()).length(3) }),
