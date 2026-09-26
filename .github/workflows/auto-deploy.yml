@@ -1,0 +1,137 @@
+name: Auto Deploy
+
+# After CI succeeds on a push to main, apply expand-only database migrations, deploy that exact revision, and
+# confirm /api/health reports it. Opt-in with the repository variable AUTO_DEPLOY_ENABLED=true (ADR 0022).
+# Vercel's own Git deployments stay disabled (vercel.json): one deployment per main revision, after the database.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: write
+
+# Shares the manual release's group so a release and an automatic deployment never interleave.
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Migrate, deploy, and verify main
+    if: >-
+      vars.AUTO_DEPLOY_ENABLED == 'true'
+      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+      PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
+      PRODUCTION_DEPLOY_HOOK_URL: ${{ secrets.PRODUCTION_DEPLOY_HOOK_URL }}
+      DATABASE_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+      DATABASE_SSL_MODE: verify-full
+      MIGRATION_EXPAND_ONLY: "true"
+    steps:
+      - name: Check out the revision CI verified
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      # The deploy hook builds the latest main. If main has moved on, the newer revision's own run deploys it.
+      - name: Skip superseded revisions
+        id: current
+        run: |
+          git fetch --quiet origin main
+          if [ "$(git rev-parse origin/main)" = "$DEPLOY_SHA" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "main has moved past $DEPLOY_SHA; its successor deploys instead."
+          fi
+      - name: Set up pnpm
+        if: steps.current.outputs.deploy == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Set up Node.js
+        if: steps.current.outputs.deploy == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        if: steps.current.outputs.deploy == 'true'
+        run: pnpm install --frozen-lockfile
+      - name: Validate deployment configuration
+        if: steps.current.outputs.deploy == 'true'
+        run: |
+          test -n "$PRODUCTION_DEPLOY_HOOK_URL" || { echo "PRODUCTION_DEPLOY_HOOK_URL is not set in the production environment"; exit 1; }
+          test -n "$PRODUCTION_BASE_URL" || { echo "PRODUCTION_BASE_URL is not set"; exit 1; }
+          test -n "$DATABASE_URL" || { echo "DATABASE_MIGRATION_URL is not set in the production environment"; exit 1; }
+      # Migrations run before the new code is live, so a contracting migration stops here without applying anything.
+      - name: Apply expand-only database migrations
+        if: steps.current.outputs.deploy == 'true'
+        run: pnpm db:migrate
+      - name: Trigger deployment
+        if: steps.current.outputs.deploy == 'true'
+        run: curl --fail --silent --show-error --request POST "$PRODUCTION_DEPLOY_HOOK_URL" > /dev/null
+      - name: Wait for the deployed revision
+        if: steps.current.outputs.deploy == 'true'
+        run: |
+          health_url="${PRODUCTION_BASE_URL%/}/api/health"
+          for attempt in $(seq 1 60); do
+            response=$(curl --fail --silent --show-error --max-time 10 "$health_url" || true)
+            if jq --exit-status --arg release "$DEPLOY_SHA" \
+              '.status == "ok" and .release == $release' <<< "$response" > /dev/null; then
+              echo "Deployed $DEPLOY_SHA"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "The public site did not report $DEPLOY_SHA within 10 minutes."
+          exit 1
+      - name: Open or refresh deployment incident
+        if: failure()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const marker = "<!-- bloombox-auto-deploy -->";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const runbook = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/blob/main/docs/operations/RELEASE.md#automatic-main-deployment`;
+            const body = `${marker}\nAutomatic deployment of \`${process.env.DEPLOY_SHA}\` failed. `
+              + `[Inspect the workflow run](${runUrl}) and follow the [runbook](${runbook}).`;
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner, repo: context.repo.repo, state: "all", per_page: 100,
+            });
+            const existing = issues.find((issue) => !issue.pull_request && issue.user?.type === "Bot"
+              && issue.user?.login === "github-actions[bot]" && issue.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.update({ owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.number, state: "open" });
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.number, body });
+            } else {
+              await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo,
+                title: "[Production] Automatic deployment failed", body });
+            }
+      - name: Close recovered deployment incident
+        if: success() && steps.current.outputs.deploy == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const marker = "<!-- bloombox-auto-deploy -->";
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner, repo: context.repo.repo, state: "open", per_page: 100,
+            });
+            const existing = issues.find((issue) => !issue.pull_request && issue.user?.type === "Bot"
+              && issue.user?.login === "github-actions[bot]" && issue.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.number, body: `Deployed \`${process.env.DEPLOY_SHA}\` successfully.` });
+              await github.rest.issues.update({ owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.number, state: "closed", state_reason: "completed" });
+            }

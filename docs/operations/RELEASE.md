@@ -24,6 +24,25 @@ Do not disable or bypass that check. ADR 0009 supersedes the Shopify selection i
 
 Preview must be clearly distinguishable and must not send real notifications, charge money, or mutate production inventory.
 
+## Automatic main deployment
+
+2026-09-26 ([ADR 0022](../architecture/adr/0022-automatic-main-deployment.md)). The `Auto Deploy` workflow runs after CI succeeds on a push to `main`: it applies pending migrations in expand-only mode, calls the deploy hook, and waits until `/api/health` reports the exact revision CI verified. Vercel's Git deployments stay disabled, so each main revision deploys once and PRs never deploy. It does not open commerce; ADR 0020 still gates new purchases in code.
+
+Enable it once, in this order:
+
+1. In the `production` GitHub Environment, confirm `PRODUCTION_DEPLOY_HOOK_URL` (a Vercel Deploy Hook for the `main` branch of project `bloom-box-shop-ybb9`) and `DATABASE_MIGRATION_URL` (the owner connection for the public database). Confirm the repository variable `PRODUCTION_BASE_URL` is `https://bloom-box-shop-ybb9.vercel.app`.
+2. Check the public database's history with `pnpm db:status` and a history reader ([DATABASE_PREFLIGHT.md](DATABASE_PREFLIGHT.md)). The first automatic run applies everything pending (expected: 0028–0030, all expand-only).
+3. Set the repository variable `AUTO_DEPLOY_ENABLED=true`. The next merge to `main` deploys; to deploy the current `main` immediately, re-run its latest successful `CI` run.
+4. After the first run, confirm `/api/health` shows the new revision and that `Production Smoke` passes.
+
+When it stops:
+
+- **Expand-only refusal** (`ContractingMigrationError`): nothing was applied. Split the change into an additive step that deploys automatically and a later contracting step released through `Production Release` after old code is gone.
+- **Configuration missing**: set the named secret or variable; re-run the failed job.
+- **Health did not report the revision**: inspect the Vercel deployment for that SHA. If the build failed, fix forward on `main`; if the site is unhealthy, promote the previous deployment in Vercel. Applied migrations stay (forward-only and additive).
+
+Disable it by setting `AUTO_DEPLOY_ENABLED` to anything but `true`.
+
 ## On-demand Vercel previews
 
 Root `vercel.json` sets `git.deploymentEnabled` to `false`. Pushes and PR updates containing this configuration do not automatically deploy to Vercel, including pushes to `main`. GitHub CI, security scanning, dependency auditing, and PR governance continue to run as configured. Production continues to require the protected release path below; merging code is not authorization to deploy it.
