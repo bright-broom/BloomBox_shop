@@ -6,3 +6,8 @@ packages:
 # Future versions remain subject to Dependabot's seven-day cooldown.
 minimumReleaseAgeExclude:
   - 'lucide-react@1.46.0'
+
+# GHSA-68fv-2mgg-jv7q: keep transitive consumers off affected versions.
+# Remove when upstream dependency ranges require >=1.2.2.
+overrides:
+  'source-map-js@<1.2.2': '1.2.2'
