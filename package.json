@@ -27,14 +27,14 @@
     "test:browser-security": "playwright test"
   },
   "dependencies": {
-    "jose": "6.2.12",
-    "lucide-react": "1.48.0",
+    "jose": "6.2.15",
+    "lucide-react": "1.66.0",
     "next": "^16.4.3",
     "next-auth": "5.0.0-beta.32",
-    "postgres": "3.4.9",
+    "postgres": "4.0.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "stripe": "22.6.2",
+    "stripe": "23.1.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
